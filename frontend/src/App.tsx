@@ -3,6 +3,7 @@ import { useAuth } from './store/AuthContext'
 import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Todo from './pages/Todo'
 import Orders from './pages/Orders'
 import OrderDetail from './pages/OrderDetail'
 import Packages from './pages/Packages'
@@ -30,6 +31,7 @@ export default function App() {
             <AppLayout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/todo" element={<Todo />} />
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/orders/:id" element={<OrderDetail />} />
                 <Route path="/packages" element={<Packages />} />

@@ -3,7 +3,7 @@ import {
 } from './client'
 import type {
   Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, Order, OrderAttachment,
-  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, SyncRecord, User, Version,
+  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, SyncRecord, TodoItem, User, Version,
 } from '@/types'
 
 // ---------- 认证 ----------
@@ -90,6 +90,11 @@ export const packages = {
 // ---------- 看板 / 受控区 / 审计 / NAS ----------
 export const dashboard = {
   get: () => get<Dashboard>('/dashboard'),
+}
+
+// ---------- 待办队列 ----------
+export const todo = {
+  list: () => get<TodoItem[]>('/todo'),
 }
 
 export const controlled = {

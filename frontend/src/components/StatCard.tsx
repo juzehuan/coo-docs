@@ -1,17 +1,19 @@
 import { Card, Statistic, theme as antdTheme } from 'antd'
 import type { ReactNode } from 'react'
 
-export default function StatCard({ title, value, suffix, icon, color }: {
+export default function StatCard({ title, value, suffix, icon, color, onClick }: {
   title: string
   value: number | string
   suffix?: string
   icon?: ReactNode
   color?: string
+  onClick?: () => void
 }) {
   const { token } = antdTheme.useToken()
   const c = color || token.colorPrimary
   return (
-    <Card variant="borderless" className="coo-card" styles={{ body: { padding: 18 } }}>
+    <Card variant="borderless" className="coo-card" onClick={onClick}
+      styles={{ body: { padding: 18, cursor: onClick ? 'pointer' : undefined } }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
         {icon && (
           <span style={{

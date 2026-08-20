@@ -197,6 +197,23 @@ export interface ControlledItem {
   locked: boolean
 }
 
+export interface TodoItem {
+  package_id: string
+  package_code: string
+  package_name: string
+  version_id: string
+  version_no: string
+  status: string
+  dept_name: string
+  owner_name: string
+  submitter_name: string
+  submitted_at: string | null
+  reject_reason: string
+  attachments: number
+  review_focus: string
+  due_date: string
+}
+
 export type Lang = 'zh' | 'en' | 'th'
 
 export const ROLES = ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] as const
