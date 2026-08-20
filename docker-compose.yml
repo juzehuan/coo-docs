@@ -30,6 +30,19 @@ services:
       - "9001:9001"   # 管理控制台
     restart: unless-stopped
 
+  # 严格 S3 语义交叉验证：Zenko CloudServer（模拟群晖/威联通独立 S3 服务端）
+  # 默认密钥 accessKey1/verySecretKey1，端口 8000；boto3 直接对接即可
+  zenko:
+    image: zenko/cloudserver:latest
+    environment:
+      SCALITY_ACCESS_KEY_ID: accessKey1
+      SCALITY_SECRET_ACCESS_KEY: verySecretKey1
+      ENDPOINT: zenko
+      REMOTE_MANAGEMENT_DISABLE: 1
+    ports:
+      - "8001:8000"   # 主机映射 8001 避免与后端冲突
+    restart: unless-stopped
+
   backend:
     build: ./backend
     environment:
