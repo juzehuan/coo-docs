@@ -1,3 +1,156 @@
+/* ============================================================
+   COO 资料收集平台 · 全局设计语言
+   品牌：深海蓝 #0b2545 → 品牌蓝 #1f5fa8，浅色主题，精致现代。
+   ============================================================ */
+
+:root {
+  --coo-navy: #0b2545;
+  --coo-blue: #1f5fa8;
+  --coo-blue-2: #2f7fd6;
+  --coo-blue-light: #eaf1fb;
+  --coo-bg: #f0f2f5;
+  --coo-card-bg: #ffffff;
+
+  --coo-text: #17263b;
+  --coo-text-sub: #61728a;
+  --coo-text-faint: #93a2b7;
+
+  --coo-border: #e6ebf2;
+  --coo-ring: rgba(31, 95, 168, 0.22);
+
+  --coo-radius: 10px;
+  --coo-radius-sm: 7px;
+
+  --coo-shadow-sm: 0 1px 2px rgba(11, 37, 69, 0.06);
+  --coo-shadow-md: 0 4px 16px rgba(11, 37, 69, 0.08);
+  --coo-shadow-lg: 0 12px 34px rgba(11, 37, 69, 0.14);
+
+  --coo-grad-blue: linear-gradient(135deg, #1f5fa8 0%, #2f7fd6 100%);
+  --coo-grad-navy: linear-gradient(160deg, #0b2545 0%, #123a68 100%);
+}
+
 html, body, #root { height: 100%; margin: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
-.muted { color: rgba(0, 0, 0, 0.45); }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  color: var(--coo-text);
+  background: var(--coo-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb {
+  background: rgba(11, 37, 69, 0.18);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgba(11, 37, 69, 0.32); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.muted { color: var(--coo-text-sub); }
+
+/* ---------- 卡片：统一层次与悬浮微交互 ---------- */
+.coo-card {
+  background: var(--coo-card-bg);
+  border: 1px solid var(--coo-border);
+  border-radius: var(--coo-radius);
+  box-shadow: var(--coo-shadow-sm);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+.coo-card:hover {
+  box-shadow: var(--coo-shadow-md);
+}
+
+/* 页面顶部标题带 */
+.coo-pagehead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.coo-pagehead-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--coo-navy);
+  letter-spacing: 0.3px;
+}
+.coo-pagehead-desc {
+  margin-top: 3px;
+  color: var(--coo-text-sub);
+  font-size: 13px;
+}
+
+/* 品牌渐变文本 */
+.coo-grad-text {
+  background: var(--coo-grad-blue);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 按钮主色更鲜明，悬停轻微上浮 */
+.ant-btn-primary {
+  background-image: var(--coo-grad-blue);
+  box-shadow: 0 2px 8px rgba(31, 95, 168, 0.3);
+  border: none;
+}
+.ant-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(31, 95, 168, 0.4); }
+.ant-btn-primary:active { transform: translateY(0); }
+
+/* 登录页主按钮：更醒目的渐变与光晕 */
+.ant-btn-primary.coo-btn-hero {
+  height: 44px;
+  font-size: 15px;
+  border-radius: 10px;
+  letter-spacing: 2px;
+  box-shadow: 0 8px 20px rgba(31, 95, 168, 0.45);
+}
+.ant-btn-primary.coo-btn-hero:disabled {
+  background-image: none;
+  background: #f0f2f5;
+  color: #bfbfbf;
+}
+
+/* 表格表头层次 */
+.ant-table-thead > tr > th {
+  font-weight: 600;
+  color: var(--coo-text-sub);
+  letter-spacing: 0.2px;
+}
+.ant-table-tbody > tr:hover > td { background: #f6f9fe !important; }
+
+/* 徽章通用底座 */
+.coo-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  line-height: 20px;
+}
+.coo-tag .coo-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 分段控件柔和化 */
+.ant-segmented {
+  border-radius: 9px;
+}
+.ant-segmented-item { border-radius: 7px; }
+
+/* 进度条品牌色圆头 */
+.ant-progress-bg { border-radius: 4px; }
+
+/* 布局内容背景轻微质感 */
+.ant-layout-content { border-radius: 0; }

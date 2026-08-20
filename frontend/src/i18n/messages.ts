@@ -4,6 +4,8 @@ type Dict = Record<string, string>
 
 const zh: Dict = {
   app_name: 'COO 资料收集平台',
+  subtitle: '原产地证（COO）资料高效收集 · 审核 · 归档',
+  dashboard_desc: '资料收集进度与待办事项一览',
   login: '登录',
   logout: '退出登录',
   username: '用户名',
@@ -97,6 +99,8 @@ const zh: Dict = {
 
 const en: Dict = {
   app_name: 'COO Material Collection Platform',
+  subtitle: 'Efficient COO material collection · review · archive',
+  dashboard_desc: 'Material collection progress and pending tasks at a glance',
   login: 'Login',
   logout: 'Logout',
   username: 'Username',
@@ -190,6 +194,8 @@ const en: Dict = {
 
 const th: Dict = {
   app_name: 'แพลตฟอร์มรวบรวมข้อมูล COO',
+  subtitle: 'รวบรวม · ตรวจสอบ · เก็บถาวรเอกสาร COO อย่างมีประสิทธิภาพ',
+  dashboard_desc: 'ภาพรวมความคืบหน้าการรวบรวมข้อมูลและงานที่ต้องทำ',
   login: 'เข้าสู่ระบบ',
   logout: 'ออกจากระบบ',
   username: 'ชื่อผู้ใช้',

@@ -51,13 +51,18 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark">
-        <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: 1 }}>
-          {collapsed ? 'COO' : t('app_name')}
+        <div style={{
+          height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+          color: '#fff', fontWeight: 800, fontSize: 16, letterSpacing: 1,
+          background: 'linear-gradient(135deg, #0b2545, #1f5fa8)', borderBottom: '1px solid rgba(255,255,255,0.10)',
+        }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#2f7fd6,#1f5fa8)', fontWeight: 900, fontSize: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>C</span>
+          {!collapsed && <span>COO 平台</span>}
         </div>
         <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={items} onClick={(e) => navigate(e.key)} />
       </Sider>
       <Layout>
-        <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+        <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#fff', borderBottom: `1px solid ${token.colorBorderSecondary}`, boxShadow: '0 1px 3px rgba(11,37,69,0.05)' }}>
           <div />
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <LanguageSwitcher />

@@ -21,24 +21,31 @@ export default function Dashboard() {
 
   return (
     <div>
-      <Row gutter={16}>
+      <div className="coo-pagehead">
+        <div>
+          <h1 className="coo-pagehead-title">{t('dashboard')}</h1>
+          <div className="coo-pagehead-desc">{t('dashboard_desc')}</div>
+        </div>
+      </div>
+
+      <Row gutter={[16, 16]}>
         <Col xs={12} md={6}><StatCard title={t('progress')} value={d.package_completion} suffix="%" icon={<FileDoneOutlined />} color="#1f5fa8" /></Col>
         <Col xs={12} md={6}><StatCard title={t('pending_mine')} value={d.pending_mine} icon={<FileSyncOutlined />} color="#d97706" /></Col>
         <Col xs={12} md={6}><StatCard title={t('released')} value={d.released} icon={<AuditOutlined />} color="#16a34a" /></Col>
         <Col xs={12} md={6}><StatCard title={t('attachment')} value={d.total_attachments} icon={<InboxOutlined />} color="#7c3aed" /></Col>
       </Row>
 
-      <Row gutter={16} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} md={10}>
-          <Card variant="borderless" title={t('progress')}>
-            <Progress type="dashboard" percent={d.package_completion} strokeColor="#1f5fa8" />
-            <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
-              {t('released')} {d.released} · {t('overdue')} {d.overdue}
+          <Card variant="borderless" className="coo-card" title={t('progress')}>
+            <Progress type="dashboard" percent={d.package_completion} strokeColor={{ '0%': '#1f5fa8', '100%': '#2f7fd6' }} strokeWidth={10} />
+            <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+              {t('released')} <b style={{ color: '#16a34a' }}>{d.released}</b> · {t('overdue')} <b style={{ color: '#d97706' }}>{d.overdue}</b>
             </Typography.Paragraph>
           </Card>
         </Col>
         <Col xs={24} md={14}>
-          <Card variant="borderless" title={t('need_attention')}>
+          <Card variant="borderless" className="coo-card" title={t('need_attention')}>
             {d.need_attention.length === 0
               ? <Typography.Text type="secondary">{t('no_data')}</Typography.Text>
               : (
@@ -49,7 +56,7 @@ export default function Dashboard() {
                   columns={[
                     { title: 'COO', dataIndex: 'code', width: 90 },
                     { title: t('packages'), dataIndex: 'name' },
-                    { title: t('issue') ?? '事项', dataIndex: 'issue' },
+                    { title: t('issue') ?? '事项', dataIndex: 'issue', width: 130, render: (v: string) => <span style={{ color: '#d97706' }}>{v}</span> },
                     { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
                   ]}
                 />
@@ -58,7 +65,7 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      <Card variant="borderless" title={t('packages')} style={{ marginTop: 16 }}>
+      <Card variant="borderless" className="coo-card" title={t('packages')} style={{ marginTop: 16 }}>
         <Table
           rowKey="code"
           dataSource={d.package_progress}
