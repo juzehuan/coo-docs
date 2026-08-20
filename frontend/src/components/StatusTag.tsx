@@ -10,6 +10,7 @@ const STYLE: Record<string, { bg: string; fg: string; dot: string }> = {
   pending_coo: { bg: '#fff1e8', fg: '#d46b08', dot: '#ff8c3b' },       // 待COO
   released:    { bg: '#f0f9f4', fg: '#2f9e5f', dot: '#34b573' },       // 已放行
   rejected:    { bg: '#fff1f0', fg: '#cf4444', dot: '#f4504b' },       // 已退回
+  withdrawn:   { bg: '#efeef7', fg: '#5b4fb5', dot: '#6c5ce7' },       // 已撤回
   active:      { bg: '#eaf1fb', fg: '#1f5fa8', dot: '#2f7fd6' },       // 进行中
   completed:   { bg: '#f0f9f4', fg: '#2f9e5f', dot: '#34b573' },       // 已完成
   closed:      { bg: '#f1f4f9', fg: '#5a6b85', dot: '#93a2b7' },       // 已关闭

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { App, Button, Card, Descriptions, Divider, Space, Tabs, Tag, Typography } from 'antd'
-import { ArrowLeftOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import { packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -43,6 +43,8 @@ export default function PackageDetail() {
   const canEdit = ver && (isStaff || ownerOk) && ver.status !== 'released'
   const canReviewDept = ver && user!.role === 'dept_reviewer' && ver.status === 'pending_dept'
   const canReviewCoo = ver && (user!.role === 'coo_reviewer' || user!.role === 'admin') && ver.status === 'pending_coo'
+  const canWithdraw = ver && !!(user!.role === 'admin' || ownerOk) &&
+    (ver.status === 'pending_dept' || ver.status === 'pending_coo')
 
   async function newVersion() {
     await packages.createVersion(pkg!.id, '')
@@ -52,6 +54,10 @@ export default function PackageDetail() {
   function submitVersion() {
     if (!ver) return
     modal.confirm({ title: t('submit'), content: t('submit_confirm'), onOk: async () => { await packages.submit(pkg!.id, ver.id); message.success(t('submit_success')); load() } })
+  }
+  function withdrawVersion() {
+    if (!ver) return
+    modal.confirm({ title: t('withdraw'), content: t('withdraw_confirm'), onOk: async () => { await packages.withdraw(pkg!.id, ver.id); message.success(t('withdraw_success')); load() } })
   }
 
   return (
@@ -65,6 +71,7 @@ export default function PackageDetail() {
           <Typography.Title level={4} style={{ margin: 0 }}>{pkg.code} · {lang === 'en' ? pkg.name_en : lang === 'th' ? pkg.name_th : pkg.name_zh}</Typography.Title>
           <Space>
             <Button icon={<PlusOutlined />} onClick={newVersion}>{t('new_version')}</Button>
+            {canWithdraw && <Button danger icon={<UndoOutlined />} onClick={withdrawVersion}>{t('withdraw')}</Button>}
             {ver && canEdit && ver.attachments.length > 0 && <Button type="primary" icon={<SendOutlined />} onClick={submitVersion}>{t('submit')}</Button>}
           </Space>
         </Space>

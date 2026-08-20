@@ -33,6 +33,7 @@ export const orders = {
     post<OrderPackage>(`/orders/${id}/packages`, data),
   removePackage: (id: string, opId: string) => del(`/orders/${id}/packages/${opId}`),
   submit: (id: string, opId: string) => post<OrderPackage>(`/orders/${id}/packages/${opId}/submit`),
+  withdraw: (id: string, opId: string) => post<OrderPackage>(`/orders/${id}/packages/${opId}/withdraw`),
   review: (id: string, opId: string, decision: string, level: string, reason: string) =>
     post<OrderPackage>(`/orders/${id}/packages/${opId}/review`, { decision, level, reason }),
   uploadAttachments: (id: string, opId: string, files: File[], batch_no: string) => {
@@ -69,6 +70,7 @@ export const packages = {
   createVersion: (id: string, change_note: string, project_code?: string) =>
     post<Version>(`/packages/${id}/versions`, { change_note, project_code: project_code || '' }),
   submit: (pkgId: string, vid: string) => post<Version>(`/packages/${pkgId}/versions/${vid}/submit`),
+  withdraw: (pkgId: string, vid: string) => post<Version>(`/packages/${pkgId}/versions/${vid}/withdraw`),
   review: (pkgId: string, vid: string, decision: string, level: string, reason: string) =>
     post<Version>(`/packages/${pkgId}/versions/${vid}/review`, { decision, level, reason }),
   deleteVersion: (pkgId: string, vid: string) => del(`/packages/${pkgId}/versions/${vid}`),

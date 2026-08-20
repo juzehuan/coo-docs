@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import {
-  App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, Upload,
+import { App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, Upload,
 } from 'antd'
-import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
@@ -31,6 +30,12 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
   const canReviewDept = user.role === 'dept_reviewer' && op.status === 'pending_dept'
   const canReviewCoo = (user.role === 'coo_reviewer' || user.role === 'admin') && op.status === 'pending_coo'
+  const canWithdraw = (user.role === 'admin' || ownerOk) &&
+    (op.status === 'pending_dept' || op.status === 'pending_coo')
+
+  async function withdraw() {
+    await orders.withdraw(orderId, op.id); message.success(t('withdraw_success')); onChanged()
+  }
 
   async function doReview(decision: string, level: string) {
     setBusy(true)
@@ -68,6 +73,9 @@ function RowAttachments({ orderId, op, user, onChanged }: {
           <Space style={{ marginBottom: 8 }}>
             <Input addonBefore={t('batch_no')} value={batchNo} onChange={(e) => setBatchNo(e.target.value)} style={{ width: 220 }} />
             <Button type="primary" icon={<SendOutlined />} disabled={atts.length === 0} onClick={submit}>{t('submit')}</Button>
+            {canWithdraw && (
+              <Button danger icon={<UndoOutlined />} onClick={withdraw}>{t('withdraw')}</Button>
+            )}
           </Space>
           <Dragger
             multiple showUploadList={false} beforeUpload={() => false} disabled={uploading}
