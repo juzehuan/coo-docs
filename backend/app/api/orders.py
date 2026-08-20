@@ -189,7 +189,7 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
 def submit_order_package(order_id: int, op_id: int, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
-    if op.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED):
+    if op.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
         raise HTTPException(status_code=400, detail="当前状态不可提交")
     if not op.attachments:
         raise HTTPException(status_code=400, detail="请先上传至少一个附件")
@@ -242,6 +242,27 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
         raise HTTPException(status_code=400, detail="退回必须填写整改要求")
     db.commit()
     db.refresh(op)
+    return _op_out(op)
+
+
+# ---------- 撤回 ----------
+@router.post("/{order_id}/packages/{op_id}/withdraw", response_model=OrderPackageOut)
+def withdraw_order_package(order_id: int, op_id: int, request: Request,
+                           db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """提交人撤回：待部门审核 / 待COO终审的实例可撤回，撤回复审后重新提交。"""
+    o, op = _get_op(db, order_id, op_id, user)
+    if op.status not in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
+        raise HTTPException(status_code=400, detail="当前状态不可撤回")
+    # 仅提交人本人或管理员可撤回
+    if user.role != "admin" and op.owner_user_id != user.id:
+        raise HTTPException(status_code=403, detail="仅提交人本人可撤回")
+    op.status = VersionStatus.WITHDRAWN
+    op.dept_reject_reason = ""
+    op.coo_reject_reason = ""
+    db.commit()
+    db.refresh(op)
+    log_event(db, AuditDomain.REVIEW, "op_withdraw", actor=user, ip=client_ip(request),
+              target=f"{o.order_no}/{op_id}")
     return _op_out(op)
 
 

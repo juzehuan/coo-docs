@@ -35,6 +35,7 @@ class VersionStatus(str, Enum):
     PENDING_COO = "pending_coo"    # 待COO终审
     RELEASED = "released"          # 已放行
     REJECTED = "rejected"          # 已退回
+    WITHDRAWN = "withdrawn"        # 已撤回
 
 
 VERSION_STATUS_LABELS = {
@@ -43,6 +44,7 @@ VERSION_STATUS_LABELS = {
     VersionStatus.PENDING_COO: {"zh": "待COO终审", "en": "Pending COO", "th": "รอ COO"},
     VersionStatus.RELEASED: {"zh": "已放行", "en": "Released", "th": "อนุมัติ"},
     VersionStatus.REJECTED: {"zh": "已退回", "en": "Rejected", "th": "ถูกตีกลับ"},
+    VersionStatus.WITHDRAWN: {"zh": "已撤回", "en": "Withdrawn", "th": "ถูกถอน"},
 }
 
 

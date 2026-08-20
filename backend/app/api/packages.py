@@ -280,7 +280,7 @@ def submit_version(pkg_id: int, vid: int, request: Request, db: Session = Depend
         raise HTTPException(status_code=404, detail="资源不存在")
     if not can_edit_package(user, p):
         raise HTTPException(status_code=403, detail="无权操作")
-    if v.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED):
+    if v.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
         raise HTTPException(status_code=400, detail="当前状态不可提交")
     if not v.attachments:
         raise HTTPException(status_code=400, detail="请先上传至少一个附件")
@@ -344,4 +344,27 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
 
     db.commit()
     db.refresh(v)
+    return v
+
+
+@router.post("/{pkg_id}/versions/{vid}/withdraw", response_model=VersionOut)
+def withdraw_version(pkg_id: int, vid: int, request: Request,
+                     db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """提交人撤回：待部门审核 / 待COO终审的版本可撤回，撤回复审后重新提交。"""
+    import datetime as _dt
+    p = db.get(Package, pkg_id)
+    v = db.get(PackageVersion, vid)
+    if not p or not v or v.package_id != pkg_id:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    if v.status not in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
+        raise HTTPException(status_code=400, detail="当前状态不可撤回")
+    if user.role != "admin" and v.submitted_by != user.id:
+        raise HTTPException(status_code=403, detail="仅提交人本人可撤回")
+    v.status = VersionStatus.WITHDRAWN
+    v.dept_reject_reason = ""
+    v.coo_reject_reason = ""
+    db.commit()
+    db.refresh(v)
+    log_event(db, AuditDomain.REVIEW, "withdraw", actor=user, ip=client_ip(request),
+              target=f"{p.code}/{v.version_no}")
     return v
