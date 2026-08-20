@@ -96,6 +96,10 @@ const zh: Dict = {
   withdraw_success: '已撤回',
   submit_confirm: '确认提交该版本进入部门审核？',
   submit_success: '提交成功',
+  step_submit: '提交资料',
+  step_dept: '部门审核',
+  step_coo: 'COO 终审',
+  step_release: '放行归档',
   syncing: '同步中…',
   sync_success: '同步完成',
 }
@@ -194,6 +198,10 @@ const en: Dict = {
   withdraw_success: 'Withdrawn',
   submit_confirm: 'Submit this version for department review?',
   submit_success: 'Submitted',
+  step_submit: 'Submit Materials',
+  step_dept: 'Dept Review',
+  step_coo: 'COO Review',
+  step_release: 'Release Archive',
   syncing: 'Syncing…',
   sync_success: 'Sync completed',
 }
@@ -292,6 +300,10 @@ const th: Dict = {
   withdraw_success: 'ถูกถอน',
   submit_confirm: 'ส่งเวอร์ชันนี้เพื่อตรวจสอบแผนก?',
   submit_success: 'ส่งเรียบร้อย',
+  step_submit: 'ส่งเอกสาร',
+  step_dept: 'ตรวจสอบแผนก',
+  step_coo: 'ตรวจสอบ COO',
+  step_release: 'เก็บถาวร-อนุมัติ',
   syncing: 'กำลังซิงค์…',
   sync_success: 'ซิงค์เสร็จสิ้น',
 }

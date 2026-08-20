@@ -6,6 +6,7 @@ import { packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
+import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentList from '@/components/AttachmentList'
 import ReviewPanel from '@/components/ReviewPanel'
 import { formatTime } from '@/utils/format'
@@ -93,7 +94,8 @@ export default function PackageDetail() {
             label: <span>{v.version_no} <StatusTag status={v.status} /></span>,
             children: (
               <div>
-                <Descriptions size="small" column={3} style={{ marginBottom: 12 }}>
+                <ReviewSteps status={v.status} />
+                <Descriptions size="small" column={3} style={{ marginTop: 12, marginBottom: 12 }}>
                   <Descriptions.Item label="变更">{v.change_note || '-'}</Descriptions.Item>
                   <Descriptions.Item label="提交">{formatTime(v.submitted_at)}</Descriptions.Item>
                   <Descriptions.Item label="锁定">{v.locked ? <Tag color="green">✓</Tag> : '-'}</Descriptions.Item>

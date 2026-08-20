@@ -8,6 +8,7 @@ import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
+import ReviewSteps from '@/components/ReviewSteps'
 import { formatTime } from '@/utils/format'
 import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, User } from '@/types'
 
@@ -196,7 +197,7 @@ export default function OrderDetail() {
           columns={[
             { title: 'COO', dataIndex: 'package_code', width: 90, render: (v) => v || '-' },
             { title: t('packages'), dataIndex: 'package_name', render: (v) => v || '-' },
-            { title: t('status'), dataIndex: 'status', width: 120, render: (s: string) => <StatusTag status={s} /> },
+            { title: t('status'), dataIndex: 'status', width: 150, render: (s: string) => (<><StatusTag status={s} /><br /><ReviewSteps status={s} compact /></>) },
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
             { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag color="blue">{t('required')}</Tag> : '-') },
