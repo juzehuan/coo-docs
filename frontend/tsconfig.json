@@ -15,8 +15,11 @@
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/*"] }
   },
   "include": ["src"],
+  "exclude": ["src/**/*.legacy.ts", "src/**/*.legacy.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

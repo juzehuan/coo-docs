@@ -1,50 +1,70 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api'
-import { useApp } from '../store'
+import { App, Button, Card, Select, Space, Table } from 'antd'
+import { DownloadOutlined } from '@ant-design/icons'
+import { audit } from '@/api/endpoints'
+import { useAuth } from '@/store/AuthContext'
+import { useI18n } from '@/i18n'
+import { formatTime } from '@/utils/format'
+import type { AuditLog } from '@/types'
 
-interface Log { id: number; event_domain: string; action: string; actor_name: string; actor_role: string; ip: string; target: string; detail: string; created_at: string }
-
-async function downloadCsv() {
-  const blob = await api<Blob>('/audit/export', { method: 'GET' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = 'audit_logs.csv'; a.click()
-  URL.revokeObjectURL(url)
-}
+const DOMAINS = ['auth', 'package', 'attachment', 'review', 'version', 'nas', 'export', 'org']
 
 export default function Audit() {
-  const { t, user } = useApp()
-  const [logs, setLogs] = useState<Log[] | null>(null)
+  const { t } = useI18n()
+  const { user } = useAuth()
+  const { message } = App.useApp()
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [domain, setDomain] = useState<string | undefined>()
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => { api<Log[]>('/audit/logs?limit=300').then(setLogs).catch(() => setLogs([])) }, [])
+  const load = (d?: string) => {
+    setLoading(true)
+    audit.list(d ? { domain: d } : undefined).then(setLogs).catch(() => setLogs([])).finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [])
 
-  if (logs === null) return <div className="loading">...</div>
+  async function exportCsv() {
+    try {
+      const blob = await audit.exportCsv()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'audit_logs.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      message.error(e?.message || 'export failed')
+    }
+  }
+
+  const canExport = user?.role === 'coo_reviewer' || user?.role === 'admin'
 
   return (
-    <div className="card">
-      <div className="row">
-        <h2 style={{ margin: 0 }}>{t('audit')}</h2>
-        <div className="spacer" />
-        {(user!.role === 'coo_reviewer' || user!.role === 'admin') && (
-          <button className="btn-ghost btn-sm" onClick={downloadCsv}>{t('export_csv')}</button>
-        )}
-      </div>
-      <table style={{ marginTop: 12 }}>
-        <thead><tr><th>时间</th><th>域.动作</th><th>操作人</th><th>IP</th><th>目标</th><th>说明</th></tr></thead>
-        <tbody>
-          {logs.map((l) => (
-            <tr key={l.id}>
-              <td>{l.created_at?.replace('T', ' ').slice(0, 19)}</td>
-              <td>{l.event_domain}.{l.action}</td>
-              <td>{l.actor_name}</td>
-              <td>{l.ip}</td>
-              <td>{l.target}</td>
-              <td className="muted">{l.detail}</td>
-            </tr>
-          ))}
-          {logs.length === 0 && <tr><td colSpan={6} className="muted">{t('no_data')}</td></tr>}
-        </tbody>
-      </table>
-    </div>
+    <Card
+      variant="borderless"
+      title={t('audit')}
+      extra={
+        <Space>
+          <Select allowClear placeholder={t('status')} style={{ width: 160 }} value={domain} onChange={(v) => { setDomain(v); load(v) }}
+            options={DOMAINS.map((d) => ({ label: d, value: d }))} />
+          {canExport && <Button icon={<DownloadOutlined />} onClick={exportCsv}>{t('export_csv')}</Button>}
+        </Space>
+      }
+    >
+      <Table
+        rowKey="id"
+        loading={loading}
+        dataSource={logs}
+        pagination={{ pageSize: 15 }}
+        columns={[
+          { title: '时间', dataIndex: 'created_at', width: 170, render: (v: string) => formatTime(v) },
+          { title: '域.动作', render: (_, r) => `${r.event_domain}.${r.action}`, width: 200 },
+          { title: '操作人', dataIndex: 'actor_name', width: 120 },
+          { title: 'IP', dataIndex: 'ip', width: 130 },
+          { title: '目标', dataIndex: 'target' },
+          { title: '说明', dataIndex: 'detail' },
+        ]}
+      />
+    </Card>
   )
 }

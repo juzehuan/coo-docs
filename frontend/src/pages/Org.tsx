@@ -1,77 +1,100 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api'
-import { useApp } from '../store'
-import { ROLE_LABELS } from '../i18n'
-
-interface Dept { id: number; code: string; name_zh: string; name_en: string; name_th: string }
-interface U { id: number; username: string; display_name: string; role: string; dept_id: number | null; status: string }
-
-const ROLES = ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin']
+import { App, Button, Card, Form, Input, Modal, Select, Table, Tabs } from 'antd'
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { org } from '@/api/endpoints'
+import { useI18n } from '@/i18n'
+import RoleTag from '@/components/RoleTag'
+import { ROLES } from '@/types'
+import type { Department, User } from '@/types'
 
 export default function Org() {
-  const { t, lang } = useApp()
-  const [depts, setDepts] = useState<Dept[]>([])
-  const [users, setUsers] = useState<U[]>([])
+  const { t } = useI18n()
+  const { message } = App.useApp()
+  const [depts, setDepts] = useState<Department[]>([])
+  const [users, setUsers] = useState<User[]>([])
 
   async function load() {
-    const [d, u] = await Promise.all([api<Dept[]>('/org/departments'), api<U[]>('/org/users')])
+    const [d, u] = await Promise.all([org.listDepartments(), org.listUsers()])
     setDepts(d); setUsers(u)
   }
   useEffect(() => { load() }, [])
 
-  const [code, setCode] = useState(''); const [nz, setNz] = useState(''); const [ne, setNe] = useState('')
-  const [uname, setUname] = useState(''); const [disp, setDisp] = useState(''); const [role, setRole] = useState('submitter'); const [udept, setUdept] = useState<number | ''>(''); const [pwd, setPwd] = useState('user123')
+  const deptName = (id: string | null) => depts.find((d) => d.id === id)?.name_zh || '-'
 
-  async function addDept(e: any) { e.preventDefault(); await api('/org/departments', { method: 'POST', body: JSON.stringify({ code, name_zh: nz, name_en: ne, name_th: nz }) }); setCode(''); setNz(''); setNe(''); load() }
-  async function addUser(e: any) { e.preventDefault(); await api('/org/users', { method: 'POST', body: JSON.stringify({ username: uname, display_name: disp, role, dept_id: udept || null, password: pwd }) }); setUname(''); setDisp(''); load() }
-  async function resetPwd(id: number) { await api(`/org/users/${id}/reset-password`, { method: 'POST' }); alert('已重置为 user123') }
+  // ---- 部门 ----
+  const [deptOpen, setDeptOpen] = useState(false)
+  const [deptForm] = Form.useForm()
+  async function submitDept() {
+    const v = await deptForm.validateFields()
+    await org.createDepartment(v)
+    message.success(t('create'))
+    setDeptOpen(false); deptForm.resetFields(); load()
+  }
 
-  const deptName = (id: number | null) => depts.find((d) => d.id === id)?.name_zh || '-'
+  // ---- 用户 ----
+  const [userOpen, setUserOpen] = useState(false)
+  const [userForm] = Form.useForm()
+  async function submitUser() {
+    const v = await userForm.validateFields()
+    await org.createUser({ ...v, dept_id: v.dept_id || null })
+    message.success(t('create'))
+    setUserOpen(false); userForm.resetFields(); load()
+  }
+  async function resetPwd(id: string) {
+    await org.resetPassword(id)
+    message.success('user123')
+  }
+
+  const deptTab = (
+    <Card variant="borderless" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setDeptOpen(true)}>{t('create_dept')}</Button>}>
+      <Table rowKey="id" dataSource={depts} pagination={false} columns={[
+        { title: t('dept_code'), dataIndex: 'code', width: 120 },
+        { title: t('name_zh'), dataIndex: 'name_zh' },
+        { title: t('name_en'), dataIndex: 'name_en' },
+        { title: t('name_th'), dataIndex: 'name_th' },
+      ]} />
+    </Card>
+  )
+
+  const userTab = (
+    <Card variant="borderless" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setUserOpen(true)}>{t('create_user')}</Button>}>
+      <Table rowKey="id" dataSource={users} pagination={false} columns={[
+        { title: t('display_name'), render: (_, r) => r.display_name || r.username },
+        { title: t('username'), dataIndex: 'username', width: 140 },
+        { title: t('role'), dataIndex: 'role', width: 140, render: (r: string) => <RoleTag role={r} /> },
+        { title: t('dept'), width: 140, render: (_, r) => deptName(r.dept_id) },
+        { title: '', width: 120, render: (_, r) => <Button size="small" icon={<ReloadOutlined />} onClick={() => resetPwd(r.id)}>{t('reset_pwd')}</Button> },
+      ]} />
+    </Card>
+  )
 
   return (
-    <div className="grid cols-2">
-      <div className="card">
-        <h2>{t('departments')}</h2>
-        <table>
-          <tbody>{depts.map((d) => <tr key={d.id}><td>{d.code}</td><td>{d.name_zh}</td><td>{d.name_en}</td></tr>)}</tbody>
-        </table>
-        <form onSubmit={addDept} className="row" style={{ marginTop: 12 }}>
-          <input placeholder="CODE" value={code} onChange={(e) => setCode(e.target.value)} />
-          <input placeholder={t('packages') + 'ZH'} value={nz} onChange={(e) => setNz(e.target.value)} />
-          <input placeholder="EN" value={ne} onChange={(e) => setNe(e.target.value)} />
-          <button className="btn btn-sm">{t('create')}</button>
-        </form>
-      </div>
+    <>
+      <Tabs
+        items={[
+          { key: 'dept', label: t('department_manage'), children: deptTab },
+          { key: 'user', label: t('user_manage'), children: userTab },
+        ]}
+      />
 
-      <div className="card">
-        <h2>{t('users')}</h2>
-        <table>
-          <thead><tr><th>{t('username')}</th><th>{t('role')}</th><th>{t('dept')}</th><th></th></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.display_name || u.username}</td>
-                <td>{ROLE_LABELS[u.role]?.[lang]}</td>
-                <td>{deptName(u.dept_id)}</td>
-                <td><button className="btn-ghost btn-sm" onClick={() => resetPwd(u.id)}>{t('reset_pwd')}</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <form onSubmit={addUser} className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-          <input placeholder={t('username')} value={uname} onChange={(e) => setUname(e.target.value)} />
-          <input placeholder={t('display_name')} value={disp} onChange={(e) => setDisp(e.target.value)} />
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]?.[lang]}</option>)}
-          </select>
-          <select value={String(udept)} onChange={(e) => setUdept(e.target.value === '' ? '' : Number(e.target.value))}>
-            <option value="">-</option>
-            {depts.map((d) => <option key={d.id} value={d.id}>{d.name_zh}</option>)}
-          </select>
-          <input placeholder={t('password')} value={pwd} onChange={(e) => setPwd(e.target.value)} style={{ width: 110 }} />
-          <button className="btn btn-sm">{t('create')}</button>
-        </form>
-      </div>
-    </div>
+      <Modal title={t('create_dept')} open={deptOpen} onOk={submitDept} onCancel={() => setDeptOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+        <Form form={deptForm} layout="vertical">
+          <Form.Item name="code" label={t('dept_code')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>
+          <Form.Item name="name_th" label={t('name_th')}><Input /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={t('create_user')} open={userOpen} onOk={submitUser} onCancel={() => setUserOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+        <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter', password: 'user123' }}>
+          <Form.Item name="username" label={t('username')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
+          <Form.Item name="password" label={t('password')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
+          <Form.Item name="dept_id" label={t('dept')}><Select allowClear options={depts.map((d) => ({ label: d.name_zh, value: d.id }))} /></Form.Item>
+        </Form>
+      </Modal>
+    </>
   )
 }

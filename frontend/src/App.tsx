@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { useApp } from './store'
-import Layout from './components/Layout'
+import { useAuth } from './store/AuthContext'
+import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Packages from './pages/Packages'
@@ -11,13 +11,13 @@ import Org from './pages/Org'
 import Nas from './pages/Nas'
 
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { user } = useApp()
+  const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
   return children
 }
 
 export default function App() {
-  const { user } = useApp()
+  const { user } = useAuth()
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
@@ -25,18 +25,18 @@ export default function App() {
         path="/*"
         element={
           <RequireAuth>
-            <Layout>
+            <AppLayout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/packages" element={<Packages />} />
                 <Route path="/packages/:id" element={<PackageDetail />} />
                 <Route path="/controlled" element={<Controlled />} />
+                <Route path="/nas" element={<Nas />} />
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/org" element={<Org />} />
-                <Route path="/nas" element={<Nas />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            </Layout>
+            </AppLayout>
           </RequireAuth>
         }
       />

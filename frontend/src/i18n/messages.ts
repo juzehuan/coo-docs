@@ -1,4 +1,4 @@
-export type Lang = 'zh' | 'en' | 'th'
+import type { Lang, Role } from '@/types'
 
 type Dict = Record<string, string>
 
@@ -12,8 +12,7 @@ const zh: Dict = {
   packages: '资料包',
   controlled: '受控区',
   audit: '操作日志',
-  users: '用户管理',
-  departments: '部门管理',
+  users: '组织管理',
   nas: 'NAS 归档',
   language: '语言',
   submit: '提交',
@@ -56,6 +55,30 @@ const zh: Dict = {
   phone: '电话',
   active: '启用',
   disabled: '停用',
+  department_manage: '部门管理',
+  user_manage: '用户管理',
+  create_dept: '新建部门',
+  create_user: '新建用户',
+  dept_code: '部门编码',
+  name_zh: '名称(中)',
+  name_en: '名称(英)',
+  name_th: '名称(泰)',
+  change_password: '修改密码',
+  old_password: '原密码',
+  new_password: '新密码',
+  confirm: '确认',
+  confirm_password: '确认新密码',
+  review_focus: '核查重点',
+  due_date: '截止日期',
+  loading: '加载中…',
+  login_failed: '用户名或密码错误',
+  dept_review: '部门审核',
+  coo_review: 'COO 终审',
+  reject_reason: '退回原因',
+  submit_confirm: '确认提交该版本进入部门审核？',
+  submit_success: '提交成功',
+  syncing: '同步中…',
+  sync_success: '同步完成',
 }
 
 const en: Dict = {
@@ -68,8 +91,7 @@ const en: Dict = {
   packages: 'Packages',
   controlled: 'Controlled Area',
   audit: 'Audit Log',
-  users: 'Users',
-  departments: 'Departments',
+  users: 'Organization',
   nas: 'NAS Archive',
   language: 'Language',
   submit: 'Submit',
@@ -112,6 +134,30 @@ const en: Dict = {
   phone: 'Phone',
   active: 'Active',
   disabled: 'Disabled',
+  department_manage: 'Departments',
+  user_manage: 'Users',
+  create_dept: 'New Department',
+  create_user: 'New User',
+  dept_code: 'Dept Code',
+  name_zh: 'Name (ZH)',
+  name_en: 'Name (EN)',
+  name_th: 'Name (TH)',
+  change_password: 'Change Password',
+  old_password: 'Old Password',
+  new_password: 'New Password',
+  confirm: 'Confirm',
+  confirm_password: 'Confirm Password',
+  review_focus: 'Review Focus',
+  due_date: 'Due Date',
+  loading: 'Loading…',
+  login_failed: 'Wrong username or password',
+  dept_review: 'Dept Review',
+  coo_review: 'COO Final Review',
+  reject_reason: 'Reject Reason',
+  submit_confirm: 'Submit this version for dept review?',
+  submit_success: 'Submitted',
+  syncing: 'Syncing…',
+  sync_success: 'Sync completed',
 }
 
 const th: Dict = {
@@ -124,8 +170,7 @@ const th: Dict = {
   packages: 'แพ็กเกจข้อมูล',
   controlled: 'พื้นที่ควบคุม',
   audit: 'บันทึกการตรวจสอบ',
-  users: 'ผู้ใช้',
-  departments: 'แผนก',
+  users: 'องค์กร',
   nas: 'เก็บถาวร NAS',
   language: 'ภาษา',
   submit: 'ส่ง',
@@ -168,13 +213,37 @@ const th: Dict = {
   phone: 'โทรศัพท์',
   active: 'เปิดใช้งาน',
   disabled: 'ปิดใช้งาน',
+  department_manage: 'แผนก',
+  user_manage: 'ผู้ใช้',
+  create_dept: 'แผนกใหม่',
+  create_user: 'ผู้ใช้ใหม่',
+  dept_code: 'รหัสแผนก',
+  name_zh: 'ชื่อ (จีน)',
+  name_en: 'ชื่อ (อังกฤษ)',
+  name_th: 'ชื่อ (ไทย)',
+  change_password: 'เปลี่ยนรหัสผ่าน',
+  old_password: 'รหัสผ่านเดิม',
+  new_password: 'รหัสผ่านใหม่',
+  confirm: 'ยืนยัน',
+  confirm_password: 'ยืนยันรหัสผ่านใหม่',
+  review_focus: 'จุดเน้นการตรวจสอบ',
+  due_date: 'วันครบกำหนด',
+  loading: 'กำลังโหลด…',
+  login_failed: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+  dept_review: 'ตรวจสอบแผนก',
+  coo_review: 'ตรวจสอบสุดท้าย COO',
+  reject_reason: 'เหตุผลการตีกลับ',
+  submit_confirm: 'ส่งเวอร์ชันนี้เพื่อตรวจสอบแผนก?',
+  submit_success: 'ส่งเรียบร้อย',
+  syncing: 'กำลังซิงค์…',
+  sync_success: 'ซิงค์เสร็จสิ้น',
 }
 
-export const dicts: Record<Lang, Dict> = { zh, en, th }
+export const messages: Record<Lang, Dict> = { zh, en, th }
 
 export const LANG_LABELS: Record<Lang, string> = { zh: '中文', en: 'English', th: 'ไทย' }
 
-export const ROLE_LABELS: Record<string, Record<Lang, string>> = {
+export const ROLE_LABELS: Record<Role, Record<Lang, string>> = {
   submitter: { zh: '提交人', en: 'Submitter', th: 'ผู้ส่ง' },
   dept_reviewer: { zh: '部门审核人', en: 'Dept Reviewer', th: 'ผู้ตรวจสอบแผนก' },
   coo_reviewer: { zh: 'COO 终审人', en: 'COO Reviewer', th: 'ผู้ตรวจสอบ COO' },

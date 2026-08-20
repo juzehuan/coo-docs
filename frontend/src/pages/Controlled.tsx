@@ -1,37 +1,39 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api'
-import { useApp } from '../store'
-import { STATUS_LABELS } from '../i18n'
-
-interface Row { package_code: string; package_name: string; version: any; attachment_count: number; locked: boolean }
+import { Card, Table, Tag, Typography } from 'antd'
+import { LockOutlined } from '@ant-design/icons'
+import { controlled } from '@/api/endpoints'
+import { useI18n } from '@/i18n'
+import type { ControlledItem } from '@/types'
 
 export default function Controlled() {
-  const { t, lang } = useApp()
-  const [rows, setRows] = useState<Row[] | null>(null)
+  const { t } = useI18n()
+  const [rows, setRows] = useState<ControlledItem[]>([])
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => { api<Row[]>('/controlled').then(setRows).catch(() => setRows([])) }, [])
-
-  if (rows === null) return <div className="loading">...</div>
+  useEffect(() => {
+    controlled.list().then(setRows).catch(() => setRows([])).finally(() => setLoading(false))
+  }, [])
 
   return (
-    <div className="card">
-      <h2>{t('controlled')}</h2>
-      <div className="muted" style={{ marginBottom: 10 }}>仅展示 COO 已终审放行的版本（只读受控）</div>
-      <table>
-        <thead><tr><th>COO</th><th>{t('packages')}</th><th>{t('version')}</th><th>{t('status')}</th><th>{t('attachment')}</th></tr></thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              <td>{r.package_code}</td>
-              <td>{r.package_name}</td>
-              <td>{r.version.version_no}</td>
-              <td><span className="tag released">{STATUS_LABELS.released[lang]}</span></td>
-              <td>{r.attachment_count}</td>
-            </tr>
-          ))}
-          {rows.length === 0 && <tr><td colSpan={5} className="muted">{t('no_data')}</td></tr>}
-        </tbody>
-      </table>
-    </div>
+    <Card
+      variant="borderless"
+      title={<span><LockOutlined /> {t('controlled')}</span>}
+      extra={<Typography.Text type="secondary">仅展示 COO 已终审放行的版本（只读受控）</Typography.Text>}
+    >
+      <Table
+        rowKey={(_, i) => String(i)}
+        loading={loading}
+        dataSource={rows}
+        pagination={{ pageSize: 10 }}
+        columns={[
+          { title: 'COO', dataIndex: 'package_code', width: 90 },
+          { title: t('packages'), dataIndex: 'package_name' },
+          { title: t('version'), dataIndex: ['version', 'version_no'], width: 90 },
+          { title: t('status'), width: 110, render: () => <Tag color="green">{t('released')}</Tag> },
+          { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
+          { title: '', key: 'lock', width: 70, render: () => <Tag color="green"><LockOutlined /></Tag> },
+        ]}
+      />
+    </Card>
   )
 }

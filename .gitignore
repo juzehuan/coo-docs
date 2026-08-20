@@ -14,6 +14,11 @@ backend/coo.db
 node_modules/
 dist/
 *.local
+*.tsbuildinfo
+frontend/dev.out.log
+frontend/dev.err.log
+frontend/vite.config.d.ts
+frontend/vite.config.js
 
 # 系统
 .DS_Store

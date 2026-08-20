@@ -1,69 +1,81 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api'
-import { useApp } from '../store'
-import { STATUS_LABELS } from '../i18n'
-
-interface Dash {
-  package_completion: number
-  total_attachments: number
-  pending_mine: number
-  released: number
-  overdue: number
-  package_progress: { code: string; name: string; status: string; percent: number; attachments: number }[]
-  need_attention: { code: string; name: string; issue: string; reason: string }[]
-}
+import { Card, Col, Progress, Row, Table, Spin, Typography } from 'antd'
+import { AuditOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
+import { dashboard } from '@/api/endpoints'
+import { useI18n } from '@/i18n'
+import { STATUS_LABELS } from '@/i18n/messages'
+import { formatTime } from '@/utils/format'
+import StatCard from '@/components/StatCard'
+import StatusTag from '@/components/StatusTag'
+import type { Dashboard as Dash } from '@/types'
 
 export default function Dashboard() {
-  const { t, lang } = useApp()
+  const { t, lang } = useI18n()
   const nav = useNavigate()
   const [d, setD] = useState<Dash | null>(null)
 
-  useEffect(() => { api<Dash>('/dashboard').then(setD).catch(() => {}) }, [])
+  useEffect(() => { dashboard.get().then(setD).catch(() => {}) }, [])
 
-  if (!d) return <div className="loading">...</div>
+  if (!d) return <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>
 
   return (
     <div>
-      <div className="grid cols-4">
-        <div className="stat"><div className="num">{d.package_completion}%</div><div className="label">{t('progress')}</div></div>
-        <div className="stat"><div className="num">{d.pending_mine}</div><div className="label">{t('pending_mine')}</div></div>
-        <div className="stat"><div className="num">{d.released}</div><div className="label">{t('released')}</div></div>
-        <div className="stat"><div className="num">{d.total_attachments}</div><div className="label">{t('attachment')}</div></div>
-      </div>
+      <Row gutter={16}>
+        <Col xs={12} md={6}><StatCard title={t('progress')} value={d.package_completion} suffix="%" icon={<FileDoneOutlined />} color="#1f5fa8" /></Col>
+        <Col xs={12} md={6}><StatCard title={t('pending_mine')} value={d.pending_mine} icon={<FileSyncOutlined />} color="#d97706" /></Col>
+        <Col xs={12} md={6}><StatCard title={t('released')} value={d.released} icon={<AuditOutlined />} color="#16a34a" /></Col>
+        <Col xs={12} md={6}><StatCard title={t('attachment')} value={d.total_attachments} icon={<InboxOutlined />} color="#7c3aed" /></Col>
+      </Row>
 
-      <div className="grid cols-2" style={{ marginTop: 18 }}>
-        <div className="card">
-          <h2>{t('packages')}</h2>
-          <table>
-            <thead><tr><th>COO</th><th>{t('packages')}</th><th>{t('status')}</th><th>{t('attachment')}</th><th></th></tr></thead>
-            <tbody>
-              {d.package_progress.map((p) => (
-                <tr key={p.code}>
-                  <td>{p.code}</td>
-                  <td>{p.name}</td>
-                  <td><span className={`tag ${p.status}`}>{STATUS_LABELS[p.status]?.[lang] ?? p.status}</span></td>
-                  <td>{p.attachments}</td>
-                  <td><button className="btn-ghost btn-sm" onClick={() => nav('/packages')}>{t('detail')}</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="card">
-          <h2>{t('need_attention')}</h2>
-          {d.need_attention.length === 0 ? <div className="muted">{t('no_data')}</div> : (
-            <table>
-              <thead><tr><th>COO</th><th>{t('packages')}</th><th>{t('issue') ?? '事项'}</th></tr></thead>
-              <tbody>
-                {d.need_attention.map((n, i) => (
-                  <tr key={i}><td>{n.code}</td><td>{n.name}</td><td>{n.issue}{n.reason ? `：${n.reason}` : ''}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col xs={24} md={10}>
+          <Card variant="borderless" title={t('progress')}>
+            <Progress type="dashboard" percent={d.package_completion} strokeColor="#1f5fa8" />
+            <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
+              {t('released')} {d.released} · {t('overdue')} {d.overdue}
+            </Typography.Paragraph>
+          </Card>
+        </Col>
+        <Col xs={24} md={14}>
+          <Card variant="borderless" title={t('need_attention')}>
+            {d.need_attention.length === 0
+              ? <Typography.Text type="secondary">{t('no_data')}</Typography.Text>
+              : (
+                <Table
+                  rowKey={(_, i) => String(i)}
+                  size="small" pagination={false}
+                  dataSource={d.need_attention}
+                  columns={[
+                    { title: 'COO', dataIndex: 'code', width: 90 },
+                    { title: t('packages'), dataIndex: 'name' },
+                    { title: t('issue') ?? '事项', dataIndex: 'issue' },
+                    { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
+                  ]}
+                />
+              )}
+          </Card>
+        </Col>
+      </Row>
+
+      <Card variant="borderless" title={t('packages')} style={{ marginTop: 16 }}>
+        <Table
+          rowKey="code"
+          dataSource={d.package_progress}
+          pagination={{ pageSize: 8 }}
+          columns={[
+            { title: 'COO', dataIndex: 'code', width: 90 },
+            { title: t('packages'), dataIndex: 'name' },
+            { title: t('status'), dataIndex: 'status', width: 120, render: (s: string) => <StatusTag status={s} /> },
+            {
+              title: t('progress'), dataIndex: 'percent', width: 180,
+              render: (p: number) => <Progress percent={p} size="small" strokeColor="#1f5fa8" />,
+            },
+            { title: t('attachment'), dataIndex: 'attachments', width: 90, render: (n: number) => `${n}` },
+            { title: '', key: 'act', width: 80, render: (_, r) => <a onClick={() => nav('/packages')}>{t('detail')}</a> },
+          ]}
+        />
+      </Card>
     </div>
   )
 }
