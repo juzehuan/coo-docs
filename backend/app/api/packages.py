@@ -13,6 +13,7 @@ from app.core.rbac import (
     admin_only, can_edit_package, can_review_dept, get_current_user, is_coo,
 )
 from app.core.snowflake import next_id
+from app.core.storage import save_upload
 from app.db import get_db
 from app.models import (
     Attachment, AuditDomain, Package, PackageVersion, User,
@@ -211,9 +212,7 @@ async def upload_attachments(
         import hashlib
         md5 = hashlib.md5(content).hexdigest()
         att_id = next_id()
-        stored = f"{att_id}{ext}"
-        with open(os.path.join(settings.UPLOAD_DIR, stored), "wb") as out:
-            out.write(content)
+        stored = save_upload(content, ext)
         att = Attachment(
             id=att_id, version_id=vid, file_name=stored, original_name=f.filename,
             file_size=len(content), md5=md5, mime_type=f.content_type or "application/octet-stream",
@@ -242,8 +241,11 @@ def delete_attachment(pkg_id: int, vid: int, aid: int, request: Request,
         raise HTTPException(status_code=403, detail="无权操作")
     if v.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行版本不可修改")
+    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
+    reused = db.query(Attachment.id).filter(
+        Attachment.file_name == att.file_name, Attachment.id != att.id).first()
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
-    if os.path.exists(path):
+    if not reused and os.path.exists(path):
         os.remove(path)
     db.delete(att)
     _reset_status_on_edit(v)
