@@ -60,6 +60,7 @@ class UserCreate(BaseModel):
     phone: str = ""
     dept_id: Optional[int] = None
     role: str = "submitter"
+    factory_ids: list[int] = []   # 授权工厂
 
 
 class UserUpdate(BaseModel):
@@ -69,6 +70,7 @@ class UserUpdate(BaseModel):
     dept_id: Optional[int] = None
     role: Optional[str] = None
     status: Optional[str] = None
+    factory_ids: Optional[list[int]] = None
 
 
 class UserOut(BaseModel):
@@ -81,8 +83,113 @@ class UserOut(BaseModel):
     dept_id: Optional[int] = None
     role: str
     status: str
+    factory_ids: list[int] = []
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+
+
+# ---------- 工厂 ----------
+class FactoryCreate(BaseModel):
+    code: str
+    name_zh: str
+    name_en: str = ""
+    name_th: str = ""
+    sort_order: int = 0
+
+
+class FactoryUpdate(BaseModel):
+    name_zh: Optional[str] = None
+    name_en: Optional[str] = None
+    name_th: Optional[str] = None
+    status: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class FactoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    code: str
+    name_zh: str
+    name_en: str = ""
+    name_th: str = ""
+    status: str
+    sort_order: int = 0
+    created_at: Optional[datetime] = None
+
+
+# ---------- 订单 ----------
+class OrderCreate(BaseModel):
+    factory_id: int
+    order_no: str
+    customer: str = ""
+    product: str = ""
+    quantity: int = 0
+    export_date: str = ""
+    status: str = "active"
+    note: str = ""
+    owner_user_id: Optional[int] = None
+
+
+class OrderUpdate(BaseModel):
+    factory_id: Optional[int] = None
+    customer: Optional[str] = None
+    product: Optional[str] = None
+    quantity: Optional[int] = None
+    export_date: Optional[str] = None
+    status: Optional[str] = None
+    note: Optional[str] = None
+    owner_user_id: Optional[int] = None
+
+
+class OrderPackageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    order_id: int
+    package_id: int
+    project_code: str
+    status: str
+    owner_user_id: Optional[int] = None
+    required: bool = True
+    due_date: str = ""
+    locked: bool = False
+    created_at: Optional[datetime] = None
+    # 冗余展示字段
+    package_code: str = ""
+    package_name: str = ""
+    attachment_count: int = 0
+    attachments: list["AttachmentOut"] = []
+
+
+class OrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    factory_id: int
+    factory_code: str = ""
+    factory_name: str = ""
+    order_no: str
+    customer: str = ""
+    product: str = ""
+    quantity: int = 0
+    export_date: str = ""
+    status: str
+    note: str = ""
+    owner_user_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    package_count: int = 0
+    released_count: int = 0
+    completion: float = 0.0
+
+
+class OrderDetailOut(OrderOut):
+    packages: list[OrderPackageOut] = []
+
+
+class OrderInstanceCreate(BaseModel):
+    """为订单按所选模板实例化订单-资料包。"""
+    package_id: int
+    owner_user_id: Optional[int] = None
+    required: bool = True
+    due_date: str = ""
 
 
 # ---------- 资料包 ----------
@@ -132,7 +239,7 @@ class PackageOut(BaseModel):
 class AttachmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    version_id: int
+    version_id: Optional[int] = None   # 订单附件无版本绑定
     file_name: str
     original_name: str
     file_size: int = 0
@@ -230,3 +337,4 @@ class DashboardOut(BaseModel):
 
 # 解决前向引用
 TokenResponse.model_rebuild()
+OrderPackageOut.model_rebuild()

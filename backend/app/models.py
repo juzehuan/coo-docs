@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text,
+    BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Table, Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -13,6 +13,32 @@ from app.db import Base
 
 def _id() -> int:
     return next_id()
+
+
+# 账号-工厂 多对多授权：一个账号可访问多个工厂
+user_factories = Table(
+    "user_factories",
+    Base.metadata,
+    Column("user_id", BigInteger, ForeignKey("users.id"), primary_key=True),
+    Column("factory_id", BigInteger, ForeignKey("factories.id"), primary_key=True),
+)
+
+
+class Factory(Base):
+    """工厂（数据隔离边界），如 RMA / WEV。"""
+    __tablename__ = "factories"
+
+    id = Column(BigInteger, primary_key=True, default=_id)
+    code = Column(String(32), unique=True, nullable=False, index=True)   # RMA / WEV
+    name_zh = Column(String(128), nullable=False)
+    name_en = Column(String(128), nullable=False, default="")
+    name_th = Column(String(128), nullable=False, default="")
+    status = Column(String(16), nullable=False, default="active")        # active/disabled
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", secondary=user_factories, back_populates="factories")
+    orders = relationship("Order", back_populates="factory")
 
 
 class Department(Base):
@@ -46,6 +72,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     department = relationship("Department", back_populates="users")
+    factories = relationship("Factory", secondary=user_factories, back_populates="users")
+
+    @property
+    def factory_ids(self) -> list:
+        return [f.id for f in self.factories]
 
 
 class Package(Base):
@@ -67,6 +98,54 @@ class Package(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     versions = relationship("PackageVersion", back_populates="package", cascade="all, delete-orphan")
+
+
+class Order(Base):
+    """客户订单（数据模型以订单为中心组织资料收集）。"""
+    __tablename__ = "orders"
+
+    id = Column(BigInteger, primary_key=True, default=_id)
+    factory_id = Column(BigInteger, ForeignKey("factories.id"), nullable=False, index=True)
+    order_no = Column(String(64), unique=True, nullable=False, index=True)      # 订单号（PO）
+    customer = Column(String(255), nullable=False, default="")                  # 客户
+    product = Column(String(255), nullable=False, default="")                   # 产品
+    quantity = Column(Integer, default=0)                                       # 数量
+    export_date = Column(String(32), default="")                                # 预计/实际出口日期（宽松文本）
+    status = Column(String(16), nullable=False, default="active")               # active/completed/closed
+    note = Column(Text, default="")
+    owner_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=True, index=True)  # 责任人
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    factory = relationship("Factory", back_populates="orders")
+    packages = relationship("OrderPackage", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderPackage(Base):
+    """订单-资料包实例：一个订单按资料包模板实例化一份资料，承载提交-审核-放行流程。"""
+    __tablename__ = "order_packages"
+
+    id = Column(BigInteger, primary_key=True, default=_id)
+    order_id = Column(BigInteger, ForeignKey("orders.id"), nullable=False, index=True)
+    package_id = Column(BigInteger, ForeignKey("packages.id"), nullable=False, index=True)  # 模板
+    project_code = Column(String(64), nullable=False, default="Bintelli-US")
+    status = Column(String(16), nullable=False, default="draft")
+    owner_user_id = Column(BigInteger, nullable=True)   # 责任人（继承模板，可覆盖）
+    required = Column(Boolean, default=True)
+    due_date = Column(String(32), default="")
+    submitted_by = Column(BigInteger, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    dept_reviewer_id = Column(BigInteger, nullable=True)
+    dept_reviewed_at = Column(DateTime, nullable=True)
+    dept_reject_reason = Column(Text, default="")
+    coo_reviewer_id = Column(BigInteger, nullable=True)
+    coo_reviewed_at = Column(DateTime, nullable=True)
+    coo_reject_reason = Column(Text, default="")
+    locked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    order = relationship("Order", back_populates="packages")
+    package = relationship("Package")
+    attachments = relationship("Attachment", back_populates="order_package", cascade="all, delete-orphan")
 
 
 class PackageVersion(Base):
@@ -98,7 +177,8 @@ class Attachment(Base):
     __tablename__ = "attachments"
 
     id = Column(BigInteger, primary_key=True, default=_id)
-    version_id = Column(BigInteger, ForeignKey("package_versions.id"), nullable=False, index=True)
+    version_id = Column(BigInteger, ForeignKey("package_versions.id"), nullable=True, index=True)
+    order_package_id = Column(BigInteger, ForeignKey("order_packages.id"), nullable=True, index=True)
     file_name = Column(String(255), nullable=False)     # 存储文件名（含扩展名）
     original_name = Column(String(255), nullable=False)  # 用户上传原名
     file_size = Column(BigInteger, default=0)
@@ -112,6 +192,7 @@ class Attachment(Base):
     nas_synced_at = Column(DateTime, nullable=True)
 
     version = relationship("PackageVersion", back_populates="attachments")
+    order_package = relationship("OrderPackage", back_populates="attachments")
 
 
 class AuditLog(Base):

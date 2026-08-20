@@ -7,7 +7,7 @@ from app.core.rbac import admin_only, get_current_user
 from app.core.security import hash_password
 from app.core.snowflake import next_id
 from app.db import get_db
-from app.models import AuditDomain, Department, User
+from app.models import AuditDomain, Department, Factory, User
 from app.schemas import DepartmentCreate, DepartmentOut, DepartmentUpdate, Msg, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/org", tags=["org"])
@@ -71,6 +71,8 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
         role=payload.role,
         status="active",
     )
+    if payload.factory_ids:
+        u.factories = db.query(Factory).filter(Factory.id.in_(payload.factory_ids)).all()
     db.add(u)
     db.commit()
     db.refresh(u)
@@ -88,8 +90,11 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     data = payload.model_dump(exclude_unset=True)
     if "password" in data:  # 不允许通过此接口改密
         data.pop("password")
+    factory_ids = data.pop("factory_ids", None)
     for k, v in data.items():
         setattr(u, k, v)
+    if "factory_ids" in payload.model_dump(exclude_unset=True) and factory_ids is not None:
+        u.factories = db.query(Factory).filter(Factory.id.in_(factory_ids)).all()
     db.commit()
     db.refresh(u)
     return u

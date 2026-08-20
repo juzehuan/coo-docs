@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.json import SafeIntJSONResponse
 from app.db import SessionLocal, init_db
-from app.api import audit, auth, controlled, dashboard, nas, org, packages
+from app.api import audit, auth, controlled, dashboard, factories, nas, orders, org, packages
 
 
 def create_app() -> FastAPI:
@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.NAS_ROOT, exist_ok=True)
 
-    for m in (auth, org, packages, dashboard, audit, nas, controlled):
+    for m in (auth, org, packages, orders, factories, dashboard, audit, nas, controlled):
         app.include_router(m.router, prefix=settings.API_PREFIX)
 
     @app.get("/health")

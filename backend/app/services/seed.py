@@ -1,10 +1,16 @@
-"""初始化种子数据：部门、12 个资料包、角色账号。"""
+"""初始化种子数据：工厂、部门、12 个资料包、角色账号与示例订单。"""
 from sqlalchemy.orm import Session
 
 from app.constants import Role
 from app.core.security import hash_password
-from app.models import Department, Package, User, PackageVersion
+from app.models import Department, Factory, Order, Package, User, PackageVersion
 from app.core.snowflake import next_id
+
+# 工厂（数据隔离边界）
+FACTORIES = [
+    ("RMA", "RMA 工厂", "RMA Factory", "โรงงาน RMA"),
+    ("WEV", "WEV 工厂", "WEV Factory", "โรงงาน WEV"),
+]
 
 # 内置 12 个资料包（COO-01 ~ COO-13）
 PACKAGE_SEED = [
@@ -47,6 +53,18 @@ ACCOUNTS = [
 
 
 def seed(db: Session):
+    # 工厂
+    factory_map = {}
+    for i, (code, zh, en, th) in enumerate(FACTORIES):
+        existing = db.query(Factory).filter(Factory.code == code).first()
+        if existing:
+            factory_map[code] = existing
+            continue
+        f = Factory(code=code, name_zh=zh, name_en=en, name_th=th, sort_order=i)
+        db.add(f)
+        db.flush()
+        factory_map[code] = f
+
     # 部门
     dept_map = {}
     for code, zh, en, th in DEPARTMENTS:
@@ -70,19 +88,43 @@ def seed(db: Session):
         )
         db.add(pkg)
 
-    # 账号
+    # 账号（admin/coo/auditor 授权全部工厂；业务账号授权 RMA）
+    # 幂等：已存在账号也同步工厂授权，避免历史库/重建时授权缺失。
     for username, name, role, dept_code, pwd in ACCOUNTS:
-        if db.query(User).filter(User.username == username).first():
+        u = db.query(User).filter(User.username == username).first()
+        if not u:
+            u = User(
+                id=next_id(),
+                username=username,
+                password_hash=hash_password(pwd),
+                display_name=name,
+                dept_id=dept_map[dept_code].id if dept_code else None,
+                role=role.value if isinstance(role, Role) else role,
+                status="active",
+            )
+            db.add(u)
+            db.flush()
+        want = list(factory_map.values()) if role in (Role.ADMIN, Role.COO_REVIEWER, Role.AUDITOR) else (
+            [factory_map["RMA"]] if factory_map else [])
+        cur = {f.id for f in u.factories}
+        for f in want:
+            if f.id not in cur:
+                u.factories.append(f)
+
+    # 示例订单（每厂 1 单，供快速验收）
+    sample = [
+        ("RMA", "ORD-RMA-001", "Bintelli Motors", "高尔夫球车 RMA-X1", 120, "2026-10-15"),
+        ("WEV", "ORD-WEV-001", "Toyha East", "城市电动小车 WEV-C2", 40, "2026-11-01"),
+    ]
+    for fac_code, order_no, customer, product, qty, export_date in sample:
+        if db.query(Order).filter(Order.order_no == order_no).first():
             continue
-        u = User(
-            id=next_id(),
-            username=username,
-            password_hash=hash_password(pwd),
-            display_name=name,
-            dept_id=dept_map[dept_code].id if dept_code else None,
-            role=role.value if isinstance(role, Role) else role,
-            status="active",
-        )
-        db.add(u)
+        fac = factory_map.get(fac_code)
+        if not fac:
+            continue
+        db.add(Order(
+            id=next_id(), factory_id=fac.id, order_no=order_no, customer=customer,
+            product=product, quantity=qty, export_date=export_date, status="active",
+        ))
 
     db.commit()
