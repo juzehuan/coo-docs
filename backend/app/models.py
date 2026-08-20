@@ -210,6 +210,20 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class Notification(Base):
+    """站内通知：提交/审核/放行等关键事件按用户推送。"""
+    __tablename__ = "notifications"
+
+    id = Column(BigInteger, primary_key=True, default=_id)
+    user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    body = Column(Text, default="")
+    type = Column(String(32), default="")        # submit/dept_review/coo_review/released/rejected/withdrawn
+    link = Column(String(255), default="")       # 前端跳转路径
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class SyncRecord(Base):
     """NAS 同步批次记录。"""
     __tablename__ = "sync_records"

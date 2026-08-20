@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.json import SafeIntJSONResponse
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.db import SessionLocal, init_db
-from app.api import audit, auth, controlled, dashboard, factories, nas, orders, org, packages, todo
+from app.api import audit, auth, controlled, dashboard, factories, nas, notifications, orders, org, packages, todo
 
 
 def create_app() -> FastAPI:
@@ -29,7 +29,7 @@ def create_app() -> FastAPI:
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.NAS_ROOT, exist_ok=True)
 
-    for m in (auth, org, packages, orders, factories, dashboard, audit, nas, controlled, todo):
+    for m in (auth, org, packages, orders, factories, dashboard, audit, nas, controlled, todo, notifications):
         app.include_router(m.router, prefix=settings.API_PREFIX)
 
     @app.get("/health")

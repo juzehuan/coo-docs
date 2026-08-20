@@ -19,6 +19,7 @@ from app.schemas import (
     AttachmentOut, Msg, OrderCreate, OrderDetailOut, OrderInstanceCreate, OrderOut,
     OrderPackageOut, OrderUpdate, ReviewRequest,
 )
+from app.services.notify import coo_reviewer_ids, dept_reviewer_ids, notify_users
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -201,6 +202,11 @@ def submit_order_package(order_id: int, op_id: int, request: Request,
     db.refresh(op)
     log_event(db, AuditDomain.REVIEW, "op_submit", actor=user, ip=client_ip(request),
               target=f"{o.order_no}/{op.package.code}")
+    dept_id = op.package.dept_id if op.package else None
+    notify_users(db, dept_reviewer_ids(db, dept_id),
+                 title=f"{o.order_no}/{op.package.code} 待部门审核",
+                 body=op.package.name_zh, ntype="submit", link=f"/orders/{o.id}", exclude=user.id)
+    db.commit()
     return _op_out(op)
 
 
@@ -241,6 +247,25 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
         raise HTTPException(status_code=400, detail="无效的审核层级")
     if decision == ReviewDecision.REJECT and not payload.reason:
         raise HTTPException(status_code=400, detail="退回必须填写整改要求")
+
+    # 事件通知：部门通过→COO 终审人；退回/放行→责任人
+    recipient = op.owner_user_id or op.submitted_by
+    pcode = op.package.code if op.package else ""
+    if level == ReviewLevel.DEPT and decision == ReviewDecision.APPROVE:
+        notify_users(db, coo_reviewer_ids(db),
+                     title=f"{o.order_no}/{pcode} 待COO终审",
+                     body=op.package.name_zh if op.package else "", ntype="coo_review",
+                     link=f"/orders/{o.id}", exclude=user.id)
+    elif recipient:
+        if decision == ReviewDecision.APPROVE:
+            notify_users(db, [recipient], title=f"{o.order_no}/{pcode} 已放行归档",
+                         body=op.package.name_zh if op.package else "", ntype="released",
+                         link=f"/orders/{o.id}", exclude=user.id)
+        else:
+            notify_users(db, [recipient], title=f"{o.order_no}/{pcode} 被退回",
+                         body=op.package.name_zh if op.package else "", ntype="rejected",
+                         link=f"/orders/{o.id}", exclude=user.id)
+
     db.commit()
     db.refresh(op)
     return _op_out(op)
@@ -264,6 +289,13 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
     db.refresh(op)
     log_event(db, AuditDomain.REVIEW, "op_withdraw", actor=user, ip=client_ip(request),
               target=f"{o.order_no}/{op_id}")
+    dept_id = op.package.dept_id if op.package else None
+    pcode = op.package.code if op.package else ""
+    notify_users(db, dept_reviewer_ids(db, dept_id),
+                 title=f"{o.order_no}/{pcode} 已撤回",
+                 body=op.package.name_zh if op.package else "", ntype="withdrawn",
+                 link=f"/orders/{o.id}", exclude=user.id)
+    db.commit()
     return _op_out(op)
 
 
