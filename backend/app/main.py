@@ -45,6 +45,10 @@ def create_app() -> FastAPI:
             seed(db)
         finally:
             db.close()
+        # NAS 归档后端：启用 S3 时确保存储桶存在
+        from app.services import s3
+        if s3.enabled():
+            s3.ensure_bucket()
 
     return app
 

@@ -26,13 +26,25 @@ class Settings(BaseSettings):
 
     # 文件存储
     UPLOAD_DIR: str = "./data/uploads"          # 云端主存储
-    NAS_ROOT: str = "./data/nas"                # 工厂本地 NAS 挂载点（开发时用本地目录模拟）
+    NAS_ROOT: str = "./data/nas"                # 本地目录回退模式的目标（未配置 S3 时用）
     MAX_FILE_MB: int = 100
     ALLOWED_EXTENSIONS: str = ""                # 留空则用 constants 默认值
+
+    # NAS 归档（S3 兼容接口，MinIO / 群晖 / 威联通 / 云对象存储）
+    S3_ENDPOINT_URL: str = ""                   # 留空则退化为本地目录同步
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
+    S3_BUCKET: str = "coo-nas"
+    S3_REGION: str = "us-east-1"
+    S3_USE_SSL: bool = False
 
     # NAS 同步
     NAS_SYNC_TIME: str = "01:00"
     PROJECT_CODE: str = "Bintelli-US"
+
+    @property
+    def S3_ENABLED(self) -> bool:
+        return bool(self.S3_ENDPOINT_URL and self.S3_ACCESS_KEY and self.S3_SECRET_KEY)
 
     # CORS（前端开发地址）
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

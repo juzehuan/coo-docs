@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
 from app.core.rbac import coo_or_admin, get_current_user
-from app.core.config import settings
 from app.db import get_db
 from app.models import AuditDomain, SyncRecord, User
 from app.schemas import NasStatusOut, SyncRecordOut
@@ -19,7 +18,7 @@ def nas_status(db: Session = Depends(get_db), _: User = Depends(get_current_user
     last = db.query(SyncRecord).order_by(SyncRecord.started_at.desc()).first()
     pending = db.query(nas_sync.Attachment).filter(nas_sync.Attachment.nas_synced.is_(False)).count()
     return NasStatusOut(
-        nas_root=settings.NAS_ROOT,
+        nas_root=nas_sync.nas_target_display(),
         nas_reachable=reachable,
         last_sync=SyncRecordOut.model_validate(last) if last else None,
         pending_count=pending,

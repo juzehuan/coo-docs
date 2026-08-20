@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# 云端主存储与 NAS 挂载点（生产时 NAS_ROOT 挂载隧道客户端提供的目录）
+# 云端主存储与本地目录回退目录（生产 NAS 走 S3 兼容接口时不再依赖挂载）
 RUN mkdir -p /app/data/uploads /app/data/nas
 
 EXPOSE 8000

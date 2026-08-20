@@ -10,6 +10,7 @@ venv/
 backend/data/
 backend/coo.db
 data/
+nas_mount/
 
 # Node / 前端
 node_modules/
