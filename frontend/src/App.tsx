@@ -3,6 +3,8 @@ import { useAuth } from './store/AuthContext'
 import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Orders from './pages/Orders'
+import OrderDetail from './pages/OrderDetail'
 import Packages from './pages/Packages'
 import PackageDetail from './pages/PackageDetail'
 import Controlled from './pages/Controlled'
@@ -28,6 +30,8 @@ export default function App() {
             <AppLayout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/orders/:id" element={<OrderDetail />} />
                 <Route path="/packages" element={<Packages />} />
                 <Route path="/packages/:id" element={<PackageDetail />} />
                 <Route path="/controlled" element={<Controlled />} />

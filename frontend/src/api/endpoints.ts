@@ -2,8 +2,8 @@ import {
   del, downloadBlob, get, patch, post, upload,
 } from './client'
 import type {
-  AuditLog, ControlledItem, Dashboard, Department, NasStatus, Package, PackageDetailResp, PackageRow,
-  SyncRecord, User, Version,
+  Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, Order, OrderAttachment,
+  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, SyncRecord, User, Version,
 } from '@/types'
 
 // ---------- 认证 ----------
@@ -16,13 +16,46 @@ export const auth = {
   logout: () => post('/auth/logout'),
 }
 
+// ---------- 工厂 ----------
+export const factories = {
+  list: () => get<Factory[]>('/factories'),
+  create: (data: Partial<Factory>) => post<Factory>('/factories', data),
+}
+
+// ---------- 订单 ----------
+export const orders = {
+  list: () => get<Order[]>('/orders'),
+  detail: (id: string) => get<OrderDetail>(`/orders/${id}`),
+  create: (data: Partial<Order>) => post<Order>('/orders', data),
+  update: (id: string, data: Partial<Order>) => patch<Order>(`/orders/${id}`, data),
+  remove: (id: string) => del(`/orders/${id}`),
+  addPackage: (id: string, data: { package_id: string; owner_user_id?: string | null; required?: boolean; due_date?: string }) =>
+    post<OrderPackage>(`/orders/${id}/packages`, data),
+  removePackage: (id: string, opId: string) => del(`/orders/${id}/packages/${opId}`),
+  submit: (id: string, opId: string) => post<OrderPackage>(`/orders/${id}/packages/${opId}/submit`),
+  review: (id: string, opId: string, decision: string, level: string, reason: string) =>
+    post<OrderPackage>(`/orders/${id}/packages/${opId}/review`, { decision, level, reason }),
+  uploadAttachments: (id: string, opId: string, files: File[], batch_no: string) => {
+    const form = new FormData()
+    files.forEach((f) => form.append('files', f))
+    form.append('batch_no', batch_no)
+    return upload<OrderAttachment[]>(`/orders/${id}/packages/${opId}/attachments`, form)
+  },
+  deleteAttachment: (id: string, opId: string, aid: string) =>
+    del(`/orders/${id}/packages/${opId}/attachments/${aid}`),
+  attachmentUrl: (id: string, opId: string, aid: string, preview = false) =>
+    `/api/orders/${id}/packages/${opId}/attachments/${aid}/file${preview ? '?preview=true' : ''}`,
+  exportCsv: (id: string) => (window.location.href = `/api/orders/${id}/export`),
+  exportZip: (id: string) => (window.location.href = `/api/orders/${id}/export/zip`),
+}
+
 // ---------- 组织 ----------
 export const org = {
   listDepartments: () => get<Department[]>('/org/departments'),
   createDepartment: (data: { code: string; name_zh: string; name_en?: string; name_th?: string }) =>
     post<Department>('/org/departments', data),
   listUsers: (dept_id?: string) => get<User[]>('/org/users', dept_id ? { dept_id } : undefined),
-  createUser: (data: { username: string; password: string; display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string }) =>
+  createUser: (data: { username: string; password: string; display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string; factory_ids?: number[] }) =>
     post<User>('/org/users', data),
   resetPassword: (id: string) => post(`/org/users/${id}/reset-password`),
 }

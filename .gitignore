@@ -9,6 +9,7 @@ venv/
 # 上传与 NAS 数据（运行时生成）
 backend/data/
 backend/coo.db
+data/
 
 # Node / 前端
 node_modules/

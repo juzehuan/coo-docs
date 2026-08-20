@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Layout, Menu, Avatar, Dropdown, Button, theme as antdTheme } from 'antd'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
-  AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined,
+  AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/AuthContext'
@@ -21,6 +21,7 @@ interface MenuItem {
 
 const MENU: MenuItem[] = [
   { key: '/', icon: <DashboardOutlined />, label: 'dashboard', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
+  { key: '/orders', icon: <ShoppingCartOutlined />, label: 'orders', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/packages', icon: <FolderOpenOutlined />, label: 'packages', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/controlled', icon: <SafetyOutlined />, label: 'controlled', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/nas', icon: <DatabaseOutlined />, label: 'nas', roles: ['coo_reviewer', 'auditor', 'admin'] },

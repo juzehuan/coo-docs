@@ -7,8 +7,69 @@ export interface User {
   dept_id: string | null
   role: string
   status: string
+  factory_ids: string[]
   last_login_at: string | null
   created_at: string | null
+}
+
+export interface Factory {
+  id: string
+  code: string
+  name_zh: string
+  name_en: string
+  name_th: string
+  status: string
+  sort_order: number
+  created_at: string | null
+}
+
+export interface OrderAttachment {
+  id: string
+  original_name: string
+  file_name: string
+  md5: string
+  batch_no: string
+  uploaded_at: string | null
+}
+
+export interface OrderPackage {
+  id: string
+  order_id: string
+  package_id: string
+  project_code: string
+  status: string
+  owner_user_id: string | null
+  required: boolean
+  due_date: string
+  locked: boolean
+  created_at: string | null
+  package_code: string
+  package_name: string
+  attachment_count: number
+  attachments?: OrderAttachment[]
+}
+
+export interface Order {
+  id: string
+  factory_id: string
+  factory_code: string
+  factory_name: string
+  order_no: string
+  customer: string
+  product: string
+  quantity: number
+  export_date: string
+  status: string
+  note: string
+  owner_user_id: string | null
+  created_at: string | null
+  package_count: number
+  released_count: number
+  completion: number
+}
+
+export interface OrderDetail extends Order {
+  packages: OrderPackage[]
 }
 
 export interface Department {
