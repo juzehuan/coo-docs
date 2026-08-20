@@ -9,6 +9,7 @@ import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import LanguageSwitcher from './LanguageSwitcher'
 import RoleTag from './RoleTag'
+import NotificationBell from './NotificationBell'
 
 const { Header, Sider, Content } = Layout
 
@@ -66,6 +67,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
         <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#fff', borderBottom: `1px solid ${token.colorBorderSecondary}`, boxShadow: '0 1px 3px rgba(11,37,69,0.05)' }}>
           <div />
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <NotificationBell />
             <LanguageSwitcher />
             <Dropdown
               menu={{

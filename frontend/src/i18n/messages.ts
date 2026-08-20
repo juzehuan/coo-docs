@@ -113,6 +113,9 @@ const zh: Dict = {
   step_release: '放行归档',
   syncing: '同步中…',
   sync_success: '同步完成',
+  notifications: '通知',
+  mark_all_read: '全部已读',
+  no_notifications: '暂无通知',
 }
 
 const en: Dict = {
@@ -226,6 +229,9 @@ const en: Dict = {
   step_release: 'Release Archive',
   syncing: 'Syncing…',
   sync_success: 'Sync completed',
+  notifications: 'Notifications',
+  mark_all_read: 'Mark all as read',
+  no_notifications: 'No notifications',
 }
 
 const th: Dict = {
@@ -339,6 +345,9 @@ const th: Dict = {
   step_release: 'เก็บถาวร-อนุมัติ',
   syncing: 'กำลังซิงค์…',
   sync_success: 'ซิงค์เสร็จสิ้น',
+  notifications: 'การแจ้งเตือน',
+  mark_all_read: 'ทำเครื่องหมายว่าอ่านแล้วทั้งหมด',
+  no_notifications: 'ไม่มีการแจ้งเตือน',
 }
 
 export const messages: Record<Lang, Dict> = { zh, en, th }

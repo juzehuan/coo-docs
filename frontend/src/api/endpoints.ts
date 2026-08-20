@@ -2,7 +2,8 @@ import {
   del, downloadBlob, get, patch, post, upload,
 } from './client'
 import type {
-  Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, Order, OrderAttachment,
+  Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, NotificationItem,
+  NotificationList, Order, OrderAttachment,
   OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, SyncRecord, TodoItem, User, Version,
 } from '@/types'
 
@@ -95,6 +96,14 @@ export const dashboard = {
 // ---------- 待办队列 ----------
 export const todo = {
   list: () => get<TodoItem[]>('/todo'),
+}
+
+// ---------- 通知中心 ----------
+export const notifications = {
+  list: (limit?: number) => get<NotificationList>('/notifications', limit ? { limit } : undefined),
+  unreadCount: () => get<{ count: number }>('/notifications/unread-count'),
+  markRead: (id: string) => post(`/notifications/${id}/read`),
+  markAllRead: () => post('/notifications/read-all'),
 }
 
 export const controlled = {

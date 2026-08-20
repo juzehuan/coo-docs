@@ -214,6 +214,22 @@ export interface TodoItem {
   due_date: string
 }
 
+export interface NotificationItem {
+  id: string
+  title: string
+  body: string
+  type: string
+  link: string
+  is_read: boolean
+  created_at: string | null
+}
+
+export interface NotificationList {
+  total: number
+  unread: number
+  items: NotificationItem[]
+}
+
 export type Lang = 'zh' | 'en' | 'th'
 
 export const ROLES = ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] as const
