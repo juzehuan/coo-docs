@@ -5,12 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.json import SafeIntJSONResponse
 from app.db import SessionLocal, init_db
 from app.api import audit, auth, controlled, dashboard, nas, org, packages
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title=settings.APP_NAME, version="1.0.0")
+    # 用安全编码器避免 Snowflake 大整数在序列化时经 JS 精度丢失
+    app = FastAPI(title=settings.APP_NAME, version="1.0.0",
+                  default_response_class=SafeIntJSONResponse)
 
     app.add_middleware(
         CORSMiddleware,
