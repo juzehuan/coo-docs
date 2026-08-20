@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.json import SafeIntJSONResponse
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.db import SessionLocal, init_db
 from app.api import audit, auth, controlled, dashboard, factories, nas, orders, org, packages
 
@@ -22,6 +23,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # 确保存储目录存在
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
