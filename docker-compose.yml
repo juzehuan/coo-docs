@@ -1,0 +1,44 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: coo
+      MYSQL_USER: coo
+      MYSQL_PASSWORD: coo123456
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: mysql+pymysql://coo:coo123456@mysql:3306/coo?charset=utf8mb4
+      SECRET_KEY: change-me-in-production
+      CORS_ORIGINS: http://localhost,http://localhost:5173
+      NAS_ROOT: /app/data/nas
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      # NAS 挂载点：生产时由加密隧道客户端挂载到 ./nas_mount
+      - ./nas_mount:/app/data/nas
+      - ./data/uploads:/app/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+
+volumes:
+  mysql_data:

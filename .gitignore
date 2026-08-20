@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+.env
+
+# 上传与 NAS 数据（运行时生成）
+backend/data/
+backend/coo.db
+
+# Node / 前端
+node_modules/
+dist/
+*.local
+
+# 系统
+.DS_Store
