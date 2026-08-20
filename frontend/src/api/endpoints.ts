@@ -94,6 +94,15 @@ export const dashboard = {
 
 export const controlled = {
   list: () => get<ControlledItem[]>('/controlled'),
+  exportZip: (pkgId: string, vid: string, filename: string) =>
+    downloadBlob(`/controlled/${pkgId}/versions/${vid}/export/zip`).then((blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    }),
 }
 
 export const audit = {
