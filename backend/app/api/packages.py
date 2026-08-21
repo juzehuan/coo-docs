@@ -10,7 +10,7 @@ from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, Versi
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core.rbac import (
-    admin_only, can_edit_package, can_review_dept, get_current_user, is_coo,
+    admin_only, can_edit_package, can_review_dept, can_view_package, get_current_user, is_coo,
 )
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
@@ -96,7 +96,7 @@ def update_package(pkg_id: int, payload: PackageUpdate, request: Request,
 @router.get("/{pkg_id}", response_model=dict)
 def package_detail(pkg_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     p = db.get(Package, pkg_id)
-    if not p:
+    if not p or not can_view_package(user, p):
         raise HTTPException(status_code=404, detail="资料包不存在")
     versions = (
         db.query(PackageVersion)
@@ -155,7 +155,8 @@ def create_version(pkg_id: int, payload: VersionCreate, request: Request,
 def version_detail(pkg_id: int, vid: int, db: Session = Depends(get_db),
                    user: User = Depends(get_current_user)):
     v = db.get(PackageVersion, vid)
-    if not v or v.package_id != pkg_id:
+    p = db.get(Package, pkg_id)
+    if not v or v.package_id != pkg_id or not p or not can_view_package(user, p):
         raise HTTPException(status_code=404, detail="版本不存在")
     return v
 
@@ -261,7 +262,10 @@ def download_attachment(pkg_id: int, vid: int, aid: int, preview: bool = False,
                         db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     att = db.get(Attachment, aid)
     v = db.get(PackageVersion, vid) if att else None
-    if not att or not v or att.version_id != vid or v.package_id != pkg_id:
+    p = db.get(Package, pkg_id) if v else None
+    if not att or not v or not p or att.version_id != vid or v.package_id != pkg_id:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    if not can_view_package(user, p):
         raise HTTPException(status_code=404, detail="资源不存在")
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
     if not os.path.exists(path):

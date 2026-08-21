@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
-from app.core.rbac import can_edit_order_package, get_current_user
+from app.core.rbac import (
+    can_edit_order, can_edit_order_package, export_viewer, get_current_user,
+)
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
 from app.db import get_db
@@ -124,9 +126,11 @@ def update_order(order_id: int, payload: OrderUpdate, request: Request,
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="订单不存在")
+    if not can_edit_order(user, o):
+        raise HTTPException(status_code=403, detail="无权修改该订单")
     data = payload.model_dump(exclude_unset=True)
-    if "factory_id" in data and data["factory_id"] not in _factory_ids(user, db):
-        raise HTTPException(status_code=403, detail="无权切换该工厂")
+    if "factory_id" in data and data["factory_id"] != o.factory_id:
+        raise HTTPException(status_code=400, detail="创建后不允许变更工厂")
     for k, v in data.items():
         setattr(o, k, v)
     db.commit()
@@ -152,10 +156,13 @@ def delete_order(order_id: int, request: Request, db: Session = Depends(get_db),
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="订单不存在")
+    if not can_edit_order(user, o):
+        raise HTTPException(status_code=403, detail="仅责任人/管理员可删除订单")
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
-    _purge_files(db, [att for op in o.packages for att in op.attachments])
+    atts = [att for op in o.packages for att in op.attachments]
     db.delete(o)
     db.commit()
+    _purge_files(db, atts)
     log_event(db, AuditDomain.PACKAGE, "order_delete", actor=user, ip=client_ip(request),
               target=o.order_no)
     return Msg(msg="已删除")
@@ -168,6 +175,8 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="订单不存在")
+    if not can_edit_order(user, o):
+        raise HTTPException(status_code=403, detail="无权为订单添加资料包")
     pkg = db.get(Package, payload.package_id)
     if not pkg:
         raise HTTPException(status_code=404, detail="资料包模板不存在")
@@ -197,12 +206,15 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
     op = db.get(OrderPackage, op_id)
     if not o or not op or op.order_id != o.id or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="资源不存在")
+    if not can_edit_order_package(user, op):
+        raise HTTPException(status_code=403, detail="无权移除该订单资料包")
     if op.locked or op.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行实例不可移除，如需变更请新建订单")
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
-    _purge_files(db, list(op.attachments))
+    atts = list(op.attachments)
     db.delete(op)
     db.commit()
+    _purge_files(db, atts)
     log_event(db, AuditDomain.PACKAGE, "order_package_remove", actor=user, ip=client_ip(request),
               target=f"{o.order_no}/{op_id}")
     return Msg(msg="已移除")
@@ -404,7 +416,7 @@ def download_order_attachment(order_id: int, op_id: int, aid: int, preview: bool
 
 @router.get("/{order_id}/export")
 def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
-                 user: User = Depends(get_current_user)):
+                 user: User = Depends(export_viewer)):
     """按订单导出归档清单（CSV），供审计/COO/管理员核查调阅使用。"""
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
@@ -429,7 +441,7 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
 
 @router.get("/{order_id}/export/zip")
 def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_db),
-                     user: User = Depends(get_current_user)):
+                     user: User = Depends(export_viewer)):
     """按订单打包全部真实附件（ZIP），供核查调阅/Form 28 回函使用。"""
     import io
     import re

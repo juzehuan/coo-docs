@@ -39,7 +39,8 @@ def require_roles(*roles: str):
 admin_only = require_roles("admin")
 coo_or_admin = require_roles("coo_reviewer", "admin")
 reviewer_or_above = require_roles("dept_reviewer", "coo_reviewer", "admin")
-audit_viewer = require_roles("dept_reviewer", "coo_reviewer", "auditor", "admin")
+audit_viewer = require_roles("auditor", "admin")          # 审计日志仅审计员/管理员可读
+export_viewer = require_roles("coo_reviewer", "auditor", "admin")  # 归档导出角色
 any_staff = require_roles("submitter", "dept_reviewer", "coo_reviewer", "auditor", "admin")
 
 
@@ -60,20 +61,46 @@ def can_review_dept(u: User, package_dept_id) -> bool:
     return False
 
 
-def can_edit_package(u: User, package) -> bool:
-    """提交人仅能编辑本人负责的资料包。"""
-    if u.role in ("admin", "dept_reviewer", "coo_reviewer"):
+def can_view_package(u: User, package) -> bool:
+    """资料包/附件可见性：提交人仅本人负责包，部门审核人仅本部门包，
+    COO/审计员/管理员可见全部。"""
+    if u.role in ("admin", "coo_reviewer", "auditor"):
         return True
+    if u.role == "dept_reviewer":
+        return package.dept_id is not None and package.dept_id == u.dept_id
     if u.role == "submitter":
         return package.owner_user_id == u.id
     return False
 
 
-def can_edit_order_package(u: User, op) -> bool:
-    """订单实例的上传/删除附件、提交审核：管理员/审核角色可操作任意；
-    提交人仅能操作本人负责的实例。"""
-    if u.role in ("admin", "dept_reviewer", "coo_reviewer"):
+def can_edit_package(u: User, package) -> bool:
+    """编辑/提交权限：提交人仅本人负责包；部门审核人仅本部门包；COO/管理员任意。"""
+    if u.role in ("admin", "coo_reviewer"):
         return True
+    if u.role == "dept_reviewer":
+        return package.dept_id is not None and package.dept_id == u.dept_id
+    if u.role == "submitter":
+        return package.owner_user_id == u.id
+    return False
+
+
+def can_edit_order(u: User, order) -> bool:
+    """订单级增删改：COO/管理员任意；提交人仅本人负责的订单。"""
+    if u.role in ("admin", "coo_reviewer"):
+        return True
+    if u.role == "submitter":
+        return order.owner_user_id == u.id
+    return False
+
+
+def can_edit_order_package(u: User, op) -> bool:
+    """订单实例的上传/删除附件、提交审核：COO/管理员任意；
+    部门审核人仅本部门实例；提交人仅本人负责的实例。"""
+    if u.role in ("admin", "coo_reviewer"):
+        return True
+    if u.role == "dept_reviewer":
+        pkg = op.package if op.package is not None else None
+        return pkg is not None and pkg.dept_id is not None and pkg.dept_id == u.dept_id
     if u.role == "submitter":
         return op.owner_user_id == u.id
     return False

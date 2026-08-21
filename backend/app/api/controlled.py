@@ -11,27 +11,27 @@ from sqlalchemy.orm import Session
 from app.constants import AuditDomain, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
-from app.core.rbac import get_current_user
+from app.core.rbac import get_current_user, require_roles
 from app.db import get_db
 from app.models import Package, PackageVersion, User
 from app.schemas import VersionOut
 
 router = APIRouter(prefix="/controlled", tags=["controlled"])
 
+# 受控区（F-09）仅审核/管理员可访问：部门审核人、COO 终审人、管理员
+controlled_access = require_roles("dept_reviewer", "coo_reviewer", "admin")
+
 
 def _visible_pkg_ids(db: Session, user: User) -> set:
-    """与资料包列表一致的可见范围：提交人仅本人负责包，部门审核人仅本部门包，
-    COO/审计/管理员可见全部。"""
+    """受控区可见范围：部门审核人仅本部门包；COO/管理员可见全部。"""
     q = db.query(Package)
     if user.role == "dept_reviewer":
         q = q.filter(Package.dept_id == user.dept_id)
-    elif user.role == "submitter":
-        q = q.filter(Package.owner_user_id == user.id)
     return {p.id for p in q.all()}
 
 
 @router.get("", response_model=list[dict])
-def controlled_area(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def controlled_area(db: Session = Depends(get_db), user: User = Depends(controlled_access)):
     # 仅展示当前账号可见范围内已放行的版本
     visible = _visible_pkg_ids(db, user)
     released = (
