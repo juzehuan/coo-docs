@@ -38,7 +38,7 @@ export default function Audit() {
     }
   }
 
-  const canExport = user?.role === 'coo_reviewer' || user?.role === 'admin'
+  const canExport = user?.role === 'auditor' || user?.role === 'admin'
 
   return (
     <>

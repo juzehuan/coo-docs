@@ -30,8 +30,10 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         if v.package_id not in latest or v.created_at > latest[v.package_id].created_at:
             latest[v.package_id] = v
 
-    released_count = sum(1 for p in pkgs if p.id in latest and latest[p.id].status == VersionStatus.RELEASED)
-    completion = round(released_count / len(pkgs) * 100, 1) if pkgs else 0.0
+    # 仅统计可见资料包的完成度，避免向提交人泄露非本人资料包信息
+    visible_pkgs = [p for p in pkgs if can_view_package(user, p)]
+    released_count = sum(1 for p in visible_pkgs if p.id in latest and latest[p.id].status == VersionStatus.RELEASED)
+    completion = round(released_count / len(visible_pkgs) * 100, 1) if visible_pkgs else 0.0
 
     # 附件总数：订单附件按工厂隔离；版本附件属共享资料包模板，全部统计
     order_att = (
@@ -83,7 +85,6 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     need_attention = []
     progress = []
     # 进度与需关注列表按可见性过滤，避免向提交人泄露非本人资料包信息
-    visible_pkgs = [p for p in pkgs if can_view_package(user, p)]
     for p in visible_pkgs:
         v = latest.get(p.id)
         st = v.status if v else "none"

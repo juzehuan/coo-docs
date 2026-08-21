@@ -37,6 +37,7 @@ def list_logs(
 
 @router.get("/export")
 def export_logs(
+    request: Request,
     domain: str | None = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(audit_viewer),
@@ -54,7 +55,7 @@ def export_logs(
         ]
         lines.append(",".join(f'"{c.replace(chr(34), chr(34)*2)}"' for c in line))
     csv = "\n".join(lines)
-    log_event(db, AuditDomain.EXPORT, "audit_csv", actor=user, ip=client_ip(None))
+    log_event(db, AuditDomain.EXPORT, "audit_csv", actor=user, ip=client_ip(request))
     return Response(
         content="\ufeff" + csv,
         media_type="text/csv",

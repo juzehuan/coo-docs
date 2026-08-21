@@ -43,7 +43,7 @@ export default function PackageDetail() {
   const isStaff = user!.role === 'admin' || user!.role === 'dept_reviewer' || user!.role === 'coo_reviewer'
   const ownerOk = user!.role === 'submitter' && pkg.owner_user_id === user!.id
   const canEdit = ver && (isStaff || ownerOk) && ver.status !== 'released'
-  const canReviewDept = ver && user!.role === 'dept_reviewer' && ver.status === 'pending_dept'
+  const canReviewDept = ver && user!.role === 'dept_reviewer' && pkg.dept_id != null && pkg.dept_id === user!.dept_id && ver.status === 'pending_dept'
   const canReviewCoo = ver && (user!.role === 'coo_reviewer' || user!.role === 'admin') && ver.status === 'pending_coo'
   const canWithdraw = ver && !!(user!.role === 'admin' || ownerOk) &&
     (ver.status === 'pending_dept' || ver.status === 'pending_coo')

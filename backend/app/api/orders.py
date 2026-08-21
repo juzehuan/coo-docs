@@ -37,7 +37,11 @@ def _factory_ids(user: User, db: Session) -> list[int]:
 
 def _visible_orders_q(db: Session, user: User):
     fids = _factory_ids(user, db)
-    return db.query(Order).filter(Order.factory_id.in_(fids))
+    q = db.query(Order).filter(Order.factory_id.in_(fids))
+    # 提交人仅能看到自己负责的订单，避免同厂越权查看
+    if user.role == "submitter":
+        q = q.filter(Order.owner_user_id == user.id)
+    return q
 
 
 def _package_stats(op: OrderPackage) -> dict:

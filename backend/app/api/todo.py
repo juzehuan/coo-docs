@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.constants import VersionStatus
 from app.core.rbac import get_current_user
 from app.db import get_db
-from app.models import Department, Order, OrderPackage, Package, PackageVersion, User
+from app.models import Department, Factory, Order, OrderPackage, Package, PackageVersion, User
 
 router = APIRouter(prefix="/todo", tags=["todo"])
 
@@ -71,10 +71,13 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
         })
 
     # ---- 订单资料包实例待办 ----
+    fids = ([f.id for f in db.query(Factory).filter(Factory.status == "active").all()]
+            if user.role == "admin" else [f.id for f in user.factories])
     ops = (
         db.query(OrderPackage)
         .join(Order, OrderPackage.order_id == Order.id)
         .join(Package, OrderPackage.package_id == Package.id)
+        .filter(Order.factory_id.in_(fids))  # 订单实例按工厂隔离
         .all()
     )
     orders = {o.id: o for o in db.query(Order).all()}
