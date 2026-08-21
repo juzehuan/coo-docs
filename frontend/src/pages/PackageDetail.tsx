@@ -6,6 +6,7 @@ import { packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
+import PageHeader from '@/components/PageHeader'
 import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentList from '@/components/AttachmentList'
 import ReviewPanel from '@/components/ReviewPanel'
@@ -63,20 +64,20 @@ export default function PackageDetail() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 12 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => nav('/packages')}>{t('back')}</Button>
-      </Space>
+      <Button icon={<ArrowLeftOutlined />} onClick={() => nav('/packages')} style={{ marginBottom: 12 }}>{t('back')}</Button>
 
-      <Card variant="borderless">
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Typography.Title level={4} style={{ margin: 0 }}>{pkg.code} · {lang === 'en' ? pkg.name_en : lang === 'th' ? pkg.name_th : pkg.name_zh}</Typography.Title>
-          <Space>
-            <Button icon={<PlusOutlined />} onClick={newVersion}>{t('new_version')}</Button>
-            {canWithdraw && <Button danger icon={<UndoOutlined />} onClick={withdrawVersion}>{t('withdraw')}</Button>}
-            {ver && canEdit && ver.attachments.length > 0 && <Button type="primary" icon={<SendOutlined />} onClick={submitVersion}>{t('submit')}</Button>}
-          </Space>
-        </Space>
-        <Descriptions column={2} size="small" style={{ marginTop: 12 }}>
+      <PageHeader
+        title={`${pkg.code} · ${lang === 'en' ? pkg.name_en : lang === 'th' ? pkg.name_th : pkg.name_zh}`}
+        desc={pkg.review_focus ? `${t('review_focus')}：${pkg.review_focus}` : undefined}
+        extra={<Space>
+          <Button icon={<PlusOutlined />} onClick={newVersion}>{t('new_version')}</Button>
+          {canWithdraw && <Button danger icon={<UndoOutlined />} onClick={withdrawVersion}>{t('withdraw')}</Button>}
+          {ver && canEdit && ver.attachments.length > 0 && <Button type="primary" icon={<SendOutlined />} onClick={submitVersion}>{t('submit')}</Button>}
+        </Space>}
+      />
+
+      <Card variant="borderless" className="coo-card">
+        <Descriptions column={2} size="small">
           <Descriptions.Item label="COO">{pkg.code}</Descriptions.Item>
           <Descriptions.Item label={t('required')}>{pkg.required ? t('required') : '-'}</Descriptions.Item>
           <Descriptions.Item label={t('review_focus')} span={2}>{pkg.review_focus || '-'}</Descriptions.Item>
@@ -85,7 +86,7 @@ export default function PackageDetail() {
         </Descriptions>
       </Card>
 
-      <Card variant="borderless" style={{ marginTop: 16 }} title={t('version')}>
+      <Card variant="borderless" className="coo-card" style={{ marginTop: 16 }} title={t('version')}>
         <Tabs
           activeKey={String(ver?.id ?? '')}
           onChange={(k) => setActiveVid(k)}
@@ -98,7 +99,7 @@ export default function PackageDetail() {
                 <Descriptions size="small" column={3} style={{ marginTop: 12, marginBottom: 12 }}>
                   <Descriptions.Item label="变更">{v.change_note || '-'}</Descriptions.Item>
                   <Descriptions.Item label="提交">{formatTime(v.submitted_at)}</Descriptions.Item>
-                  <Descriptions.Item label="锁定">{v.locked ? <Tag color="green">✓</Tag> : '-'}</Descriptions.Item>
+                  <Descriptions.Item label="锁定">{v.locked ? <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}>✓</Tag> : '-'}</Descriptions.Item>
                 </Descriptions>
                 <AttachmentList pkgId={pkg.id} version={v} canEdit={!!canEdit} onChanged={load} />
                 <Divider />

@@ -29,18 +29,18 @@ export default function Dashboard() {
       </div>
 
       <Row gutter={[16, 16]}>
-        <Col xs={12} md={6}><StatCard title={t('progress')} value={d.package_completion} suffix="%" icon={<FileDoneOutlined />} color="#1f5fa8" /></Col>
-        <Col xs={12} md={6}><StatCard title={t('pending_mine')} value={d.pending_mine} icon={<FileSyncOutlined />} color="#d97706" onClick={() => nav('/todo')} /></Col>
-        <Col xs={12} md={6}><StatCard title={t('released')} value={d.released} icon={<AuditOutlined />} color="#16a34a" /></Col>
-        <Col xs={12} md={6}><StatCard title={t('attachment')} value={d.total_attachments} icon={<InboxOutlined />} color="#7c3aed" /></Col>
+        <Col xs={12} md={6}><div className="coo-rise coo-rise-1"><StatCard title={t('progress')} value={d.package_completion} suffix="%" icon={<FileDoneOutlined />} color="#16263f" /></div></Col>
+        <Col xs={12} md={6}><div className="coo-rise coo-rise-2"><StatCard title={t('pending_mine')} value={d.pending_mine} icon={<FileSyncOutlined />} color="#b97a1e" onClick={() => nav('/todo')} /></div></Col>
+        <Col xs={12} md={6}><div className="coo-rise coo-rise-3"><StatCard title={t('released')} value={d.released} icon={<AuditOutlined />} color="#3f7d5c" /></div></Col>
+        <Col xs={12} md={6}><div className="coo-rise coo-rise-4"><StatCard title={t('attachment')} value={d.total_attachments} icon={<InboxOutlined />} color="#a8833c" /></div></Col>
       </Row>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} md={10}>
           <Card variant="borderless" className="coo-card" title={t('progress')}>
-            <Progress type="dashboard" percent={d.package_completion} strokeColor={{ '0%': '#1f5fa8', '100%': '#2f7fd6' }} strokeWidth={10} />
+            <Progress type="dashboard" percent={d.package_completion} strokeColor={{ '0%': '#a8833c', '100%': '#c9b06a' }} strokeWidth={10} />
             <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-              {t('released')} <b style={{ color: '#16a34a' }}>{d.released}</b> · {t('overdue')} <b style={{ color: '#d97706' }}>{d.overdue}</b>
+              {t('released')} <b style={{ color: '#3f7d5c' }}>{d.released}</b> · {t('overdue')} <b style={{ color: '#b97a1e' }}>{d.overdue}</b>
             </Typography.Paragraph>
           </Card>
         </Col>
@@ -56,7 +56,7 @@ export default function Dashboard() {
                   columns={[
                     { title: 'COO', dataIndex: 'code', width: 90 },
                     { title: t('packages'), dataIndex: 'name' },
-                    { title: t('issue'), dataIndex: 'issue', width: 130, render: (v: string) => <span style={{ color: '#d97706' }}>{v}</span> },
+                    { title: t('issue'), dataIndex: 'issue', width: 130, render: (v: string) => <span style={{ color: '#b97a1e' }}>{v}</span> },
                     { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
                   ]}
                 />
@@ -76,7 +76,7 @@ export default function Dashboard() {
             { title: t('status'), dataIndex: 'status', width: 120, render: (s: string) => <StatusTag status={s} /> },
             {
               title: t('progress'), dataIndex: 'percent', width: 180,
-              render: (p: number) => <Progress percent={p} size="small" strokeColor="#1f5fa8" />,
+              render: (p: number) => <Progress percent={p} size="small" strokeColor="#a8833c" />,
             },
             { title: t('attachment'), dataIndex: 'attachments', width: 90, render: (n: number) => `${n}` },
             { title: '', key: 'act', width: 80, render: (_, r) => <a onClick={() => nav('/packages')}>{t('detail')}</a> },

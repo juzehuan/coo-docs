@@ -51,12 +51,12 @@ export default function NotificationBell() {
       placement="bottomRight"
       dropdownRender={() => (
         <div style={{
-          width: 380, background: '#fff', borderRadius: 12,
-          boxShadow: '0 6px 24px rgba(11,37,69,0.14)', border: '1px solid #e6ebf2', overflow: 'hidden',
+          width: 380, background: '#fffdf7', borderRadius: 12,
+          boxShadow: '0 6px 24px rgba(34,42,51,0.14)', border: '1px solid #e8e1d3', overflow: 'hidden',
         }}>
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '10px 14px', borderBottom: '1px solid #f0f3f8',
+            padding: '10px 14px', borderBottom: '1px solid #e8e1d3',
           }}>
             <Typography.Text strong>{t('notifications')}</Typography.Text>
             {unread > 0 && (
@@ -81,19 +81,19 @@ export default function NotificationBell() {
                     onClick={() => openItem(n)}
                     style={{
                       padding: '10px 14px', cursor: 'pointer',
-                      background: n.is_read ? '#fff' : '#f0f6ff',
-                      borderBottom: '1px solid #f5f7fa',
+                      background: n.is_read ? '#fffdf7' : '#faf0dc',
+                      borderBottom: '1px solid #e8e1d3',
                     }}
                   >
                     <List.Item.Meta
                       title={
                         <span style={{
                           fontSize: 13, fontWeight: n.is_read ? 400 : 600,
-                          color: n.is_read ? '#5c6b82' : '#14233c',
+                          color: n.is_read ? '#6f685a' : '#16263f',
                         }}>{n.title}</span>
                       }
                       description={
-                        <span style={{ fontSize: 12, color: '#8a97a8' }}>
+                        <span style={{ fontSize: 12, color: '#a49e8c' }}>
                           {n.body ? `${n.body} · ` : ''}{formatTime(n.created_at)}
                         </span>
                       }
@@ -106,7 +106,7 @@ export default function NotificationBell() {
       )}
     >
       <Badge count={unread} size="small" offset={[-2, 2]}>
-        <span style={{ fontSize: 18, cursor: 'pointer', color: '#14233c', display: 'inline-flex', padding: 4 }}>
+        <span style={{ fontSize: 18, cursor: 'pointer', color: '#16263f', display: 'inline-flex', padding: 4 }}>
           <BellOutlined />
         </span>
       </Badge>

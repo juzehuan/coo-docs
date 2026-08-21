@@ -34,10 +34,14 @@ export default function ReviewSteps({ status, compact = false }: Props) {
           const done = isReleased || i < current
           const active = !error && !isReleased && i === current
           const err = error && i === current
-          const color = err ? '#f5222d' : active ? '#0958d9' : done ? '#1677ff' : '#d9d9d9'
+          // 档案风暖色：绿=完成，黄铜=进行中，红=退回，浅灰=未到
+          const color = err ? '#b04a3a' : active ? '#a8833c' : done ? '#3f7d5c' : '#d8d1c2'
           return (
             <Tooltip key={key} title={t(key)}>
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, display: 'inline-block' }} />
+              <span style={{
+                width: 9, height: 9, borderRadius: '50%', background: color, display: 'inline-block',
+                boxShadow: active ? `0 0 0 3px rgba(168, 131, 60, 0.22)` : undefined,
+              }} />
             </Tooltip>
           )
         })}

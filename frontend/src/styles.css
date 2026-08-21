@@ -1,140 +1,179 @@
 /* ============================================================
-   COO 资料收集平台 · 全局设计语言
-   品牌：深海蓝 #0b2545 → 品牌蓝 #1f5fa8，浅色主题，精致现代。
+   COO 资料收集平台 · 典雅档案风设计语言
+   暖纸底 + 墨蓝主色 + 黄铜点缀；宋体标题 / 黑体正文。
    ============================================================ */
 
 :root {
-  --coo-navy: #0b2545;
-  --coo-blue: #1f5fa8;
-  --coo-blue-2: #2f7fd6;
-  --coo-blue-light: #eaf1fb;
-  --coo-bg: #f0f2f5;
-  --coo-card-bg: #ffffff;
+  --coo-ink: #16263f;          /* 墨蓝主色 */
+  --coo-ink-deep: #101d31;     /* 更深墨蓝 */
+  --coo-ink-2: #2a3d5c;        /* 侧栏选中底 */
+  --coo-gold: #a8833c;         /* 黄铜点缀 */
+  --coo-gold-2: #c9b06a;       /* 亮黄铜 */
+  --coo-gold-soft: #f4efe4;    /* 黄铜浅底 */
+  --coo-paper: #f5f2ea;        /* 暖纸底 */
+  --coo-card: #fffdf7;         /* 暖白卡片 */
 
-  --coo-text: #17263b;
-  --coo-text-sub: #61728a;
-  --coo-text-faint: #93a2b7;
+  --coo-text: #232a33;
+  --coo-text-sub: #75705f;
+  --coo-text-faint: #a49e8c;
 
-  --coo-border: #e6ebf2;
-  --coo-ring: rgba(31, 95, 168, 0.22);
+  --coo-line: #dcd4c3;         /* 发丝线 */
+  --coo-line-soft: #e8e1d3;
+
+  --coo-green: #3f7d5c;
+  --coo-amber: #b97a1e;
+  --coo-red: #b04a3a;
 
   --coo-radius: 10px;
-  --coo-radius-sm: 7px;
+  --coo-radius-sm: 6px;
 
-  --coo-shadow-sm: 0 1px 2px rgba(11, 37, 69, 0.06);
-  --coo-shadow-md: 0 4px 16px rgba(11, 37, 69, 0.08);
-  --coo-shadow-lg: 0 12px 34px rgba(11, 37, 69, 0.14);
+  --coo-shadow-sm: 0 1px 2px rgba(34, 42, 51, 0.05), 0 3px 10px rgba(34, 42, 51, 0.04);
+  --coo-shadow-md: 0 2px 6px rgba(34, 42, 51, 0.06), 0 8px 22px rgba(34, 42, 51, 0.08);
+  --coo-shadow-lg: 0 6px 16px rgba(34, 42, 51, 0.08), 0 18px 44px rgba(34, 42, 51, 0.14);
 
-  --coo-grad-blue: linear-gradient(135deg, #1f5fa8 0%, #2f7fd6 100%);
-  --coo-grad-navy: linear-gradient(160deg, #0b2545 0%, #123a68 100%);
+  --coo-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
 }
 
 html, body, #root { height: 100%; margin: 0; }
 html { -webkit-text-size-adjust: 100%; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
   color: var(--coo-text);
-  background: var(--coo-bg);
+  background-color: var(--coo-paper);
+  /* 细腻纸纹：极淡噪点，避免纯色呆板 */
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(168, 131, 60, 0.035) 0, transparent 42%),
+    radial-gradient(circle at 85% 88%, rgba(22, 38, 63, 0.03) 0, transparent 40%);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-/* 细滚动条 */
+/* 细滚动条（暖色调） */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(11, 37, 69, 0.18);
+  background: rgba(168, 131, 60, 0.35);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background-color: rgba(11, 37, 69, 0.32); }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(168, 131, 60, 0.55); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 .muted { color: var(--coo-text-sub); }
 
-/* ---------- 卡片：统一层次与悬浮微交互 ---------- */
+/* ---------- 卡片：档案夹质感，发丝描边 + 细腻阴影 ---------- */
 .coo-card {
-  background: var(--coo-card-bg);
-  border: 1px solid var(--coo-border);
+  background: var(--coo-card);
+  border: 1px solid var(--coo-line-soft);
   border-radius: var(--coo-radius);
   box-shadow: var(--coo-shadow-sm);
   transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
 }
 .coo-card:hover {
   box-shadow: var(--coo-shadow-md);
+  border-color: var(--coo-line);
 }
 
-/* 页面顶部标题带 */
+/* ---------- 页面顶部标题带（宋体大标题 + 黄铜装饰线） ---------- */
 .coo-pagehead {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--coo-line-soft);
+  position: relative;
+}
+.coo-pagehead::after {
+  content: '';
+  position: absolute;
+  left: 0; bottom: -1px;
+  width: 46px; height: 2px;
+  background: linear-gradient(90deg, var(--coo-gold), var(--coo-gold-2));
 }
 .coo-pagehead-title {
   margin: 0;
-  font-size: 20px;
+  font-family: var(--coo-serif);
+  font-size: 22px;
   font-weight: 700;
-  color: var(--coo-navy);
-  letter-spacing: 0.3px;
+  letter-spacing: 1.5px;
+  color: var(--coo-ink);
 }
 .coo-pagehead-desc {
-  margin-top: 3px;
+  margin-top: 5px;
   color: var(--coo-text-sub);
   font-size: 13px;
+  letter-spacing: 0.3px;
 }
 
-/* 品牌渐变文本 */
+/* 品牌渐变文本（黄铜→亮黄铜） */
 .coo-grad-text {
-  background: var(--coo-grad-blue);
+  background: linear-gradient(135deg, var(--coo-gold), var(--coo-gold-2));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-/* 按钮主色更鲜明，悬停轻微上浮 */
+/* ---------- 按钮：主按钮墨蓝、点缀黄铜描边 ---------- */
 .ant-btn-primary {
-  background-image: var(--coo-grad-blue);
-  box-shadow: 0 2px 8px rgba(31, 95, 168, 0.3);
+  background-color: var(--coo-ink);
+  box-shadow: 0 2px 8px rgba(22, 38, 63, 0.24);
   border: none;
 }
-.ant-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(31, 95, 168, 0.4); }
+.ant-btn-primary:hover { background-color: var(--coo-ink-2) !important; transform: translateY(-1px); box-shadow: 0 5px 14px rgba(22, 38, 63, 0.3); }
 .ant-btn-primary:active { transform: translateY(0); }
 
-/* 登录页主按钮：更醒目的渐变与光晕 */
+/* 登录页主按钮：黄铜质感 */
 .ant-btn-primary.coo-btn-hero {
-  height: 44px;
+  height: 46px;
   font-size: 15px;
-  border-radius: 10px;
-  letter-spacing: 2px;
-  box-shadow: 0 8px 20px rgba(31, 95, 168, 0.45);
+  border-radius: 8px;
+  letter-spacing: 4px;
+  background: linear-gradient(135deg, #16263f, #2a3d5c);
+  box-shadow: 0 8px 22px rgba(22, 38, 63, 0.4);
+}
+.ant-btn-primary.coo-btn-hero:hover {
+  box-shadow: 0 10px 28px rgba(168, 131, 60, 0.45);
+  background: linear-gradient(135deg, #1d3152, #35507a) !important;
 }
 .ant-btn-primary.coo-btn-hero:disabled {
   background-image: none;
-  background: #f0f2f5;
-  color: #bfbfbf;
+  background: #ece6d8;
+  color: #b7b1a1;
+  box-shadow: none;
 }
 
-/* 表格表头层次 */
+/* 次按钮：黄铜描边 */
+.ant-btn:not(.ant-btn-primary):hover { border-color: var(--coo-gold); color: var(--coo-gold); }
+
+/* ---------- 表格：发丝线、档案纸表头 ---------- */
+.ant-table {
+  font-size: 13px;
+}
 .ant-table-thead > tr > th {
   font-weight: 600;
-  color: var(--coo-text-sub);
-  letter-spacing: 0.2px;
+  font-size: 12.5px;
+  letter-spacing: 0.6px;
+  color: var(--coo-text-sub) !important;
+  background: #f4efe4 !important;
 }
-.ant-table-tbody > tr:hover > td { background: #f6f9fe !important; }
+.ant-table-tbody > tr > td { border-bottom: 1px solid var(--coo-line-soft) !important; }
+.ant-table-tbody > tr:hover > td { background: #faf6ec !important; }
 
-/* 徽章通用底座 */
+/* ---------- 徽章（状态/角色） ---------- */
 .coo-tag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 2px 11px;
   line-height: 20px;
+  font-size: 12px;
+  letter-spacing: 0.3px;
 }
 .coo-tag .coo-dot {
   width: 7px;
@@ -143,14 +182,35 @@ body {
   flex-shrink: 0;
 }
 
-/* 分段控件柔和化 */
-.ant-segmented {
-  border-radius: 9px;
-}
-.ant-segmented-item { border-radius: 7px; }
+/* ---------- 分段控件 ---------- */
+.ant-segmented { border-radius: 8px; }
+.ant-segmented-item { border-radius: 6px; }
 
-/* 进度条品牌色圆头 */
+/* ---------- 进度条圆头 ---------- */
 .ant-progress-bg { border-radius: 4px; }
 
-/* 布局内容背景轻微质感 */
+/* ---------- 页面进入：轻缓上浮淡入 ---------- */
+@keyframes coo-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.coo-rise {
+  animation: coo-rise 0.45s ease both;
+}
+.coo-rise-1 { animation-delay: 0.04s; }
+.coo-rise-2 { animation-delay: 0.10s; }
+.coo-rise-3 { animation-delay: 0.16s; }
+.coo-rise-4 { animation-delay: 0.22s; }
+
+/* 内容区呼吸感 */
 .ant-layout-content { border-radius: 0; }
+
+/* ---------- 登录页响应式：桌面显示品牌左栏，移动端折叠 ---------- */
+@media (min-width: 960px) {
+  .coo-login-brand { display: flex !important; }
+  .coo-login-lang-mobile { display: none !important; }
+}
+@media (max-width: 959.98px) {
+  .coo-login-brand { display: none !important; }
+  .coo-login-lang-mobile { display: block !important; }
+}

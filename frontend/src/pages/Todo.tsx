@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Empty, Space, Table, Typography } from 'antd'
-import { ArrowRightOutlined, NotificationOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined } from '@ant-design/icons'
 import { todo } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
+import PageHeader from '@/components/PageHeader'
 import ReviewSteps from '@/components/ReviewSteps'
 import { formatTime } from '@/utils/format'
 import type { TodoItem } from '@/types'
@@ -31,11 +32,9 @@ export default function Todo() {
   }
 
   return (
-    <Card
-      variant="borderless"
-      title={<span><NotificationOutlined /> {t('todo')}</span>}
-      extra={<Typography.Text type="secondary">{t('todo_desc')}</Typography.Text>}
-    >
+    <>
+      <PageHeader title={t('todo')} desc={t('todo_desc')} />
+      <Card variant="borderless" className="coo-card">
       <Table
         rowKey="package_id"
         loading={loading}
@@ -71,6 +70,7 @@ export default function Todo() {
           },
         ]}
       />
-    </Card>
+      </Card>
+    </>
   )
 }

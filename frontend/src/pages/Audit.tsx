@@ -5,6 +5,7 @@ import { audit } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { formatTime } from '@/utils/format'
+import PageHeader from '@/components/PageHeader'
 import type { AuditLog } from '@/types'
 
 const DOMAINS = ['auth', 'package', 'attachment', 'review', 'version', 'nas', 'export', 'org']
@@ -40,17 +41,19 @@ export default function Audit() {
   const canExport = user?.role === 'coo_reviewer' || user?.role === 'admin'
 
   return (
-    <Card
-      variant="borderless"
-      title={t('audit')}
-      extra={
-        <Space>
-          <Select allowClear placeholder={t('status')} style={{ width: 160 }} value={domain} onChange={(v) => { setDomain(v); load(v) }}
-            options={DOMAINS.map((d) => ({ label: d, value: d }))} />
-          {canExport && <Button icon={<DownloadOutlined />} onClick={exportCsv}>{t('export_csv')}</Button>}
-        </Space>
-      }
-    >
+    <>
+      <PageHeader
+        title={t('audit')}
+        desc={t('audit_desc')}
+        extra={
+          <Space>
+            <Select allowClear placeholder={t('status')} style={{ width: 160 }} value={domain} onChange={(v) => { setDomain(v); load(v) }}
+              options={DOMAINS.map((d) => ({ label: d, value: d }))} />
+            {canExport && <Button icon={<DownloadOutlined />} onClick={exportCsv}>{t('export_csv')}</Button>}
+          </Space>
+        }
+      />
+      <Card variant="borderless" className="coo-card">
       <Table
         rowKey="id"
         loading={loading}
@@ -65,6 +68,7 @@ export default function Audit() {
           { title: '说明', dataIndex: 'detail' },
         ]}
       />
-    </Card>
+      </Card>
+    </>
   )
 }

@@ -41,7 +41,9 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
     { title: t('order_no'), dataIndex: 'order_no', render: (v) => v || '-' },
     { title: t('batch_no'), dataIndex: 'batch_no', render: (v) => v || '-' },
     { title: 'MD5', dataIndex: 'md5', ellipsis: true, render: (v) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
-    { title: 'NAS', dataIndex: 'nas_synced', width: 70, render: (s: boolean) => (s ? <Tag color="green">✓</Tag> : <Tag color="gold">⏳</Tag>) },
+    { title: 'NAS', dataIndex: 'nas_synced', width: 70, render: (s: boolean) => (s
+      ? <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}>✓</Tag>
+      : <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>⏳</Tag>) },
     { title: t('status'), dataIndex: 'uploaded_at', width: 160, render: (v) => formatTime(v) },
     {
       title: '', key: 'act', width: 120,
@@ -60,7 +62,7 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
       <Table rowKey="id" size="middle" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} />
 
       {canEdit && (
-        <div style={{ marginTop: 16, padding: 16, background: '#fafcff', border: '1px dashed #dfe6f0', borderRadius: 8 }}>
+        <div style={{ marginTop: 16, padding: 16, background: '#faf6ec', border: '1px dashed #d8cdb0', borderRadius: 8 }}>
           <Space style={{ marginBottom: 12 }}>
             <Input addonBefore={t('order_no')} value={orderNo} onChange={(e) => setOrderNo(e.target.value)} style={{ width: 220 }} />
             <Input addonBefore={t('batch_no')} value={batchNo} onChange={(e) => setBatchNo(e.target.value)} style={{ width: 220 }} />

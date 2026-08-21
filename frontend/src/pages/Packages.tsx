@@ -6,6 +6,7 @@ import { org, packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
+import PageHeader from '@/components/PageHeader'
 import type { Department, Package, PackageRow, User } from '@/types'
 
 export default function Packages() {
@@ -80,14 +81,16 @@ export default function Packages() {
   }
 
   return (
-    <Card
-      variant="borderless"
-      title={t('packages')}
-      extra={<Space>
-        <Input prefix={<SearchOutlined />} placeholder={t('packages')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 220 }} allowClear />
-        {isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>{t('create')}</Button>}
-      </Space>}
-    >
+    <>
+      <PageHeader
+        title={t('packages')}
+        desc={t('packages_desc')}
+        extra={<Space>
+          <Input prefix={<SearchOutlined />} placeholder={t('packages')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 220 }} allowClear />
+          {isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>{t('create')}</Button>}
+        </Space>}
+      />
+      <Card variant="borderless" className="coo-card">
       <Table
         rowKey="id"
         loading={loading}
@@ -151,6 +154,7 @@ export default function Packages() {
           <Form.Item label={t('due_date')} name="due_date"><Input placeholder="2026-10-15" /></Form.Item>
         </Form>
       </Modal>
-    </Card>
+      </Card>
+    </>
   )
 }

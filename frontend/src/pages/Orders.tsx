@@ -6,6 +6,7 @@ import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
+import PageHeader from '@/components/PageHeader'
 import type { Factory, Order } from '@/types'
 
 export default function Orders() {
@@ -51,14 +52,15 @@ export default function Orders() {
 
   return (
     <>
-      <Card
-        variant="borderless"
+      <PageHeader
         title={t('orders')}
+        desc={t('orders_desc')}
         extra={<Space>
           <Input prefix={<SearchOutlined />} placeholder={t('orders')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 220 }} allowClear />
           {!isReadOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>{t('create_order')}</Button>}
         </Space>}
-      >
+      />
+      <Card variant="borderless" className="coo-card">
         <Table
           rowKey="id"
           loading={loading}

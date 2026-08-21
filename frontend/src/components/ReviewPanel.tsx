@@ -36,9 +36,9 @@ export default function ReviewPanel({ pkgId, version, level, onDone }: Props) {
   }
 
   return (
-    <div style={{ padding: 16, borderRadius: 8, background: level === 'dept' ? '#fffbeb' : '#eff6ff', border: `1px solid ${level === 'dept' ? '#fde68a' : '#bfdbfe'}` }}>
+    <div style={{ padding: 16, borderRadius: 8, background: level === 'dept' ? '#fbf2dd' : '#eef3fa', border: `1px solid ${level === 'dept' ? '#e5cf9c' : '#c7d8ec'}` }}>
       <Space style={{ marginBottom: 10 }}>
-        <Tag color={level === 'dept' ? 'gold' : 'geekblue'}>{level === 'dept' ? t('dept_review') : t('coo_review')}</Tag>
+        <Tag className="coo-tag" style={{ background: level === 'dept' ? '#faf0dc' : '#e9eff8', color: level === 'dept' ? '#a67c1e' : '#1f5fa8', border: 'none' }}>{level === 'dept' ? t('dept_review') : t('coo_review')}</Tag>
         {rejected && rejectReason && <Typography.Text type="danger">{t('reject_reason')}：{rejectReason}</Typography.Text>}
       </Space>
       {version.status === 'rejected' && !rejected && null}

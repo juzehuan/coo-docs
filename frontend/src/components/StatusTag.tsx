@@ -3,18 +3,18 @@ import { STATUS_LABELS } from '@/i18n/messages'
 import { useI18n } from '@/i18n'
 import type { Lang } from '@/types'
 
-// 每个状态：纯色圆点 + 浅色胶囊背景，提升扫视可读性。
+// 每个状态：纯色圆点 + 浅色胶囊背景，暖色调档案风。
 const STYLE: Record<string, { bg: string; fg: string; dot: string }> = {
-  draft:       { bg: '#f1f4f9', fg: '#5a6b85', dot: '#93a2b7' },       // 草稿
-  pending_dept:{ bg: '#fff7e6', fg: '#d48806', dot: '#faad14' },       // 待部门
-  pending_coo: { bg: '#fff1e8', fg: '#d46b08', dot: '#ff8c3b' },       // 待COO
-  released:    { bg: '#f0f9f4', fg: '#2f9e5f', dot: '#34b573' },       // 已放行
-  rejected:    { bg: '#fff1f0', fg: '#cf4444', dot: '#f4504b' },       // 已退回
-  withdrawn:   { bg: '#efeef7', fg: '#5b4fb5', dot: '#6c5ce7' },       // 已撤回
-  active:      { bg: '#eaf1fb', fg: '#1f5fa8', dot: '#2f7fd6' },       // 进行中
-  completed:   { bg: '#f0f9f4', fg: '#2f9e5f', dot: '#34b573' },       // 已完成
-  closed:      { bg: '#f1f4f9', fg: '#5a6b85', dot: '#93a2b7' },       // 已关闭
-  none:        { bg: '#f1f4f9', fg: '#5a6b85', dot: '#93a2b7' },
+  draft:       { bg: '#f2efe6', fg: '#7a7468', dot: '#a49e8c' },       // 草稿
+  pending_dept:{ bg: '#faf0dc', fg: '#a67c1e', dot: '#c9a23c' },       // 待部门
+  pending_coo: { bg: '#f5ead2', fg: '#8a6d2f', dot: '#a8833c' },       // 待COO
+  released:    { bg: '#eaf2ec', fg: '#2f6b4a', dot: '#3f7d5c' },       // 已放行
+  rejected:    { bg: '#f9ece9', fg: '#9c4134', dot: '#b04a3a' },       // 已退回
+  withdrawn:   { bg: '#eee9df', fg: '#6b6355', dot: '#8f8777' },       // 已撤回
+  active:      { bg: '#e9eff8', fg: '#1f5fa8', dot: '#2f7fd6' },       // 进行中
+  completed:   { bg: '#eaf2ec', fg: '#2f6b4a', dot: '#3f7d5c' },       // 已完成
+  closed:      { bg: '#f2efe6', fg: '#7a7468', dot: '#a49e8c' },       // 已关闭
+  none:        { bg: '#f2efe6', fg: '#7a7468', dot: '#a49e8c' },
 }
 
 export default function StatusTag({ status }: { status: string }) {

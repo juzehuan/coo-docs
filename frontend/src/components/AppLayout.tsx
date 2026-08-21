@@ -2,11 +2,12 @@ import { useState, type ReactNode } from 'react'
 import { Layout, Menu, Avatar, Dropdown, Button, theme as antdTheme } from 'antd'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
-  AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined,
+  AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { SERIF } from '@/theme'
 import LanguageSwitcher from './LanguageSwitcher'
 import RoleTag from './RoleTag'
 import NotificationBell from './NotificationBell'
@@ -52,21 +53,57 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark">
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark" width={224} trigger={null}>
+        {/* 品牌区：黄铜徽标 + 宋体标题 */}
         <div style={{
-          height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-          color: '#fff', fontWeight: 800, fontSize: 16, letterSpacing: 1,
-          background: 'linear-gradient(135deg, #0b2545, #1f5fa8)', borderBottom: '1px solid rgba(255,255,255,0.10)',
+          height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
+          borderBottom: '1px solid rgba(245, 241, 228, 0.12)',
+          background: 'linear-gradient(180deg, rgba(168,131,60,0.10), transparent 70%)',
+          position: 'relative',
         }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#2f7fd6,#1f5fa8)', fontWeight: 900, fontSize: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>C</span>
-          {!collapsed && <span>COO 平台</span>}
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 30, height: 30, borderRadius: 7,
+            fontFamily: SERIF, fontWeight: 900, fontSize: 15, color: '#f7e9c9',
+            background: 'linear-gradient(135deg, #16263f, #2a3d5c)',
+            border: '1px solid rgba(201, 176, 106, 0.55)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+          }}>C</span>
+          {!collapsed && (
+            <span style={{
+              fontFamily: SERIF, color: '#f5f1e4', fontWeight: 700, fontSize: 15,
+              letterSpacing: 3, lineHeight: 1.15,
+            }}>
+              COO 平台
+            </span>
+          )}
         </div>
         <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={items} onClick={(e) => navigate(e.key)} />
+        {/* 侧栏底部品牌注记 */}
+        {!collapsed && (
+          <div style={{
+            position: 'absolute', bottom: 14, left: 0, right: 0, textAlign: 'center',
+            fontSize: 10.5, letterSpacing: 1.5, color: 'rgba(245, 241, 228, 0.35)',
+            fontFamily: SERIF,
+          }}>
+            Bintelli · COO Dossier
+          </div>
+        )}
       </Sider>
       <Layout>
-        <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#fff', borderBottom: `1px solid ${token.colorBorderSecondary}`, boxShadow: '0 1px 3px rgba(11,37,69,0.05)' }}>
-          <div />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <Header style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 20px 0 12px', background: '#fffdf7',
+          borderBottom: '1px solid #e8e1d3',
+          boxShadow: '0 1px 3px rgba(34,42,51,0.04)',
+          position: 'sticky', top: 0, zIndex: 10,
+        }}>
+          <Button
+            type="text" aria-label="toggle-menu"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed(!collapsed)}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <NotificationBell />
             <LanguageSwitcher />
             <Dropdown
@@ -74,15 +111,15 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                 items: [{ key: 'logout', icon: <LogoutOutlined />, label: t('logout'), onClick: () => { logout(); navigate('/login') } }],
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <Avatar size="small" icon={<UserOutlined />} />
-                <span style={{ fontWeight: 600 }}>{user.display_name || user.username}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '4px 8px', borderRadius: 8 }}>
+                <Avatar size="small" style={{ background: '#16263f', color: '#f7e9c9' }} icon={<UserOutlined />} />
+                <span style={{ fontWeight: 600, color: '#232a33' }}>{user.display_name || user.username}</span>
                 <RoleTag role={user.role} />
               </div>
             </Dropdown>
           </div>
         </Header>
-        <Content style={{ margin: 20 }}>
+        <Content style={{ margin: 22 }}>
           {children ?? <Outlet />}
         </Content>
       </Layout>

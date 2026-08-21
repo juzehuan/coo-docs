@@ -5,6 +5,8 @@ import { controlled, packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import AttachmentPreview from '@/components/AttachmentPreview'
+import StatusTag from '@/components/StatusTag'
+import PageHeader from '@/components/PageHeader'
 import type { ControlledItem } from '@/types'
 
 export default function Controlled() {
@@ -26,11 +28,9 @@ export default function Controlled() {
   }
 
   return (
-    <Card
-      variant="borderless"
-      title={<span><LockOutlined /> {t('controlled')}</span>}
-      extra={<Typography.Text type="secondary">仅展示 COO 已终审放行的版本（只读受控），支持按版本打包归档下载</Typography.Text>}
-    >
+    <>
+      <PageHeader title={t('controlled')} desc={t('controlled_desc')} />
+      <Card variant="borderless" className="coo-card">
       <Table
         rowKey={(r) => r.version.id}
         loading={loading}
@@ -65,9 +65,9 @@ export default function Controlled() {
           { title: 'COO', dataIndex: 'package_code', width: 90 },
           { title: t('packages'), dataIndex: 'package_name' },
           { title: t('version'), dataIndex: ['version', 'version_no'], width: 90 },
-          { title: t('status'), width: 110, render: () => <Tag color="green">{t('released')}</Tag> },
+          { title: t('status'), width: 110, render: () => <StatusTag status="released" /> },
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
-          { title: '', key: 'lock', width: 60, render: () => <Tag color="green"><LockOutlined /></Tag> },
+          { title: '', key: 'lock', width: 60, render: () => <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}><LockOutlined /></Tag> },
           { title: '', key: 'act', width: 150, render: (_, r) => (
             <Space>
               <Button size="small" icon={<DownloadOutlined />} disabled={!r.attachment_count} onClick={() => downloadZip(r)}>{t('export_zip')}</Button>
@@ -77,6 +77,7 @@ export default function Controlled() {
       />
 
       <AttachmentPreview open={!!preview} url={preview?.url ?? ''} name={preview?.name ?? ''} onClose={() => setPreview(null)} />
-    </Card>
+      </Card>
+    </>
   )
 }

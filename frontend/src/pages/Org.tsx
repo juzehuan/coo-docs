@@ -4,6 +4,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { factories, org } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import RoleTag from '@/components/RoleTag'
+import PageHeader from '@/components/PageHeader'
 import { ROLES } from '@/types'
 import type { Department, Factory, User } from '@/types'
 
@@ -61,7 +62,7 @@ export default function Org() {
   }
 
   const deptTab = (
-    <Card variant="borderless" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setDeptOpen(true)}>{t('create_dept')}</Button>}>
+    <Card variant="borderless" className="coo-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setDeptOpen(true)}>{t('create_dept')}</Button>}>
       <Table rowKey="id" dataSource={depts} pagination={false} columns={[
         { title: t('dept_code'), dataIndex: 'code', width: 120 },
         { title: t('name_zh'), dataIndex: 'name_zh' },
@@ -72,19 +73,19 @@ export default function Org() {
   )
 
   const factTab = (
-    <Card variant="borderless" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setFactOpen(true)}>{t('create_factory')}</Button>}>
+    <Card variant="borderless" className="coo-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setFactOpen(true)}>{t('create_factory')}</Button>}>
       <Table rowKey="id" dataSource={factList} pagination={false} columns={[
         { title: t('factory_code'), dataIndex: 'code', width: 120 },
         { title: t('name_zh'), dataIndex: 'name_zh' },
         { title: t('name_en'), dataIndex: 'name_en' },
         { title: t('name_th'), dataIndex: 'name_th' },
-        { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag color={s === 'active' ? 'green' : 'red'}>{s === 'active' ? t('active') : t('disabled')}</Tag> },
+        { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag className="coo-tag" style={{ background: s === 'active' ? '#eaf2ec' : '#f9ece9', color: s === 'active' ? '#2f6b4a' : '#9c4134', border: 'none' }}>{s === 'active' ? t('active') : t('disabled')}</Tag> },
       ]} />
     </Card>
   )
 
   const userTab = (
-    <Card variant="borderless" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setUserOpen(true)}>{t('create_user')}</Button>}>
+    <Card variant="borderless" className="coo-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setUserOpen(true)}>{t('create_user')}</Button>}>
       <Table rowKey="id" dataSource={users} pagination={false} columns={[
         { title: t('display_name'), render: (_, r) => r.display_name || r.username },
         { title: t('username'), dataIndex: 'username', width: 140 },
@@ -98,6 +99,7 @@ export default function Org() {
 
   return (
     <>
+      <PageHeader title={t('users')} desc={t('users_desc')} />
       <Tabs
         items={[
           { key: 'dept', label: t('department_manage'), children: deptTab },

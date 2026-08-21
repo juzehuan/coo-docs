@@ -11,6 +11,7 @@ import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentPreview from '@/components/AttachmentPreview'
+import PageHeader from '@/components/PageHeader'
 import { formatTime } from '@/utils/format'
 import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, User } from '@/types'
 
@@ -73,7 +74,7 @@ function RowAttachments({ orderId, op, user, onChanged }: {
       <Table rowKey="id" size="small" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} />
 
       {canEdit && (
-        <div style={{ marginTop: 8, padding: 12, background: '#fafcff', border: '1px dashed #dfe6f0', borderRadius: 8 }}>
+        <div style={{ marginTop: 8, padding: 12, background: '#faf6ec', border: '1px dashed #d8cdb0', borderRadius: 8 }}>
           <Space style={{ marginBottom: 8 }}>
             <Input addonBefore={t('batch_no')} value={batchNo} onChange={(e) => setBatchNo(e.target.value)} style={{ width: 220 }} />
             <Button type="primary" icon={<SendOutlined />} disabled={atts.length === 0} onClick={submit}>{t('submit')}</Button>
@@ -100,8 +101,8 @@ function RowAttachments({ orderId, op, user, onChanged }: {
       )}
 
       {(canReviewCoo || canReviewDept) && (
-        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: canReviewCoo ? '#eff6ff' : '#fffbeb', border: `1px solid ${canReviewCoo ? '#bfdbfe' : '#fde68a'}` }}>
-          <Tag color={canReviewCoo ? 'geekblue' : 'gold'}>{canReviewCoo ? t('coo_review') : t('dept_review')}</Tag>
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: canReviewCoo ? '#eef3fa' : '#fbf2dd', border: `1px solid ${canReviewCoo ? '#c7d8ec' : '#e5cf9c'}` }}>
+          <Tag className="coo-tag" style={{ background: canReviewCoo ? '#e9eff8' : '#faf0dc', color: canReviewCoo ? '#1f5fa8' : '#a67c1e', border: 'none' }}>{canReviewCoo ? t('coo_review') : t('dept_review')}</Tag>
           <Input.TextArea rows={2} placeholder={t('change_note')} value={reason} onChange={(e) => setReason(e.target.value)} style={{ margin: '8px 0' }} />
           <Space>
             <Button type="primary" size="small" icon={<CheckOutlined />} loading={busy} onClick={() => doReview('approve', canReviewCoo ? 'coo' : 'dept')}>{t('approve')}</Button>
@@ -163,24 +164,24 @@ export default function OrderDetail() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 12 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => nav('/orders')}>{t('back')}</Button>
-      </Space>
+      <Button icon={<ArrowLeftOutlined />} onClick={() => nav('/orders')} style={{ marginBottom: 12 }}>{t('back')}</Button>
 
-      <Card variant="borderless">
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Typography.Title level={4} style={{ margin: 0 }}>{order.factory_code} · {order.order_no}</Typography.Title>
-          <Space>
-            {canExport && (
-              <>
-                <Button icon={<DownloadOutlined />} onClick={() => orders.exportCsv(order.id)}>{t('export_csv')}</Button>
-                <Button icon={<FileZipOutlined />} onClick={() => orders.exportZip(order.id)}>{t('export_zip')}</Button>
-              </>
-            )}
-            <Button type="primary" icon={<PlusOutlined />} disabled={!canEditOrder} onClick={() => setOpen(true)}>{t('add_package')}</Button>
-          </Space>
-        </Space>
-        <Descriptions column={3} size="small" style={{ marginTop: 12 }}>
+      <PageHeader
+        title={`${order.factory_code} · ${order.order_no}`}
+        desc={order.factory_name ? `${order.factory_name}${order.customer ? ` · ${order.customer}` : ''}` : (order.customer || '')}
+        extra={<Space>
+          {canExport && (
+            <>
+              <Button icon={<DownloadOutlined />} onClick={() => orders.exportCsv(order.id)}>{t('export_csv')}</Button>
+              <Button icon={<FileZipOutlined />} onClick={() => orders.exportZip(order.id)}>{t('export_zip')}</Button>
+            </>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} disabled={!canEditOrder} onClick={() => setOpen(true)}>{t('add_package')}</Button>
+        </Space>}
+      />
+
+      <Card variant="borderless" className="coo-card">
+        <Descriptions column={3} size="small">
           <Descriptions.Item label={t('factory')}>{order.factory_name || order.factory_code}</Descriptions.Item>
           <Descriptions.Item label={t('customer')}>{order.customer || '-'}</Descriptions.Item>
           <Descriptions.Item label={t('product')}>{order.product || '-'}</Descriptions.Item>
@@ -192,7 +193,7 @@ export default function OrderDetail() {
         </Descriptions>
       </Card>
 
-      <Card variant="borderless" style={{ marginTop: 16 }} title={t('progress')}>
+      <Card variant="borderless" className="coo-card" style={{ marginTop: 16 }} title={t('progress')}>
         <Table
           rowKey="id"
           dataSource={order.packages}
@@ -206,7 +207,7 @@ export default function OrderDetail() {
             { title: t('status'), dataIndex: 'status', width: 150, render: (s: string) => (<><StatusTag status={s} /><br /><ReviewSteps status={s} compact /></>) },
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
-            { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag color="blue">{t('required')}</Tag> : '-') },
+            { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>{t('required')}</Tag> : '-') },
             { title: '', key: 'act', width: 64, render: (_, op: OrderPackage) => canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)} /> },
           ]}
         />
