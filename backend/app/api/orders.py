@@ -263,7 +263,8 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
     if level == ReviewLevel.DEPT:
         if op.status != VersionStatus.PENDING_DEPT:
             raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
-        if not can_review_dept(user, op.package.dept_id if op.package else None):
+        if not can_review_dept(user, op.package.dept_id if op.package else None,
+                               submitted_by=op.submitted_by, db=db):
             raise HTTPException(status_code=403, detail="非本部门审核人")
         op.dept_reviewer_id = user.id
         op.dept_reviewed_at = _utcnow()
@@ -460,7 +461,8 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="订单不存在")
     fac = db.get(Factory, o.factory_id) if o.factory_id else None
-    fac_code = fac.code if fac else "NA"
+    fac_code = re.sub(r"[^A-Za-z0-9_\-]", "_", fac.code) if fac else "NA"
+    safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -471,10 +473,10 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
                 src = os.path.join(settings.UPLOAD_DIR, att.file_name)
                 if not os.path.exists(src):
                     continue
-                # 安全化归档目录名与文件名
+                # 安全化归档目录名与文件名，防路径穿越（ZIP Slip）
                 safe_code = re.sub(r"[^A-Za-z0-9_\-\u4e00-\u9fff]", "_", pkg_code)
                 safe_name = re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff]", "_", att.original_name or att.file_name)
-                arc = f"{fac_code}/{o.order_no}/{safe_code}/{safe_name}"
+                arc = f"{fac_code}/{safe_order}/{safe_code}/{safe_name}"
                 zf.write(src, arc)
                 manifest.append([fac_code, o.order_no, pkg_code, att.original_name, att.file_name,
                                  str(att.file_size)])

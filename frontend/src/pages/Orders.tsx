@@ -10,7 +10,7 @@ import PageHeader from '@/components/PageHeader'
 import type { Factory, Order } from '@/types'
 
 export default function Orders() {
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const { user } = useAuth()
   const { message } = App.useApp()
   const nav = useNavigate()
@@ -67,7 +67,7 @@ export default function Orders() {
           dataSource={data}
           pagination={{ pageSize: 10 }}
           columns={[
-            { title: t('factory'), width: 110, render: (_, r) => <span>{r.factory_code} · {(lang === 'en' ? '' : t('factory'))}{factName(r.factory_id)}</span> },
+            { title: t('factory'), width: 110, render: (_, r) => <span>{r.factory_code} · {r.factory_name || factName(r.factory_id)}</span> },
             { title: t('order_no'), dataIndex: 'order_no', width: 170 },
             { title: t('customer'), dataIndex: 'customer', ellipsis: true },
             { title: t('product'), dataIndex: 'product', ellipsis: true },

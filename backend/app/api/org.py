@@ -37,7 +37,7 @@ def create_department(payload: DepartmentCreate, request: Request, db: Session =
 
 @router.patch("/departments/{dept_id}", response_model=DepartmentOut)
 def update_department(dept_id: int, payload: DepartmentUpdate, request: Request,
-                      db: Session = Depends(get_db), _: User = Depends(admin_only)):
+                      db: Session = Depends(get_db), user: User = Depends(admin_only)):
     d = db.get(Department, dept_id)
     if not d:
         raise HTTPException(status_code=404, detail="部门不存在")
@@ -45,6 +45,8 @@ def update_department(dept_id: int, payload: DepartmentUpdate, request: Request,
         setattr(d, k, v)
     db.commit()
     db.refresh(d)
+    log_event(db, AuditDomain.ORG, "dept_update", actor=user, ip=client_ip(request),
+              target=d.code)
     return d
 
 
@@ -86,7 +88,7 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
 
 @router.patch("/users/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db),
-                _: User = Depends(admin_only)):
+                user: User = Depends(admin_only)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -100,6 +102,8 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
         u.factories = db.query(Factory).filter(Factory.id.in_(factory_ids)).all()
     db.commit()
     db.refresh(u)
+    log_event(db, AuditDomain.ORG, "user_update", actor=user, ip=client_ip(request),
+              target=u.username)
     return u
 
 

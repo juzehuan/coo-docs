@@ -40,7 +40,8 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             continue
         # 角色判定：当前资料包是否为"待我处理"
         if user.role == "submitter":
-            mine = p.owner_user_id == user.id and lv.status == VersionStatus.REJECTED
+            mine = p.owner_user_id == user.id \
+                and lv.status in (VersionStatus.REJECTED, VersionStatus.WITHDRAWN)
         elif user.role == "dept_reviewer":
             mine = p.dept_id == user.dept_id and lv.status == VersionStatus.PENDING_DEPT
         elif user.role in ("coo_reviewer", "admin"):
@@ -84,7 +85,7 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             continue
         if user.role == "submitter":
             mine = (op.owner_user_id == user.id or op.submitted_by == user.id) \
-                and op.status == VersionStatus.REJECTED
+                and op.status in (VersionStatus.REJECTED, VersionStatus.WITHDRAWN)
         elif user.role == "dept_reviewer":
             mine = pkg.dept_id == user.dept_id and op.status == VersionStatus.PENDING_DEPT
         elif user.role in ("coo_reviewer", "admin"):

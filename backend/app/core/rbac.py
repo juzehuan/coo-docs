@@ -41,6 +41,7 @@ coo_or_admin = require_roles("coo_reviewer", "admin")
 reviewer_or_above = require_roles("dept_reviewer", "coo_reviewer", "admin")
 audit_viewer = require_roles("auditor", "admin")          # 审计日志仅审计员/管理员可读
 export_viewer = require_roles("coo_reviewer", "auditor", "admin")  # 归档导出角色
+nas_viewer = require_roles("coo_reviewer", "auditor", "admin")     # NAS 归档查看角色
 any_staff = require_roles("submitter", "dept_reviewer", "coo_reviewer", "auditor", "admin")
 
 
@@ -52,12 +53,28 @@ def is_coo(u: User) -> bool:
     return u.role in ("coo_reviewer", "admin")
 
 
-def can_review_dept(u: User, package_dept_id) -> bool:
-    """部门审核人仅能审核本人责任部门范围内的资料包。"""
+def can_review_dept(u: User, package_dept_id, submitted_by=None, db=None) -> bool:
+    """部门审核人仅能审核本人责任部门范围内的资料包。
+
+    职责分离：当本部门存在其他部门审核人（可履行审核职责）时，
+    禁止审核人审核本人提交的内容；若本部门仅一名审核人（无替代者），
+    为保持流程可闭环，允许其审核本人提交的内容。
+    """
     if u.role == "admin" or u.role == "coo_reviewer":
         return True
     if u.role == "dept_reviewer":
-        return package_dept_id is not None and package_dept_id == u.dept_id
+        if package_dept_id is None or package_dept_id != u.dept_id:
+            return False
+        if submitted_by is not None and submitted_by == u.id and db is not None:
+            others = db.query(User).filter(
+                User.role == "dept_reviewer",
+                User.dept_id == u.dept_id,
+                User.id != u.id,
+                User.status == "active",
+            ).count()
+            if others > 0:
+                return False
+        return True
     return False
 
 

@@ -35,7 +35,8 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     (user.role === 'dept_reviewer' && op.package_dept_id != null && op.package_dept_id === user.dept_id)
   const ownerOk = user.role === 'submitter' && op.owner_user_id === user.id
   const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
-  const canReviewDept = user.role === 'dept_reviewer' && op.status === 'pending_dept'
+  const canReviewDept = user.role === 'dept_reviewer' && op.package_dept_id != null &&
+    op.package_dept_id === user.dept_id && op.status === 'pending_dept'
   const canReviewCoo = (user.role === 'coo_reviewer' || user.role === 'admin') && op.status === 'pending_coo'
   const canWithdraw = (user.role === 'admin' || ownerOk) &&
     (op.status === 'pending_dept' || op.status === 'pending_coo')

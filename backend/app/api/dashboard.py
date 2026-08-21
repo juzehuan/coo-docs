@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
-from app.core.rbac import export_viewer, get_current_user
+from app.core.rbac import can_view_package, export_viewer, get_current_user
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
 from app.schemas import DashboardOut
@@ -44,14 +44,15 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     ver_att = db.query(Attachment).filter(Attachment.order_package_id.is_(None)).count()
     total_attachments = order_att + ver_att
 
-    # 待我处理：提交人看自己被退回；部门审核人看待部门审核；COO 看待终审
+    # 待我处理：提交人看自己被退回/撤回；部门审核人看待部门审核；COO 看待终审
     # （同时统计订单资料包实例流程线上的待办）
     pending_mine = 0
     for p in pkgs:
         v = latest.get(p.id)
         if not v:
             continue
-        if user.role == "submitter" and p.owner_user_id == user.id and v.status == VersionStatus.REJECTED:
+        if user.role == "submitter" and p.owner_user_id == user.id \
+                and v.status in (VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
             pending_mine += 1
         elif user.role == "dept_reviewer" and p.dept_id == user.dept_id and v.status == VersionStatus.PENDING_DEPT:
             pending_mine += 1
@@ -69,7 +70,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
             continue
         if user.role == "submitter":
             if (op.owner_user_id == user.id or op.submitted_by == user.id) \
-                    and op.status == VersionStatus.REJECTED:
+                    and op.status in (VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
                 pending_mine += 1
         elif user.role == "dept_reviewer":
             if pkg.dept_id == user.dept_id and op.status == VersionStatus.PENDING_DEPT:
@@ -81,13 +82,15 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     overdue = 0
     need_attention = []
     progress = []
-    for p in pkgs:
+    # 进度与需关注列表按可见性过滤，避免向提交人泄露非本人资料包信息
+    visible_pkgs = [p for p in pkgs if can_view_package(user, p)]
+    for p in visible_pkgs:
         v = latest.get(p.id)
         st = v.status if v else "none"
         att_n = len(v.attachments) if v else 0
-        # 进度：已放行=100，待终审=80，待部门=50，退回=30，草稿=10，无=0
+        # 进度：已放行=100，待终审=80，待部门=50，退回/撤回=30，草稿=10，无=0
         pct = {"released": 100, "pending_coo": 80, "pending_dept": 50,
-               "rejected": 30, "draft": 10, "none": 0}.get(st, 0)
+               "rejected": 30, "withdrawn": 30, "draft": 10, "none": 0}.get(st, 0)
         progress.append({"code": p.code, "name": p.name_zh, "status": st, "percent": pct,
                          "attachments": att_n})
         if st == "rejected":

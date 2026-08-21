@@ -48,6 +48,30 @@ def _latest_version(db: Session, pkg_id: int):
     )
 
 
+def _purge_files(db: Session, atts: list) -> None:
+    """批量删除附件行对应的物理文件。
+
+    存储按 sha256 内容哈希命名，多个附件行（订单附件 / 版本附件）可能复用同一
+    物理文件，仅当删除集合之外无其它引用时才删除，避免误删仍被引用的文件。
+    """
+    if not atts:
+        return
+    names = {a.file_name for a in atts}
+    ids = [a.id for a in atts]
+    for name in names:
+        q = db.query(Attachment.id).filter(Attachment.file_name == name)
+        if ids:
+            q = q.filter(Attachment.id.notin_(ids))
+        if q.first():
+            continue
+        path = os.path.join(settings.UPLOAD_DIR, name)
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 @router.get("", response_model=list[dict])
 def list_packages(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     pkgs = _visible_packages(db, user)
@@ -60,7 +84,9 @@ def list_packages(db: Session = Depends(get_db), user: User = Depends(get_curren
             "current_version": lv.version_no if lv else "",
             "attachment_count": len(lv.attachments) if lv else 0,
             "editable": can_edit_package(user, p) and (lv is None or lv.status in (VersionStatus.DRAFT, VersionStatus.REJECTED)),
-            "reviewable_dept": can_review_dept(user, p.dept_id) and lv is not None and lv.status == VersionStatus.PENDING_DEPT,
+            "reviewable_dept": can_review_dept(user, p.dept_id, db=db,
+                                               submitted_by=lv.submitted_by if lv else None)
+                                and lv is not None and lv.status == VersionStatus.PENDING_DEPT,
             "reviewable_coo": is_coo(user) and lv is not None and lv.status == VersionStatus.PENDING_COO,
         })
     return result
@@ -82,7 +108,7 @@ def create_package(payload: PackageCreate, request: Request, db: Session = Depen
 
 @router.patch("/{pkg_id}", response_model=PackageOut)
 def update_package(pkg_id: int, payload: PackageUpdate, request: Request,
-                   db: Session = Depends(get_db), _: User = Depends(admin_only)):
+                   db: Session = Depends(get_db), user: User = Depends(admin_only)):
     p = db.get(Package, pkg_id)
     if not p:
         raise HTTPException(status_code=404, detail="资料包不存在")
@@ -90,6 +116,8 @@ def update_package(pkg_id: int, payload: PackageUpdate, request: Request,
         setattr(p, k, v)
     db.commit()
     db.refresh(p)
+    log_event(db, AuditDomain.PACKAGE, "update", actor=user, ip=client_ip(request),
+              target=p.code)
     return p
 
 
@@ -163,14 +191,21 @@ def version_detail(pkg_id: int, vid: int, db: Session = Depends(get_db),
 
 @router.delete("/{pkg_id}/versions/{vid}", response_model=Msg)
 def delete_version(pkg_id: int, vid: int, request: Request, db: Session = Depends(get_db),
-                   _: User = Depends(admin_only)):
+                   user: User = Depends(admin_only)):
     v = db.get(PackageVersion, vid)
     if not v or v.package_id != pkg_id:
         raise HTTPException(status_code=404, detail="版本不存在")
     if v.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行版本不可删除")
+    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
+    atts = list(v.attachments)
+    p = db.get(Package, pkg_id)
+    target = f"{p.code if p else pkg_id}/{v.version_no}"
     db.delete(v)
     db.commit()
+    _purge_files(db, atts)
+    log_event(db, AuditDomain.PACKAGE, "version_delete", actor=user, ip=client_ip(request),
+              target=target)
     return Msg(msg="已删除")
 
 
@@ -323,7 +358,7 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
     if level == ReviewLevel.DEPT:
         if v.status != VersionStatus.PENDING_DEPT:
             raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
-        if not can_review_dept(user, p.dept_id):
+        if not can_review_dept(user, p.dept_id, db=db, submitted_by=v.submitted_by):
             raise HTTPException(status_code=403, detail="非本部门审核人")
         v.dept_reviewer_id = user.id
         v.dept_reviewed_at = __import__("datetime").datetime.utcnow()

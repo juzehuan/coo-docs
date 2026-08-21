@@ -70,6 +70,7 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
         raise HTTPException(status_code=404, detail="受控版本不存在")
 
     buf = io.BytesIO()
+    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code or "pkg")
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         manifest = [["资料包", "版本", "附件原名", "存储文件名", "大小(字节)"]]
         for att in v.attachments:
@@ -77,7 +78,7 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
             if not os.path.exists(src):
                 continue
             safe_name = re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff]", "_", att.original_name or att.file_name)
-            arc = f"{p.code}/{v.version_no}/{safe_name}"
+            arc = f"{safe_code}/{v.version_no}/{safe_name}"
             zf.write(src, arc)
             manifest.append([p.code, v.version_no, att.original_name, att.file_name, str(att.file_size)])
         _q = lambda c: c.replace(chr(34), chr(34) * 2)
@@ -86,7 +87,6 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
 
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code}/{v.version_no}")
-    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code)
     return StreamingResponse(
         buf, media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=controlled_{safe_code}_{v.version_no}.zip"},
