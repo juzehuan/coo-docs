@@ -63,4 +63,17 @@ export async function downloadBlob(url: string): Promise<Blob> {
   return r.data
 }
 
+/** 附件下载：原生 fetch 携带 token，url 需为完整 /api/... 路径（浏览器导航无法带 Bearer 头）。 */
+export async function downloadFile(url: string, filename: string): Promise<void> {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
+  if (!res.ok) throw new Error(`下载失败（HTTP ${res.status}）`)
+  const blob = await res.blob()
+  const u = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = u
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(u)
+}
+
 export type { AxiosRequestConfig }

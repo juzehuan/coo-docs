@@ -4,11 +4,13 @@ import { App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Tab
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import { downloadFile } from '@/api/client'
 import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
+import AttachmentPreview from '@/components/AttachmentPreview'
 import { formatTime } from '@/utils/format'
 import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, User } from '@/types'
 
@@ -24,6 +26,7 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   const [uploading, setUploading] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   const atts = op.attachments || []
   const isStaff = user.role === 'admin' || user.role === 'dept_reviewer' || user.role === 'coo_reviewer'
@@ -52,14 +55,14 @@ function RowAttachments({ orderId, op, user, onChanged }: {
 
   const columns: ColumnsType<OrderAttachment> = [
     { title: t('attachment'), dataIndex: 'original_name', render: (n, r) => (
-      <a onClick={() => window.open(orders.attachmentUrl(orderId, op.id, r.id, false), '_blank')}>{n}</a>
+      <a onClick={() => setPreview({ url: orders.attachmentUrl(orderId, op.id, r.id, true), name: r.original_name || r.file_name })}>{n}</a>
     ) },
     { title: 'MD5', dataIndex: 'md5', ellipsis: true, render: (v: string) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
     { title: t('batch_no'), dataIndex: 'batch_no', render: (v: string) => v || '-' },
     { title: t('status'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
     { title: '', key: 'act', width: 72, render: (_, r: OrderAttachment) => (
       <Space>
-        <Tooltip title="下载"><Button size="small" icon={<DownloadOutlined />} onClick={() => window.open(orders.attachmentUrl(orderId, op.id, r.id, false), '_blank')} /></Tooltip>
+        <Tooltip title="下载"><Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)} /></Tooltip>
         {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await orders.deleteAttachment(orderId, op.id, r.id); message.success('已删除'); onChanged() }} />}
       </Space>
     )},
@@ -106,6 +109,8 @@ function RowAttachments({ orderId, op, user, onChanged }: {
           </Space>
         </div>
       )}
+
+      <AttachmentPreview open={!!preview} url={preview?.url ?? ''} name={preview?.name ?? ''} onClose={() => setPreview(null)} />
     </div>
   )
 }

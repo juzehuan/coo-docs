@@ -4,6 +4,7 @@ import { DownloadOutlined, FileOutlined, LockOutlined } from '@ant-design/icons'
 import { controlled, packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
+import AttachmentPreview from '@/components/AttachmentPreview'
 import type { ControlledItem } from '@/types'
 
 export default function Controlled() {
@@ -11,6 +12,7 @@ export default function Controlled() {
   const { message } = App.useApp()
   const [rows, setRows] = useState<ControlledItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
     controlled.list().then(setRows).catch(() => setRows([])).finally(() => setLoading(false))
@@ -47,7 +49,7 @@ export default function Controlled() {
                 dataSource={atts}
                 columns={[
                   { title: t('attachment'), render: (_, a) => (
-                    <a onClick={() => window.open(packages.attachmentUrl(v.package_id, v.id, a.id, false), '_blank')}>
+                    <a onClick={() => setPreview({ url: packages.attachmentUrl(v.package_id, v.id, a.id, true), name: a.original_name || a.file_name })}>
                       <FileOutlined /> {a.original_name || a.file_name}
                     </a>
                   ) },
@@ -73,6 +75,8 @@ export default function Controlled() {
           ) },
         ]}
       />
+
+      <AttachmentPreview open={!!preview} url={preview?.url ?? ''} name={preview?.name ?? ''} onClose={() => setPreview(null)} />
     </Card>
   )
 }

@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { App, Button, Input, Space, Table, Tag, Tooltip, Upload, Typography } from 'antd'
+import { App, Button, Input, Space, Table, Tag, Tooltip, Typography, Upload } from 'antd'
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, InboxOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import { downloadFile } from '@/api/client'
 import { packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import type { Attachment } from '@/types'
+import AttachmentPreview from '@/components/AttachmentPreview'
 
 const { Dragger } = Upload
 
@@ -16,23 +18,24 @@ interface Props {
   onChanged: () => void
 }
 
-const PREVIEW_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'image/webp']
-
 export default function AttachmentList({ pkgId, version, canEdit, onChanged }: Props) {
   const { t } = useI18n()
   const { message } = App.useApp()
   const [orderNo, setOrderNo] = useState('')
   const [batchNo, setBatchNo] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   const atts = version.attachments
+
+  const openPreview = (r: Attachment) => setPreview({ url: packages.attachmentUrl(pkgId, version.id, r.id, true), name: r.original_name || r.file_name })
 
   const columns: ColumnsType<Attachment> = [
     {
       title: t('attachment'),
       dataIndex: 'original_name',
       render: (name: string, r) => (
-        <a onClick={() => window.open(packages.attachmentUrl(pkgId, version.id, r.id, false), '_blank')}>{name}</a>
+        <a onClick={() => openPreview(r)}>{name}</a>
       ),
     },
     { title: t('order_no'), dataIndex: 'order_no', render: (v) => v || '-' },
@@ -44,8 +47,8 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
       title: '', key: 'act', width: 120,
       render: (_, r) => (
         <Space>
-          <Tooltip title={t('detail')}><Button size="small" icon={<EyeOutlined />} onClick={() => { if (PREVIEW_TYPES.includes(r.mime_type)) window.open(packages.attachmentUrl(pkgId, version.id, r.id, true), '_blank'); else window.open(packages.attachmentUrl(pkgId, version.id, r.id, false), '_blank') }} /></Tooltip>
-          <Tooltip title="下载"><Button size="small" icon={<DownloadOutlined />} onClick={() => window.open(packages.attachmentUrl(pkgId, version.id, r.id, false), '_blank')} /></Tooltip>
+          <Tooltip title={t('detail')}><Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)} /></Tooltip>
+          <Tooltip title="下载"><Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name)} /></Tooltip>
           {canEdit && <Tooltip title={t('cancel')}><Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await packages.deleteAttachment(pkgId, version.id, r.id); message.success('已删除'); onChanged() }} /></Tooltip>}
         </Space>
       ),
@@ -88,6 +91,8 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
           </Dragger>
         </div>
       )}
+
+      <AttachmentPreview open={!!preview} url={preview?.url ?? ''} name={preview?.name ?? ''} onClose={() => setPreview(null)} />
     </div>
   )
 }
