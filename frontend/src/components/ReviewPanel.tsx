@@ -29,7 +29,7 @@ export default function ReviewPanel({ pkgId, version, level, onDone }: Props) {
       setReason('')
       onDone()
     } catch (e: any) {
-      message.error(e?.message || '操作失败')
+      message.error(e?.message || t('op_failed'))
     } finally {
       setBusy(false)
     }

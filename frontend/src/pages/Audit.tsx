@@ -60,12 +60,12 @@ export default function Audit() {
         dataSource={logs}
         pagination={{ pageSize: 15 }}
         columns={[
-          { title: '时间', dataIndex: 'created_at', width: 170, render: (v: string) => formatTime(v) },
-          { title: '域.动作', render: (_, r) => `${r.event_domain}.${r.action}`, width: 200 },
-          { title: '操作人', dataIndex: 'actor_name', width: 120 },
-          { title: 'IP', dataIndex: 'ip', width: 130 },
-          { title: '目标', dataIndex: 'target' },
-          { title: '说明', dataIndex: 'detail' },
+          { title: t('time'), dataIndex: 'created_at', width: 170, render: (v: string) => formatTime(v) },
+          { title: t('domain_action'), render: (_, r) => `${r.event_domain}.${r.action}`, width: 200 },
+          { title: t('operator'), dataIndex: 'actor_name', width: 120 },
+          { title: t('ip'), dataIndex: 'ip', width: 130 },
+          { title: t('target'), dataIndex: 'target' },
+          { title: t('desc'), dataIndex: 'detail' },
         ]}
       />
       </Card>

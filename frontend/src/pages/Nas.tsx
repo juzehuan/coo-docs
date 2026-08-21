@@ -60,10 +60,10 @@ export default function Nas() {
         <Card variant="borderless" className="coo-card" title={t('sync_status')}>
           <Table rowKey="id" size="small" pagination={{ pageSize: 8 }} dataSource={recs} columns={[
             { title: 'ID', dataIndex: 'id', width: 70 },
-            { title: '类型', dataIndex: 'run_type', width: 90 },
-            { title: '成功/总数', render: (_, r) => `${r.success}/${r.total}`, width: 110 },
+            { title: t('type'), dataIndex: 'run_type', width: 90 },
+            { title: t('success_total'), render: (_, r) => `${r.success}/${r.total}`, width: 110 },
             { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag className="coo-tag" style={{ background: s === 'success' ? '#eaf2ec' : s === 'failed' ? '#f9ece9' : '#faf0dc', color: s === 'success' ? '#2f6b4a' : s === 'failed' ? '#9c4134' : '#a67c1e', border: 'none' }}>{s}</Tag> },
-            { title: '时间', dataIndex: 'started_at', render: (v: string) => formatTime(v) },
+            { title: t('time'), dataIndex: 'started_at', render: (v: string) => formatTime(v) },
           ]} />
         </Card>
       </Col>

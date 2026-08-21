@@ -97,9 +97,9 @@ export default function PackageDetail() {
               <div>
                 <ReviewSteps status={v.status} />
                 <Descriptions size="small" column={3} style={{ marginTop: 12, marginBottom: 12 }}>
-                  <Descriptions.Item label="变更">{v.change_note || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="提交">{formatTime(v.submitted_at)}</Descriptions.Item>
-                  <Descriptions.Item label="锁定">{v.locked ? <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}>✓</Tag> : '-'}</Descriptions.Item>
+                  <Descriptions.Item label={t('change_note')}>{v.change_note || '-'}</Descriptions.Item>
+                  <Descriptions.Item label={t('submit_time')}>{formatTime(v.submitted_at)}</Descriptions.Item>
+                  <Descriptions.Item label={t('locked')}>{v.locked ? <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}>✓</Tag> : '-'}</Descriptions.Item>
                 </Descriptions>
                 <AttachmentList pkgId={pkg.id} version={v} canEdit={!!canEdit} onChanged={load} />
                 <Divider />

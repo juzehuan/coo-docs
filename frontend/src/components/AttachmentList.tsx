@@ -50,8 +50,8 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
       render: (_, r) => (
         <Space size={4}>
           <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)}>{t('detail')}</Button>
-          <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name)}>下载</Button>
-          {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await packages.deleteAttachment(pkgId, version.id, r.id); message.success('已删除'); onChanged() }}>{t('cancel')}</Button>}
+          <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name)}>{t('download')}</Button>
+          {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await packages.deleteAttachment(pkgId, version.id, r.id); message.success(t('deleted')); onChanged() }}>{t('cancel')}</Button>}
         </Space>
       ),
     },
@@ -78,11 +78,11 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
               setUploading(true)
               try {
                 await packages.uploadAttachments(pkgId, version.id, files, orderNo, batchNo)
-                message.success(`已上传 ${files.length} 个文件`)
+                message.success(t('uploaded_n', { n: files.length }))
                 setOrderNo(''); setBatchNo('')
                 onChanged()
               } catch (e: any) {
-                message.error(e?.message || '上传失败')
+                message.error(e?.message || t('upload_failed'))
               } finally {
                 setUploading(false)
               }

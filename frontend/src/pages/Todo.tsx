@@ -36,7 +36,7 @@ export default function Todo() {
       <PageHeader title={t('todo')} desc={t('todo_desc')} />
       <Card variant="borderless" className="coo-card">
       <Table
-        rowKey="package_id"
+        rowKey={(r) => `${r.kind}-${r.package_id}`}
         loading={loading}
         dataSource={rows}
         locale={{ emptyText: <Empty description={t('todo_empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
@@ -44,7 +44,7 @@ export default function Todo() {
         columns={[
           { title: 'COO', dataIndex: 'package_code', width: 90 },
           { title: t('packages'), dataIndex: 'package_name', ellipsis: true },
-          { title: t('version'), dataIndex: 'version_no', width: 80 },
+          { title: t('version'), dataIndex: 'version_no', width: 110, render: (v: string) => v || '-' },
           {
             title: t('status'), width: 170,
             render: (_, r) => (
@@ -63,7 +63,7 @@ export default function Todo() {
           {
             title: '', key: 'act', width: 100,
             render: (_, r) => (
-              <Button size="small" type="primary" ghost icon={<ArrowRightOutlined />} onClick={() => nav(`/packages/${r.package_id}`)}>
+              <Button size="small" type="primary" ghost icon={<ArrowRightOutlined />} onClick={() => nav(r.kind === 'order' && r.order_id ? `/orders/${r.order_id}` : `/packages/${r.package_id}`)}>
                 {actionLabel(r)}
               </Button>
             ),

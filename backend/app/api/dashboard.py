@@ -6,7 +6,7 @@ from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.rbac import get_current_user
 from app.db import get_db
-from app.models import Attachment, AuditDomain, Package, PackageVersion, User
+from app.models import Attachment, AuditDomain, OrderPackage, Package, PackageVersion, User
 from app.schemas import DashboardOut
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -28,6 +28,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     total_attachments = db.query(Attachment).count()
 
     # 待我处理：提交人看自己被退回；部门审核人看待部门审核；COO 看待终审
+    # （同时统计订单资料包实例流程线上的待办）
     pending_mine = 0
     for p in pkgs:
         v = latest.get(p.id)
@@ -39,6 +40,21 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
             pending_mine += 1
         elif user.role in ("coo_reviewer", "admin") and v.status == VersionStatus.PENDING_COO:
             pending_mine += 1
+    ops = db.query(OrderPackage).all()
+    for op in ops:
+        pkg = db.get(Package, op.package_id)
+        if not pkg:
+            continue
+        if user.role == "submitter":
+            if (op.owner_user_id == user.id or op.submitted_by == user.id) \
+                    and op.status == VersionStatus.REJECTED:
+                pending_mine += 1
+        elif user.role == "dept_reviewer":
+            if pkg.dept_id == user.dept_id and op.status == VersionStatus.PENDING_DEPT:
+                pending_mine += 1
+        elif user.role in ("coo_reviewer", "admin"):
+            if op.status == VersionStatus.PENDING_COO:
+                pending_mine += 1
 
     overdue = 0
     need_attention = []

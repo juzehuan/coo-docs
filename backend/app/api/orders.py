@@ -45,6 +45,30 @@ def _package_stats(op: OrderPackage) -> dict:
     }
 
 
+def _purge_files(db: Session, atts: list) -> None:
+    """批量删除附件行对应的物理文件。
+
+    存储按 sha256 内容哈希命名，多个附件行（订单附件 / 版本附件）可能复用同一
+    物理文件，仅当删除集合之外无其它引用时才删除，避免误删仍被引用的文件。
+    """
+    if not atts:
+        return
+    names = {a.file_name for a in atts}
+    ids = [a.id for a in atts]
+    for name in names:
+        q = db.query(Attachment.id).filter(Attachment.file_name == name)
+        if ids:
+            q = q.filter(Attachment.id.notin_(ids))
+        if q.first():
+            continue
+        path = os.path.join(settings.UPLOAD_DIR, name)
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 def _order_row(db: Session, o: Order) -> dict:
     fac = db.get(Factory, o.factory_id) if o.factory_id else None
     opkgs = o.packages
@@ -128,11 +152,8 @@ def delete_order(order_id: int, request: Request, db: Session = Depends(get_db),
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="订单不存在")
-    for op in list(o.packages):
-        for att in list(op.attachments):
-            path = os.path.join(settings.UPLOAD_DIR, att.file_name)
-            if os.path.exists(path):
-                os.remove(path)
+    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
+    _purge_files(db, [att for op in o.packages for att in op.attachments])
     db.delete(o)
     db.commit()
     log_event(db, AuditDomain.PACKAGE, "order_delete", actor=user, ip=client_ip(request),
@@ -178,11 +199,8 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
         raise HTTPException(status_code=404, detail="资源不存在")
     if op.locked or op.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行实例不可移除，如需变更请新建订单")
-    if op.attachments:
-        for att in op.attachments:
-            path = os.path.join(settings.UPLOAD_DIR, att.file_name)
-            if os.path.exists(path):
-                os.remove(path)
+    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
+    _purge_files(db, list(op.attachments))
     db.delete(op)
     db.commit()
     log_event(db, AuditDomain.PACKAGE, "order_package_remove", actor=user, ip=client_ip(request),
@@ -359,11 +377,7 @@ def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Reques
     if op.locked:
         raise HTTPException(status_code=400, detail="已放行版本不可修改")
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
-    reused = db.query(Attachment.id).filter(
-        Attachment.file_name == att.file_name, Attachment.id != att.id).first()
-    path = os.path.join(settings.UPLOAD_DIR, att.file_name)
-    if not reused and os.path.exists(path):
-        os.remove(path)
+    _purge_files(db, [att])
     db.delete(att)
     _reset_status_on_edit(op)
     db.commit()

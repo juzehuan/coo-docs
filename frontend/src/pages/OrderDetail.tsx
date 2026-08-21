@@ -48,7 +48,7 @@ function RowAttachments({ orderId, op, user, onChanged }: {
       await orders.review(orderId, op.id, decision, level, reason)
       message.success(decision === 'approve' ? t('approve') : t('reject'))
       setReason(''); onChanged()
-    } catch (e: any) { message.error(e?.message || '操作失败') } finally { setBusy(false) }
+    } catch (e: any) { message.error(e?.message || t('op_failed')) } finally { setBusy(false) }
   }
   async function submit() {
     await orders.submit(orderId, op.id); message.success(t('submit_success')); onChanged()
@@ -63,8 +63,8 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
     { title: '', key: 'act', width: 160, render: (_, r: OrderAttachment) => (
       <Space size={4}>
-        <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)}>下载</Button>
-        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await orders.deleteAttachment(orderId, op.id, r.id); message.success('已删除'); onChanged() }}>{t('cancel')}</Button>}
+        <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)}>{t('download')}</Button>
+        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await orders.deleteAttachment(orderId, op.id, r.id); message.success(t('deleted')); onChanged() }}>{t('cancel')}</Button>}
       </Space>
     )},
   ]
@@ -90,8 +90,8 @@ function RowAttachments({ orderId, op, user, onChanged }: {
               setUploading(true)
               try {
                 await orders.uploadAttachments(orderId, op.id, files, batchNo)
-                message.success(`已上传 ${files.length} 个文件`); setBatchNo(''); onChanged()
-              } catch (e: any) { message.error(e?.message || '上传失败') } finally { setUploading(false) }
+                message.success(t('uploaded_n', { n: files.length })); setBatchNo(''); onChanged()
+              } catch (e: any) { message.error(e?.message || t('upload_failed')) } finally { setUploading(false) }
             }}
           >
             <p className="ant-upload-drag-icon"><InboxOutlined /></p>
@@ -159,7 +159,7 @@ export default function OrderDetail() {
   }
   function removeOp(op: OrderPackage) {
     if (!order) return
-    modal.confirm({ title: t('cancel'), content: t('remove_package_confirm'), okText: t('confirm'), cancelText: t('cancel'), onOk: async () => { await orders.removePackage(order.id, op.id); message.success('已移除'); load() } })
+    modal.confirm({ title: t('cancel'), content: t('remove_package_confirm'), okText: t('confirm'), cancelText: t('cancel'), onOk: async () => { await orders.removePackage(order.id, op.id); message.success(t('removed')); load() } })
   }
 
   return (

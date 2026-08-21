@@ -24,7 +24,7 @@ export default function Controlled() {
     const v = r.version
     controlled.exportZip(v.package_id, v.id, `controlled_${r.package_code}_${v.version_no}.zip`)
       .then(() => message.success(t('export_zip')))
-      .catch((e: any) => message.error(e?.message || '下载失败'))
+      .catch((e: any) => message.error(e?.message || t('download_failed')))
   }
 
   return (

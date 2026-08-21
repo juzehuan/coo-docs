@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Modal, Result, Space, Spin } from 'antd'
 import { DownloadOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import { downloadFile, getToken } from '@/api/client'
+import { useI18n } from '@/i18n'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 
 // PDF.js worker：不依赖浏览器内置 PDF 查看器，任何环境（含 headless）都能渲染
@@ -19,6 +20,7 @@ interface Props {
 
 /** 附件预览 Modal：fetch 携带 token 获取 blob，图片/PDF/文本内嵌展示，其余类型提供下载。 */
 export default function AttachmentPreview({ open, url, name, onClose }: Props) {
+  const { t } = useI18n()
   const [kind, setKind] = useState<Kind | null>(null)
   const [blobUrl, setBlobUrl] = useState('')
   const [text, setText] = useState('')
@@ -43,7 +45,7 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
     ;(async () => {
       try {
         const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
-        if (!res.ok) throw new Error(`加载失败（HTTP ${res.status}）`)
+        if (!res.ok) throw new Error(`${t('load_failed')}（HTTP ${res.status}）`)
         const blob = await res.blob()
         if (cancelled) return
         const mime = blob.type || res.headers.get('Content-Type') || ''
@@ -61,7 +63,7 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
           const u = URL.createObjectURL(blob); blobUrlRef.current = u; setBlobUrl(u); setKind('unsupported')
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || '加载失败')
+        if (!cancelled) setError(e?.message || t('load_failed'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -99,7 +101,7 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
 
   return (
     <Modal open={open} onCancel={onClose} footer={null} width={980} title={name} destroyOnHidden>
-      {loading && <div style={{ textAlign: 'center', padding: 64 }}><Spin tip="加载中"><div style={{ minHeight: 96 }} /></Spin></div>}
+      {loading && <div style={{ textAlign: 'center', padding: 64 }}><Spin tip={t('loading')}><div style={{ minHeight: 96 }} /></Spin></div>}
       {!loading && error && <Result status="warning" title={error} />}
       {!loading && !error && kind === 'image' && (
         <div style={{ textAlign: 'center', background: '#f5f5f5', borderRadius: 8, padding: 8 }}>
@@ -124,9 +126,9 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
       {!loading && !error && kind === 'unsupported' && (
         <Result
           icon={<DownloadOutlined />}
-          title="该文件类型暂不支持在线预览"
-          subTitle={`${name} · 请下载后查看`}
-          extra={<Button type="primary" icon={<DownloadOutlined />} onClick={() => downloadFile(url, name)}>下载</Button>}
+          title={t('preview_unsupported')}
+          subTitle={`${name} · ${t('preview_download_hint')}`}
+          extra={<Button type="primary" icon={<DownloadOutlined />} onClick={() => downloadFile(url, name)}>{t('download')}</Button>}
         />
       )}
     </Modal>

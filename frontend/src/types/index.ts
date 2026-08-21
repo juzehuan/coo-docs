@@ -198,10 +198,12 @@ export interface ControlledItem {
 }
 
 export interface TodoItem {
+  kind: 'package' | 'order'
   package_id: string
   package_code: string
   package_name: string
-  version_id: string
+  order_id: string | null
+  version_id: string | null
   version_no: string
   status: string
   dept_name: string

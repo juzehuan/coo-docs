@@ -81,8 +81,8 @@ export default function Orders() {
                 <Space size={4}>
                   <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/orders/${r.id}`)}>{t('detail')}</Button>
                   {canExport && (<>
-                    <Button size="small" icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)}>CSV</Button>
-                    <Button size="small" icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)}>ZIP</Button>
+                    <Button size="small" icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)}>{t('export_csv')}</Button>
+                    <Button size="small" icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)}>{t('export_zip')}</Button>
                   </>)}
                 </Space>
               ),

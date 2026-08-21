@@ -7,7 +7,7 @@ const LANG_KEY = 'coo_lang'
 interface I18nCtx {
   lang: Lang
   setLang: (l: Lang) => void
-  t: (k: string) => string
+  t: (k: string, params?: Record<string, string | number>) => string
 }
 
 const Ctx = createContext<I18nCtx | null>(null)
@@ -20,7 +20,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LANG_KEY, l)
   }
 
-  const t = (k: string): string => messages[lang][k] ?? messages.zh[k] ?? k
+  const t = (k: string, params?: Record<string, string | number>): string => {
+    let s = messages[lang][k] ?? messages.zh[k] ?? k
+    if (params) for (const [key, val] of Object.entries(params)) s = s.split(`{${key}}`).join(String(val))
+    return s
+  }
 
   return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>
 }

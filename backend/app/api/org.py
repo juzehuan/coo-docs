@@ -15,7 +15,7 @@ router = APIRouter(prefix="/org", tags=["org"])
 
 # ---------- 部门 ----------
 @router.get("/departments", response_model=list[DepartmentOut])
-def list_departments(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_departments(db: Session = Depends(get_db), _: User = Depends(admin_only)):
     return db.query(Department).order_by(Department.code).all()
 
 
@@ -48,7 +48,7 @@ def update_department(dept_id: int, payload: DepartmentUpdate, request: Request,
 # ---------- 用户 ----------
 @router.get("/users", response_model=list[UserOut])
 def list_users(dept_id: int | None = Query(None), db: Session = Depends(get_db),
-               _: User = Depends(get_current_user)):
+               _: User = Depends(admin_only)):
     q = db.query(User)
     if dept_id:
         q = q.filter(User.dept_id == dept_id)
