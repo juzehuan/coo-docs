@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Layout, Menu, Avatar, Dropdown, Button, theme as antdTheme } from 'antd'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
@@ -38,6 +38,11 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const contentRef = useRef<HTMLElement>(null)
+  // 路由切换时内容滚动容器回到顶部，避免新页面停留在旧滚动位置
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [location.pathname])
   const { token } = antdTheme.useToken()
 
   if (!user) return null
@@ -52,11 +57,12 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     .sort((a, b) => b.length - a.length)[0] || '/'
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark" width={224} trigger={null}>
-        {/* 品牌区：黄铜徽标 + 宋体标题 */}
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark" width={224} trigger={null}
+        style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* 品牌区：黄铜徽标 + 宋体标题（固定顶部） */}
         <div style={{
-          height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
+          height: 60, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
           borderBottom: '1px solid rgba(245, 241, 228, 0.12)',
           background: 'linear-gradient(180deg, rgba(168,131,60,0.10), transparent 70%)',
           position: 'relative',
@@ -78,11 +84,14 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             </span>
           )}
         </div>
-        <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={items} onClick={(e) => navigate(e.key)} />
-        {/* 侧栏底部品牌注记 */}
+        {/* 菜单区：独立滚动 */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={items} onClick={(e) => navigate(e.key)} />
+        </div>
+        {/* 侧栏底部品牌注记（固定底部） */}
         {!collapsed && (
           <div style={{
-            position: 'absolute', bottom: 14, left: 0, right: 0, textAlign: 'center',
+            flexShrink: 0, padding: '12px 0 14px', textAlign: 'center',
             fontSize: 10.5, letterSpacing: 1.5, color: 'rgba(245, 241, 228, 0.35)',
             fontFamily: SERIF,
           }}>
@@ -90,7 +99,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
           </div>
         )}
       </Sider>
-      <Layout>
+      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '0 20px 0 12px', background: '#fffdf7',
@@ -119,7 +128,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             </Dropdown>
           </div>
         </Header>
-        <Content style={{ margin: 22 }}>
+        <Content ref={contentRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 22 }}>
           {children ?? <Outlet />}
         </Content>
       </Layout>
