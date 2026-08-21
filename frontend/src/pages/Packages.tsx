@@ -95,7 +95,7 @@ export default function Packages() {
         rowKey="id"
         loading={loading}
         dataSource={data}
-        pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+        pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         columns={[
           { title: 'COO', dataIndex: 'code', width: 90 },
           { title: t('packages'), render: (_, r) => lang === 'en' ? r.name_en || r.name_zh : lang === 'th' ? r.name_th || r.name_zh : r.name_zh },

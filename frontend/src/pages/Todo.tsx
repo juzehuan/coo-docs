@@ -40,7 +40,7 @@ export default function Todo() {
         loading={loading}
         dataSource={rows}
         locale={{ emptyText: <Empty description={t('todo_empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-        pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+        pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         columns={[
           { title: 'COO', dataIndex: 'package_code', width: 90 },
           { title: t('packages'), dataIndex: 'package_name', ellipsis: true },

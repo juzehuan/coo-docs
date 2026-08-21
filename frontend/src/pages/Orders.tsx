@@ -65,7 +65,7 @@ export default function Orders() {
           rowKey="id"
           loading={loading}
           dataSource={data}
-          pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+          pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'] }}
           columns={[
             { title: t('factory'), width: 110, render: (_, r) => <span>{r.factory_code} · {r.factory_name || factName(r.factory_id)}</span> },
             { title: t('order_no'), dataIndex: 'order_no', width: 170 },
