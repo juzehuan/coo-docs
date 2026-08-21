@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App, Button, Card, Form, Input, Modal, Select, Space, Switch, Table } from 'antd'
-import { EditOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { org, packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -104,9 +104,9 @@ export default function Packages() {
           { title: t('version'), dataIndex: 'current_version', width: 90, render: (v: string) => v || '-' },
           { title: t('status'), dataIndex: 'current_status', width: 130, render: (s: string) => <StatusTag status={s} /> },
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
-          { title: '', key: 'act', width: isAdmin ? 150 : 80, render: (_, r) => (
+          { title: '', key: 'act', width: isAdmin ? 180 : 110, render: (_, r) => (
             <Space>
-              <a onClick={() => nav(`/packages/${r.id}`)}>{t('detail')}</a>
+              <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/packages/${r.id}`)}>{t('detail')}</Button>
               {isAdmin && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>{t('edit')}</Button>}
             </Space>
           ) },

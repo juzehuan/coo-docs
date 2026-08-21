@@ -30,7 +30,7 @@ def log_event(
         action=action,
         actor_id=actor.id if actor else None,
         actor_role=actor.role if actor else "",
-        actor_name=actor.display_name or (actor.username if actor else ""),
+        actor_name=actor.display_name if actor else "",
         ip=ip,
         target=target,
         detail=detail,

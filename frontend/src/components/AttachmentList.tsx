@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { App, Button, Input, Space, Table, Tag, Tooltip, Typography, Upload } from 'antd'
+import { App, Button, Input, Space, Table, Tag, Typography, Upload } from 'antd'
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, InboxOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { downloadFile } from '@/api/client'
@@ -44,14 +44,14 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
     { title: 'NAS', dataIndex: 'nas_synced', width: 70, render: (s: boolean) => (s
       ? <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}>✓</Tag>
       : <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>⏳</Tag>) },
-    { title: t('status'), dataIndex: 'uploaded_at', width: 160, render: (v) => formatTime(v) },
+    { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v) => formatTime(v) },
     {
-      title: '', key: 'act', width: 120,
+      title: '', key: 'act', width: 200,
       render: (_, r) => (
-        <Space>
-          <Tooltip title={t('detail')}><Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)} /></Tooltip>
-          <Tooltip title="下载"><Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name)} /></Tooltip>
-          {canEdit && <Tooltip title={t('cancel')}><Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await packages.deleteAttachment(pkgId, version.id, r.id); message.success('已删除'); onChanged() }} /></Tooltip>}
+        <Space size={4}>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)}>{t('detail')}</Button>
+          <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name)}>下载</Button>
+          {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await packages.deleteAttachment(pkgId, version.id, r.id); message.success('已删除'); onChanged() }}>{t('cancel')}</Button>}
         </Space>
       ),
     },

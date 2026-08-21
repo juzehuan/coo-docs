@@ -99,7 +99,7 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
 
   return (
     <Modal open={open} onCancel={onClose} footer={null} width={980} title={name} destroyOnHidden>
-      {loading && <div style={{ textAlign: 'center', padding: 64 }}><Spin tip="加载中" /></div>}
+      {loading && <div style={{ textAlign: 'center', padding: 64 }}><Spin tip="加载中"><div style={{ minHeight: 96 }} /></Spin></div>}
       {!loading && error && <Result status="warning" title={error} />}
       {!loading && !error && kind === 'image' && (
         <div style={{ textAlign: 'center', background: '#f5f5f5', borderRadius: 8, padding: 8 }}>

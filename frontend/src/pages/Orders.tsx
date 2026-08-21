@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App, Button, Card, Form, Input, InputNumber, Modal, Progress, Select, Space, Table } from 'antd'
-import { DownloadOutlined, FileZipOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { DownloadOutlined, EyeOutlined, FileZipOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -76,13 +76,13 @@ export default function Orders() {
             { title: t('completion'), width: 140, render: (_, r) => <Progress percent={r.completion} size="small" /> },
             { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <StatusTag status={s || 'active'} /> },
             {
-              title: '', key: 'act', width: 150,
+              title: '', key: 'act', width: 260,
               render: (_, r) => (
-                <Space>
-                  <a onClick={() => nav(`/orders/${r.id}`)}>{t('detail')}</a>
+                <Space size={4}>
+                  <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/orders/${r.id}`)}>{t('detail')}</Button>
                   {canExport && (<>
-                    <a onClick={() => orders.exportCsv(r.id)}><DownloadOutlined /></a>
-                    <a onClick={() => orders.exportZip(r.id)}><FileZipOutlined /></a>
+                    <Button size="small" icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)}>CSV</Button>
+                    <Button size="small" icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)}>ZIP</Button>
                   </>)}
                 </Space>
               ),

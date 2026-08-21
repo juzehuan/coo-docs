@@ -47,8 +47,25 @@ export const orders = {
     del(`/orders/${id}/packages/${opId}/attachments/${aid}`),
   attachmentUrl: (id: string, opId: string, aid: string, preview = false) =>
     `/api/orders/${id}/packages/${opId}/attachments/${aid}/file${preview ? '?preview=true' : ''}`,
-  exportCsv: (id: string) => (window.location.href = `/api/orders/${id}/export`),
-  exportZip: (id: string) => (window.location.href = `/api/orders/${id}/export/zip`),
+  // 导出通过 axios 携带 Bearer token 下载，避免 window.location.href 无法带认证头而 401
+  exportCsv: (id: string, orderNo: string) =>
+    downloadBlob(`/orders/${id}/export`).then((blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `order_${orderNo}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }),
+  exportZip: (id: string, orderNo: string) =>
+    downloadBlob(`/orders/${id}/export/zip`).then((blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `order_${orderNo}_archive.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    }),
 }
 
 // ---------- 组织 ----------

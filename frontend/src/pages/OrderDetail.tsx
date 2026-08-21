@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, Upload,
+import { App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Typography, Upload,
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -60,11 +60,11 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     ) },
     { title: 'MD5', dataIndex: 'md5', ellipsis: true, render: (v: string) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
     { title: t('batch_no'), dataIndex: 'batch_no', render: (v: string) => v || '-' },
-    { title: t('status'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
-    { title: '', key: 'act', width: 72, render: (_, r: OrderAttachment) => (
-      <Space>
-        <Tooltip title="下载"><Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)} /></Tooltip>
-        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await orders.deleteAttachment(orderId, op.id, r.id); message.success('已删除'); onChanged() }} />}
+    { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
+    { title: '', key: 'act', width: 160, render: (_, r: OrderAttachment) => (
+      <Space size={4}>
+        <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)}>下载</Button>
+        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await orders.deleteAttachment(orderId, op.id, r.id); message.success('已删除'); onChanged() }}>{t('cancel')}</Button>}
       </Space>
     )},
   ]
@@ -172,8 +172,8 @@ export default function OrderDetail() {
         extra={<Space>
           {canExport && (
             <>
-              <Button icon={<DownloadOutlined />} onClick={() => orders.exportCsv(order.id)}>{t('export_csv')}</Button>
-              <Button icon={<FileZipOutlined />} onClick={() => orders.exportZip(order.id)}>{t('export_zip')}</Button>
+              <Button icon={<DownloadOutlined />} onClick={() => orders.exportCsv(order.id, order.order_no)}>{t('export_csv')}</Button>
+              <Button icon={<FileZipOutlined />} onClick={() => orders.exportZip(order.id, order.order_no)}>{t('export_zip')}</Button>
             </>
           )}
           <Button type="primary" icon={<PlusOutlined />} disabled={!canEditOrder} onClick={() => setOpen(true)}>{t('add_package')}</Button>
@@ -208,7 +208,7 @@ export default function OrderDetail() {
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
             { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>{t('required')}</Tag> : '-') },
-            { title: '', key: 'act', width: 64, render: (_, op: OrderPackage) => canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)} /> },
+            { title: '', key: 'act', width: 90, render: (_, op: OrderPackage) => canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)}>{t('cancel')}</Button> },
           ]}
         />
       </Card>
