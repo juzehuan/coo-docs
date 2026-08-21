@@ -22,5 +22,8 @@ frontend/dev.err.log
 frontend/vite.config.d.ts
 frontend/vite.config.js
 
+# 大型参考资料（超过 GitHub 100MB 限制，保持本地不追踪）
+docs/美国审查资料.zip
+
 # 系统
 .DS_Store

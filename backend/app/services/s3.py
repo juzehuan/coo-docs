@@ -8,6 +8,7 @@
 import logging
 
 import boto3
+from boto3.s3.transfer import TransferConfig
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -15,7 +16,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 单部分上传时 MinIO/S3 返回的 ETag 即内容 MD5
+# 单部分上传时 MinIO/S3 返回的 ETag 即内容 MD5；阈值需大于 MAX_FILE_MB，
+# 否则 boto3 对超阈值文件走分片上传，ETag 变为分片哈希，无法用 MD5 校验
 ETAG_IS_MD5 = True
 
 
@@ -74,9 +76,14 @@ def reachable(cli=None) -> bool:
 
 
 def put_file(cli, key: str, local_path: str) -> bool:
-    """上传本地文件到对象；返回是否成功。"""
+    """上传本地文件到对象；返回是否成功。
+
+    强制单部分上传（阈值 = MAX_FILE_MB + 1），保证 ETag 即文件 MD5，
+    便于 nas_sync 用 MD5 校验同步完整性。
+    """
     try:
-        cli.upload_file(local_path, settings.S3_BUCKET, key)
+        cfg = TransferConfig(multipart_threshold=settings.MAX_FILE_MB * 1024 * 1024 + 1)
+        cli.upload_file(local_path, settings.S3_BUCKET, key, Config=cfg)
         return True
     except Exception as e:  # noqa: BLE001
         logger.warning("S3 put_file %s failed: %s", key, e)
