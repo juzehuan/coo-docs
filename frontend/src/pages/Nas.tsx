@@ -17,7 +17,7 @@ export default function Nas() {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
-    const [s, r] = await Promise.all([nas.status(), nas.records()])
+    const [s, r] = await Promise.all([nas.status(), nas.records(200)])
     setSt(s); setRecs(r)
   }, [])
   useEffect(() => { load() }, [load])
@@ -58,7 +58,7 @@ export default function Nas() {
       </Col>
       <Col xs={24} md={14}>
         <Card variant="borderless" className="coo-card" title={t('sync_status')}>
-          <Table rowKey="id" size="small" pagination={{ pageSize: 8 }} dataSource={recs} columns={[
+          <Table rowKey="id" size="small" pagination={{ pageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }} dataSource={recs} columns={[
             { title: 'ID', dataIndex: 'id', width: 70 },
             { title: t('type'), dataIndex: 'run_type', width: 90 },
             { title: t('success_total'), render: (_, r) => `${r.success}/${r.total}`, width: 110 },

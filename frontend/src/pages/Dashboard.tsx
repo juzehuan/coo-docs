@@ -69,7 +69,7 @@ export default function Dashboard() {
         <Table
           rowKey="code"
           dataSource={d.package_progress}
-          pagination={{ pageSize: 8 }}
+          pagination={{ pageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
           columns={[
             { title: 'COO', dataIndex: 'code', width: 90 },
             { title: t('packages'), dataIndex: 'name' },

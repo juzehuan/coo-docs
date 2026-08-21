@@ -137,12 +137,12 @@ export const controlled = {
 }
 
 export const audit = {
-  list: (params?: { domain?: string; actor_id?: string }) => get<AuditLog[]>('/audit/logs', params),
+  list: (params?: { domain?: string; actor_id?: string; limit?: number }) => get<AuditLog[]>('/audit/logs', params),
   exportCsv: () => downloadBlob('/audit/export'),
 }
 
 export const nas = {
   status: () => get<NasStatus>('/nas/status'),
   sync: () => post<SyncRecord>('/nas/sync'),
-  records: () => get<SyncRecord[]>('/nas/records'),
+  records: (limit?: number) => get<SyncRecord[]>('/nas/records', limit ? { limit } : undefined),
 }

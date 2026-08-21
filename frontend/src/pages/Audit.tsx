@@ -20,7 +20,7 @@ export default function Audit() {
 
   const load = (d?: string) => {
     setLoading(true)
-    audit.list(d ? { domain: d } : undefined).then(setLogs).catch(() => setLogs([])).finally(() => setLoading(false))
+    audit.list(d ? { domain: d, limit: 1000 } : { limit: 1000 }).then(setLogs).catch(() => setLogs([])).finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
 
@@ -58,7 +58,7 @@ export default function Audit() {
         rowKey="id"
         loading={loading}
         dataSource={logs}
-        pagination={{ pageSize: 15 }}
+        pagination={{ pageSize: 15, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         columns={[
           { title: t('time'), dataIndex: 'created_at', width: 170, render: (v: string) => formatTime(v) },
           { title: t('domain_action'), render: (_, r) => `${r.event_domain}.${r.action}`, width: 200 },

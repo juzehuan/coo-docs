@@ -35,7 +35,7 @@ export default function Controlled() {
         rowKey={(r) => r.version.id}
         loading={loading}
         dataSource={rows}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         expandable={{
           expandedRowRender: (r) => {
             const v = r.version
