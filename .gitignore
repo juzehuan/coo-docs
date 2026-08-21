@@ -24,6 +24,7 @@ frontend/vite.config.js
 
 # 大型参考资料（超过 GitHub 100MB 限制，保持本地不追踪）
 docs/美国审查资料.zip
+docs/美国审查资料/对应资料参考/14/ST.1 I-G12-SS-01 Install Steering and suspension  All Model.xlsx
 
 # 系统
 .DS_Store
