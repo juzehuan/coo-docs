@@ -4,7 +4,7 @@ import {
 import type {
   Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
-  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, SyncRecord, TodoItem, User, Version,
+  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, SyncRecord, TodoItem, User, Version,
 } from '@/types'
 
 // ---------- 认证 ----------
@@ -76,7 +76,7 @@ export const org = {
   listUsers: (dept_id?: string) => get<User[]>('/org/users', dept_id ? { dept_id } : undefined),
   createUser: (data: { username: string; password: string; display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string; factory_ids?: number[] }) =>
     post<User>('/org/users', data),
-  resetPassword: (id: string) => post(`/org/users/${id}/reset-password`),
+  resetPassword: (id: string) => post<PasswordResetOut>(`/org/users/${id}/reset-password`),
 }
 
 // ---------- 资料包 / 版本 / 附件 ----------

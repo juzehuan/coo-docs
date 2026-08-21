@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { App, Button, Card, Form, Input, Modal, Select, Table, Tabs, Tag } from 'antd'
+import { App, Button, Card, Form, Input, Modal, Select, Table, Tabs, Tag, Typography } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { factories, org } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
@@ -56,9 +56,10 @@ export default function Org() {
     message.success(t('create'))
     setUserOpen(false); userForm.resetFields(); load()
   }
-  async function resetPwd(id: string) {
-    await org.resetPassword(id)
-    message.success('user123')
+  const [pwdReset, setPwdReset] = useState<{ username: string; password: string } | null>(null)
+  async function resetPwd(r: User) {
+    const res = await org.resetPassword(r.id)
+    setPwdReset({ username: r.display_name || r.username, password: res.password })
   }
 
   const deptTab = (
@@ -92,7 +93,7 @@ export default function Org() {
         { title: t('role'), dataIndex: 'role', width: 140, render: (r: string) => <RoleTag role={r} /> },
         { title: t('dept'), width: 120, render: (_, r) => deptName(r.dept_id) },
         { title: t('factory'), width: 160, render: (_, r) => (r.factory_ids?.length ? r.factory_ids.map((id) => <Tag key={id} style={{ marginRight: 4 }}>{factLabel(id)}</Tag>) : '-') },
-        { title: '', width: 120, render: (_, r) => <Button size="small" icon={<ReloadOutlined />} onClick={() => resetPwd(r.id)}>{t('reset_pwd')}</Button> },
+        { title: '', width: 130, render: (_, r) => <Button size="small" icon={<ReloadOutlined />} onClick={() => resetPwd(r)}>{t('reset_pwd')}</Button> },
       ]} />
     </Card>
   )
@@ -137,6 +138,15 @@ export default function Org() {
             <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} />
           </Form.Item>
         </Form>
+      </Modal>
+      <Modal title={t('reset_pwd')} open={!!pwdReset} onOk={() => setPwdReset(null)} onCancel={() => setPwdReset(null)} okText={t('confirm')} cancelText={t('cancel')}>
+        {pwdReset && (
+          <div>
+            <p>{lang === 'zh' ? `已为「${pwdReset.username}」生成一次性临时密码，请立即告知用户：` : `Temporary password generated for "${pwdReset.username}", share it with the user:`}</p>
+            <Typography.Title level={4} copyable style={{ textAlign: 'center', margin: '12px 0', letterSpacing: 2 }}>{pwdReset.password}</Typography.Title>
+            <p style={{ color: '#9c4134', margin: 0 }}>{lang === 'zh' ? '该密码仅本次展示，关闭后不可再次查看，请务必先复制。' : 'Shown only once; copy it now.'}</p>
+          </div>
+        )}
       </Modal>
     </>
   )

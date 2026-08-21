@@ -26,9 +26,9 @@ const MENU: MenuItem[] = [
   { key: '/todo', icon: <BellOutlined />, label: 'todo', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'admin'] },
   { key: '/orders', icon: <ShoppingCartOutlined />, label: 'orders', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/packages', icon: <FolderOpenOutlined />, label: 'packages', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
-  { key: '/controlled', icon: <SafetyOutlined />, label: 'controlled', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
+  { key: '/controlled', icon: <SafetyOutlined />, label: 'controlled', roles: ['dept_reviewer', 'coo_reviewer', 'admin'] },
   { key: '/nas', icon: <DatabaseOutlined />, label: 'nas', roles: ['coo_reviewer', 'auditor', 'admin'] },
-  { key: '/audit', icon: <FileSearchOutlined />, label: 'audit', roles: ['dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
+  { key: '/audit', icon: <FileSearchOutlined />, label: 'audit', roles: ['auditor', 'admin'] },
   { key: '/org', icon: <TeamOutlined />, label: 'users', roles: ['admin'] },
 ]
 

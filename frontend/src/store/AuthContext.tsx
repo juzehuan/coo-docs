@@ -5,6 +5,7 @@ import type { User } from '@/types'
 
 interface AuthCtx {
   user: User | null
+  loading: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -13,10 +14,16 @@ const Ctx = createContext<AuthCtx | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (getToken()) {
-      auth.me().then(setUser).catch(() => clearToken())
+      auth.me()
+        .then(setUser)
+        .catch(() => clearToken())
+        .finally(() => setLoading(false))
+    } else {
+      setLoading(false)
     }
   }, [])
 
@@ -31,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
-  return <Ctx.Provider value={{ user, login, logout }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>
 }
 
 export function useAuth(): AuthCtx {

@@ -30,7 +30,9 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   const atts = op.attachments || []
-  const isStaff = user.role === 'admin' || user.role === 'dept_reviewer' || user.role === 'coo_reviewer'
+  // 可编辑（上传/删附件/提交）：COO/管理员任意；部门审核人仅本部门实例；提交人仅本人负责实例
+  const isStaff = user.role === 'admin' || user.role === 'coo_reviewer' ||
+    (user.role === 'dept_reviewer' && op.package_dept_id != null && op.package_dept_id === user.dept_id)
   const ownerOk = user.role === 'submitter' && op.owner_user_id === user.id
   const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
   const canReviewDept = user.role === 'dept_reviewer' && op.status === 'pending_dept'
@@ -147,7 +149,9 @@ export default function OrderDetail() {
   if (!order) return <Card variant="borderless">{t('no_data')}</Card>
 
   const canExport = user!.role !== 'submitter' && user!.role !== 'dept_reviewer'
-  const canEditOrder = user!.role !== 'auditor'
+  // 增删订单资料包/删订单：COO/管理员任意；提交人仅本人负责订单（与后端 can_edit_order 对齐）
+  const canEditOrder = (user!.role === 'admin' || user!.role === 'coo_reviewer') ||
+    (user!.role === 'submitter' && order.owner_user_id === user!.id)
   const typeName = lang === 'en' ? (p: Package) => p.name_en || p.name_zh
     : lang === 'th' ? (p: Package) => p.name_th || p.name_zh : (p: Package) => p.name_zh
 

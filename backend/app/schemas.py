@@ -10,6 +10,12 @@ class Msg(BaseModel):
     msg: str
 
 
+class PasswordResetOut(BaseModel):
+    """管理员重置密码返回：msg 描述 + 一次性展示的临时密码。"""
+    msg: str
+    password: str
+
+
 # ---------- 认证 ----------
 class LoginRequest(BaseModel):
     username: str
@@ -152,10 +158,19 @@ class OrderPackageOut(BaseModel):
     required: bool = True
     due_date: str = ""
     locked: bool = False
+    submitted_by: Optional[int] = None
+    submitted_at: Optional[datetime] = None
+    dept_reviewer_id: Optional[int] = None
+    dept_reviewed_at: Optional[datetime] = None
+    dept_reject_reason: str = ""
+    coo_reviewer_id: Optional[int] = None
+    coo_reviewed_at: Optional[datetime] = None
+    coo_reject_reason: str = ""
     created_at: Optional[datetime] = None
     # 冗余展示字段
     package_code: str = ""
     package_name: str = ""
+    package_dept_id: Optional[int] = None
     attachment_count: int = 0
     attachments: list["AttachmentOut"] = []
 

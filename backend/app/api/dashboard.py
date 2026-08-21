@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
-from app.core.rbac import get_current_user
+from app.core.rbac import export_viewer, get_current_user
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
 from app.schemas import DashboardOut
@@ -57,7 +57,12 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
             pending_mine += 1
         elif user.role in ("coo_reviewer", "admin") and v.status == VersionStatus.PENDING_COO:
             pending_mine += 1
-    ops = db.query(OrderPackage).all()
+    ops = (
+        db.query(OrderPackage)
+        .join(Order, OrderPackage.order_id == Order.id)
+        .filter(Order.factory_id.in_(fids))
+        .all()
+    )
     for op in ops:
         pkg = db.get(Package, op.package_id)
         if not pkg:
@@ -106,21 +111,19 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
 
 
 @router.get("/export")
-def export_archive_list(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def export_archive_list(db: Session = Depends(get_db), user: User = Depends(export_viewer)):
     """归档清单导出（CSV）。审计查看人/COO/管理员可用。"""
-    if user.role == "submitter" or user.role == "dept_reviewer":
-        from fastapi import HTTPException, status
-        raise HTTPException(status_code=403, detail="无权导出")
     versions = db.query(PackageVersion).all()
     pkgs = {p.id: p for p in db.query(Package).all()}
     header = ["资料包编号", "资料包名称", "版本", "状态", "责任人", "附件数", "已同步NAS"]
     lines = [",".join(header)]
+    _q = lambda c: str(c).replace(chr(34), chr(34) * 2)
     for v in versions:
         p = pkgs.get(v.package_id)
         synced = sum(1 for a in v.attachments if a.nas_synced)
         line = [p.code if p else "", p.name_zh if p else "", v.version_no, v.status,
                 str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"]
-        lines.append(",".join(f'"{c}"' for c in line))
+        lines.append(",".join(f'"{_q(c)}"' for c in line))
     csv = "\n".join(lines)
     log_event(db, AuditDomain.EXPORT, "archive_csv", actor=user, ip=client_ip(None))
     return Response(content="\ufeff" + csv, media_type="text/csv",

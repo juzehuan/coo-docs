@@ -9,6 +9,7 @@
 """
 import hashlib
 import os
+import re
 import shutil
 from datetime import datetime
 
@@ -22,6 +23,16 @@ from app.services import s3
 CHUNK = 1024 * 1024
 
 
+def _safe_segment(s: str, fallback: str = "_") -> str:
+    """清洗单个路径/对象键片段：去除路径分隔符与控制字符，防目录穿越。"""
+    if not s:
+        return fallback
+    s = re.sub(r"[\\/]", "_", s)          # 阻止 ../ 或 路径分隔符
+    s = re.sub(r"[\x00-\x1f\x7f]", "", s)  # 去除控制字符
+    s = s.strip(" .")                      # 去除首尾空格/点，避免 '.'/'..' 段
+    return s or fallback
+
+
 def file_md5(path: str) -> str:
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -33,18 +44,18 @@ def file_md5(path: str) -> str:
 def _common_parts(ver: PackageVersion, pkg: Package) -> list[str]:
     return [
         NAS_BASE_DIRNAME,
-        ver.project_code or settings.PROJECT_CODE,
-        f"{pkg.code}_{pkg.name_zh}",
-        ver.version_no,
+        _safe_segment(ver.project_code or settings.PROJECT_CODE),
+        _safe_segment(f"{pkg.code}_{pkg.name_zh}", pkg.code or "pkg"),
+        _safe_segment(ver.version_no, "V"),
     ]
 
 
 def _order_parts(op: OrderPackage, pkg: Package, order_no: str) -> list[str]:
     return [
         NAS_BASE_DIRNAME,
-        op.project_code or settings.PROJECT_CODE,
-        f"{pkg.code}_{pkg.name_zh}",
-        order_no,
+        _safe_segment(op.project_code or settings.PROJECT_CODE),
+        _safe_segment(f"{pkg.code}_{pkg.name_zh}", pkg.code or "pkg"),
+        _safe_segment(order_no, "order"),
     ]
 
 
@@ -72,10 +83,10 @@ class _LocalBackend:
         return os.path.join(settings.NAS_ROOT, *_order_parts(op, pkg, order_no))
 
     def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
-        return os.path.join(self.version_base(ver, pkg), att.original_name or att.file_name)
+        return os.path.join(self.version_base(ver, pkg), _safe_segment(att.original_name or att.file_name))
 
     def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str) -> str:
-        return os.path.join(self.order_base(op, pkg, order_no), att.original_name or att.file_name)
+        return os.path.join(self.order_base(op, pkg, order_no), _safe_segment(att.original_name or att.file_name))
 
     def sync_one(self, target: str, src: str, att: Attachment) -> bool:
         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -109,11 +120,11 @@ class _S3Backend:
         return "/".join(_order_parts(op, pkg, order_no))
 
     def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
-        name = att.original_name or att.file_name
+        name = _safe_segment(att.original_name or att.file_name)
         return f"{self.version_base(ver, pkg)}/{name}"
 
     def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str) -> str:
-        name = att.original_name or att.file_name
+        name = _safe_segment(att.original_name or att.file_name)
         return f"{self.order_base(op, pkg, order_no)}/{name}"
 
     def sync_one(self, key: str, src: str, att: Attachment) -> bool:

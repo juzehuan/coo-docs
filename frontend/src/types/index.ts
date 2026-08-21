@@ -12,6 +12,11 @@ export interface User {
   created_at: string | null
 }
 
+export interface PasswordResetOut {
+  msg: string
+  password: string
+}
+
 export interface Factory {
   id: string
   code: string
@@ -45,6 +50,7 @@ export interface OrderPackage {
   created_at: string | null
   package_code: string
   package_name: string
+  package_dept_id: string | null
   attachment_count: number
   attachments?: OrderAttachment[]
 }

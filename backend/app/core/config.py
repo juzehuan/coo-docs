@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
+    def model_post_init(self, __context) -> None:
+        # 安全加固：SECRET_KEY 仍为默认占位值时给出告警，生产务必用环境变量覆盖
+        if self.SECRET_KEY and self.SECRET_KEY.startswith("change-me"):
+            import logging
+            logging.getLogger("app.config").warning(
+                "SECRET_KEY 仍为默认占位值，生产环境请务必通过环境变量 SECRET_KEY 覆盖")
+
 
 @lru_cache
 def get_settings() -> Settings:

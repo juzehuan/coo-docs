@@ -92,6 +92,7 @@ def _op_out(op: OrderPackage) -> dict:
     out = OrderPackageOut.model_validate(op).model_dump()
     out["package_code"] = pkg.code if pkg else ""
     out["package_name"] = pkg.name_zh if pkg else ""
+    out["package_dept_id"] = pkg.dept_id if pkg else None
     out["attachment_count"] = len(op.attachments)
     out["attachments"] = [AttachmentOut.model_validate(a).model_dump() for a in op.attachments]
     return out
@@ -111,7 +112,11 @@ def create_order(payload: OrderCreate, request: Request, db: Session = Depends(g
         raise HTTPException(status_code=403, detail="无权为该工厂创建订单")
     if db.query(Order).filter(Order.order_no == payload.order_no).first():
         raise HTTPException(status_code=400, detail="订单号已存在")
-    o = Order(**payload.model_dump())
+    data = payload.model_dump()
+    # 提交人创建订单时默认本人为责任人，否则后续无法编辑/操作该订单
+    if not data.get("owner_user_id") and user.role == "submitter":
+        data["owner_user_id"] = user.id
+    o = Order(**data)
     db.add(o)
     db.commit()
     db.refresh(o)
@@ -187,7 +192,8 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
         package_id=pkg.id,
         project_code=settings.PROJECT_CODE,
         status=VersionStatus.DRAFT,
-        owner_user_id=payload.owner_user_id or pkg.owner_user_id,
+        owner_user_id=(payload.owner_user_id or pkg.owner_user_id
+                       or (user.id if user.role == "submitter" else None)),
         required=payload.required,
         due_date=payload.due_date or pkg.due_date,
     )
@@ -259,6 +265,7 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
             raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
         if not can_review_dept(user, op.package.dept_id if op.package else None):
             raise HTTPException(status_code=403, detail="非本部门审核人")
+        op.dept_reviewer_id = user.id
         op.dept_reviewed_at = _utcnow()
         if decision == ReviewDecision.APPROVE:
             op.status = VersionStatus.PENDING_COO
@@ -272,6 +279,7 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
             raise HTTPException(status_code=400, detail="当前不在待COO终审状态")
         if not is_coo(user):
             raise HTTPException(status_code=403, detail="仅 COO 终审人可终审")
+        op.coo_reviewer_id = user.id
         op.coo_reviewed_at = _utcnow()
         if decision == ReviewDecision.APPROVE:
             op.status = VersionStatus.RELEASED

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
-from app.core.rbac import audit_viewer, coo_or_admin
+from app.core.rbac import audit_viewer
 from app.db import get_db
 from app.models import AuditDomain, AuditLog, User
 from app.schemas import AuditLogOut
@@ -39,7 +39,7 @@ def list_logs(
 def export_logs(
     domain: str | None = Query(None),
     db: Session = Depends(get_db),
-    user: User = Depends(coo_or_admin),
+    user: User = Depends(audit_viewer),
 ):
     q = db.query(AuditLog)
     if domain:

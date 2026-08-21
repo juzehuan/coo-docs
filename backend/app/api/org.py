@@ -8,7 +8,10 @@ from app.core.security import hash_password
 from app.core.snowflake import next_id
 from app.db import get_db
 from app.models import AuditDomain, Department, Factory, User
-from app.schemas import DepartmentCreate, DepartmentOut, DepartmentUpdate, Msg, UserCreate, UserOut, UserUpdate
+from app.schemas import (
+    DepartmentCreate, DepartmentOut, DepartmentUpdate, Msg, PasswordResetOut,
+    UserCreate, UserOut, UserUpdate,
+)
 
 router = APIRouter(prefix="/org", tags=["org"])
 
@@ -100,13 +103,17 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     return u
 
 
-@router.post("/users/{user_id}/reset-password", response_model=Msg)
+@router.post("/users/{user_id}/reset-password", response_model=PasswordResetOut)
 def reset_password(user_id: int, request: Request, db: Session = Depends(get_db),
                    _: User = Depends(admin_only)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="用户不存在")
-    u.password_hash = hash_password("user123")
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits
+    tmp = "".join(secrets.choice(alphabet) for _ in range(10))
+    u.password_hash = hash_password(tmp)
     db.commit()
     log_event(db, AuditDomain.ORG, "user_reset_pwd", ip=client_ip(request), target=u.username)
-    return Msg(msg="密码已重置为 user123")
+    return PasswordResetOut(msg="密码已重置", password=tmp)

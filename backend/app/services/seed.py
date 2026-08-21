@@ -142,6 +142,18 @@ def seed(db: Session):
             if f.id not in cur:
                 u.factories.append(f)
 
+    # 资料包责任人 = 责任部门审核人（补 owner_user_id，供提交人/责任人维度可见性使用）
+    owner_by_dept = {}
+    for username, _name, role, dept_code, _pwd in ACCOUNTS:
+        if role == Role.DEPT_REVIEWER and dept_code:
+            rv = db.query(User).filter(User.username == username).first()
+            if rv:
+                owner_by_dept[dept_code] = rv.id
+    for code, _zh, _en, _th, dept_code, _focus in PACKAGE_SEED:
+        p = db.query(Package).filter(Package.code == code).first()
+        if p and p.owner_user_id is None and dept_code in owner_by_dept:
+            p.owner_user_id = owner_by_dept[dept_code]
+
     # 示例订单（每厂 1 单，供快速验收）
     sample = [
         ("RMA", "ORD-RMA-001", "Bintelli Motors", "高尔夫球车 RMA-X1", 120, "2026-10-15"),
