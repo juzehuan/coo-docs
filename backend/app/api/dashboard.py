@@ -6,14 +6,22 @@ from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.rbac import get_current_user
 from app.db import get_db
-from app.models import Attachment, AuditDomain, OrderPackage, Package, PackageVersion, User
+from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
 from app.schemas import DashboardOut
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+def _factory_ids(user: User, db: Session) -> list[int]:
+    """当前账号可见工厂 ID；admin 可见全部激活工厂。"""
+    if user.role == "admin":
+        return [f.id for f in db.query(Factory).filter(Factory.status == "active").all()]
+    return [f.id for f in user.factories]
+
+
 @router.get("", response_model=DashboardOut)
 def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    fids = _factory_ids(user, db)
     pkgs = db.query(Package).filter(Package.status == "active").all()
     versions = db.query(PackageVersion).all()
     # 构建 资料包 -> 最新版本状态
@@ -25,7 +33,16 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     released_count = sum(1 for p in pkgs if p.id in latest and latest[p.id].status == VersionStatus.RELEASED)
     completion = round(released_count / len(pkgs) * 100, 1) if pkgs else 0.0
 
-    total_attachments = db.query(Attachment).count()
+    # 附件总数：订单附件按工厂隔离；版本附件属共享资料包模板，全部统计
+    order_att = (
+        db.query(Attachment)
+        .join(OrderPackage, Attachment.order_package_id == OrderPackage.id)
+        .join(Order, OrderPackage.order_id == Order.id)
+        .filter(Order.factory_id.in_(fids))
+        .count()
+    )
+    ver_att = db.query(Attachment).filter(Attachment.order_package_id.is_(None)).count()
+    total_attachments = order_att + ver_att
 
     # 待我处理：提交人看自己被退回；部门审核人看待部门审核；COO 看待终审
     # （同时统计订单资料包实例流程线上的待办）

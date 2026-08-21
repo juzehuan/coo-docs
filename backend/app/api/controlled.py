@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.constants import AuditDomain, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
-from app.core.rbac import get_current_user, require_roles
+from app.core.rbac import require_roles
 from app.db import get_db
 from app.models import Package, PackageVersion, User
 from app.schemas import VersionOut
@@ -60,7 +60,7 @@ def controlled_area(db: Session = Depends(get_db), user: User = Depends(controll
 @router.get("/{pkg_id}/versions/{vid}/export/zip")
 def download_released_zip(pkg_id: int, vid: int, request: Request,
                           db: Session = Depends(get_db),
-                          user: User = Depends(get_current_user)):
+                          user: User = Depends(controlled_access)):
     """受控区归档下载：打包某受控版本的已放行真实附件为 ZIP，供核查调阅/Form 28 回函。"""
     v = db.get(PackageVersion, vid)
     p = db.get(Package, pkg_id)
