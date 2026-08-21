@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
-from app.core.rbac import get_current_user
+from app.core.rbac import can_edit_order_package, get_current_user
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
 from app.db import get_db
@@ -67,6 +67,7 @@ def _op_out(op: OrderPackage) -> dict:
     out["package_code"] = pkg.code if pkg else ""
     out["package_name"] = pkg.name_zh if pkg else ""
     out["attachment_count"] = len(op.attachments)
+    out["attachments"] = [AttachmentOut.model_validate(a).model_dump() for a in op.attachments]
     return out
 
 
@@ -175,6 +176,8 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
     op = db.get(OrderPackage, op_id)
     if not o or not op or op.order_id != o.id or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="资源不存在")
+    if op.locked or op.status == VersionStatus.RELEASED:
+        raise HTTPException(status_code=400, detail="已放行实例不可移除，如需变更请新建订单")
     if op.attachments:
         for att in op.attachments:
             path = os.path.join(settings.UPLOAD_DIR, att.file_name)
@@ -191,6 +194,8 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
 def submit_order_package(order_id: int, op_id: int, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    if not can_edit_order_package(user, op):
+        raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     if op.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
         raise HTTPException(status_code=400, detail="当前状态不可提交")
     if not op.attachments:
@@ -216,6 +221,9 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
     o, op = _get_op(db, order_id, op_id, user)
     from app.core.rbac import can_review_dept, is_coo
     decision, level = payload.decision, payload.level
+    # 退回必须填写整改要求：先校验，避免状态/审计日志已落库后才报错
+    if decision == ReviewDecision.REJECT and not payload.reason:
+        raise HTTPException(status_code=400, detail="退回必须填写整改要求")
     if level == ReviewLevel.DEPT:
         if op.status != VersionStatus.PENDING_DEPT:
             raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
@@ -245,8 +253,6 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
                   actor=user, ip=client_ip(request), target=f"{o.order_no}/{op_id}", detail=payload.reason)
     else:
         raise HTTPException(status_code=400, detail="无效的审核层级")
-    if decision == ReviewDecision.REJECT and not payload.reason:
-        raise HTTPException(status_code=400, detail="退回必须填写整改要求")
 
     # 事件通知：部门通过→COO 终审人；退回/放行→责任人
     recipient = op.owner_user_id or op.submitted_by
@@ -279,8 +285,8 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
     o, op = _get_op(db, order_id, op_id, user)
     if op.status not in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
         raise HTTPException(status_code=400, detail="当前状态不可撤回")
-    # 仅提交人本人或管理员可撤回
-    if user.role != "admin" and op.owner_user_id != user.id:
+    # 仅提交人本人/责任人本人或管理员可撤回
+    if user.role != "admin" and op.submitted_by != user.id and op.owner_user_id != user.id:
         raise HTTPException(status_code=403, detail="仅提交人本人可撤回")
     op.status = VersionStatus.WITHDRAWN
     op.dept_reject_reason = ""
@@ -308,6 +314,8 @@ async def upload_order_attachment(
     db: Session = Depends(get_db), user: User = Depends(get_current_user),
 ):
     o, op = _get_op(db, order_id, op_id, user)
+    if not can_edit_order_package(user, op):
+        raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     if op.locked:
         raise HTTPException(status_code=400, detail="已放行版本不可修改，请移除后重新实例化")
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -343,6 +351,8 @@ async def upload_order_attachment(
 def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Request,
                             db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    if not can_edit_order_package(user, op):
+        raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     att = db.get(Attachment, aid)
     if not att or att.order_package_id != op.id:
         raise HTTPException(status_code=404, detail="附件不存在")
@@ -391,7 +401,8 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
     lines = [",".join(header)]
     for op in sorted(o.packages, key=lambda x: x.package.code if x.package else ""):
         pkg = op.package
-        lines.append(",".join(f'"{c}"' for c in [
+        _q = lambda c: str(c).replace(chr(34), chr(34) * 2)
+        lines.append(",".join(f'"{_q(c)}"' for c in [
             fac.code if fac else "", o.order_no, pkg.code if pkg else "",
             pkg.name_zh if pkg else "", op.status, str(op.owner_user_id or ""),
             str(len(op.attachments)), "是" if op.locked else "否", op.due_date,
@@ -433,7 +444,8 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
                 zf.write(src, arc)
                 manifest.append([fac_code, o.order_no, pkg_code, att.original_name, att.file_name,
                                  str(att.file_size)])
-        meta = "\n".join(",".join(f'"{c}"' for c in row) for row in manifest)
+        _q = lambda c: str(c).replace(chr(34), chr(34) * 2)
+        meta = "\n".join(",".join(f'"{_q(c)}"' for c in row) for row in manifest)
         zf.writestr("_manifest.csv", "\ufeff" + meta)
     buf.seek(0)
     log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request), target=o.order_no)

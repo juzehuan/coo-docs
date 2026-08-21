@@ -56,7 +56,7 @@ export default function Dashboard() {
                   columns={[
                     { title: 'COO', dataIndex: 'code', width: 90 },
                     { title: t('packages'), dataIndex: 'name' },
-                    { title: t('issue') ?? '事项', dataIndex: 'issue', width: 130, render: (v: string) => <span style={{ color: '#d97706' }}>{v}</span> },
+                    { title: t('issue'), dataIndex: 'issue', width: 130, render: (v: string) => <span style={{ color: '#d97706' }}>{v}</span> },
                     { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
                   ]}
                 />

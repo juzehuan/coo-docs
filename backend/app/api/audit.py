@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
-from app.core.rbac import coo_or_admin, get_current_user
+from app.core.rbac import audit_viewer, coo_or_admin
 from app.db import get_db
 from app.models import AuditDomain, AuditLog, User
 from app.schemas import AuditLogOut
@@ -21,7 +21,7 @@ def list_logs(
     end: str | None = Query(None),
     limit: int = Query(200, le=1000),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(audit_viewer),
 ):
     q = db.query(AuditLog)
     if actor_id:

@@ -31,6 +31,8 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
   const [pageNum, setPageNum] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // 用 ref 持有文档引用：PDF 是异步加载的，闭包中的 state 可能是旧值，导致 cleanup 无法销毁
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -51,6 +53,7 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
           setKind('pdf')
           const doc = await getDocument({ data: await blob.arrayBuffer() }).promise
           if (cancelled) { doc.destroy(); return }
+          pdfDocRef.current = doc
           setPdfDoc(doc); setTotalPages(doc.numPages)
         } else if (mime.startsWith('text/') || mime.includes('csv') || mime.includes('json')) {
           setKind('text'); setText(await blob.text())
@@ -67,7 +70,9 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
     return () => {
       cancelled = true
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
-      if (pdfDoc) { try { pdfDoc.destroy() } catch { /* ignore */ } }
+      const doc = pdfDocRef.current
+      pdfDocRef.current = null
+      if (doc) { try { doc.destroy() } catch { /* ignore */ } }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, url])
@@ -93,7 +98,7 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
   }, [pdfDoc, pageNum])
 
   return (
-    <Modal open={open} onCancel={onClose} footer={null} width={980} title={name} destroyOnClose>
+    <Modal open={open} onCancel={onClose} footer={null} width={980} title={name} destroyOnHidden>
       {loading && <div style={{ textAlign: 'center', padding: 64 }}><Spin tip="加载中" /></div>}
       {!loading && error && <Result status="warning" title={error} />}
       {!loading && !error && kind === 'image' && (

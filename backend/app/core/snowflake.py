@@ -10,14 +10,18 @@ from typing import Optional
 
 class Snowflake:
     EPOCH = 1_700_000_000_000  # 2023-11-14 起，单位毫秒
-    WORKER_BITS = 10
+    DATACENTER_BITS = 5
+    WORKER_BITS = 5
     SEQUENCE_BITS = 12
+    MAX_DATACENTER = (1 << DATACENTER_BITS) - 1
     MAX_WORKER = (1 << WORKER_BITS) - 1
     MAX_SEQUENCE = (1 << SEQUENCE_BITS) - 1
 
     def __init__(self, worker_id: int = 3, datacenter_id: int = 0):
         if not (0 <= worker_id <= self.MAX_WORKER):
             raise ValueError("worker_id out of range")
+        if not (0 <= datacenter_id <= self.MAX_DATACENTER):
+            raise ValueError("datacenter_id out of range")
         self.worker_id = worker_id
         self.datacenter_id = datacenter_id
         self._lock_seq = 0
@@ -36,11 +40,15 @@ class Snowflake:
         else:
             self._lock_seq = 0
         self._last_ts = ts
+        # 位域布局：时间戳 | datacenter_id | worker_id | 序列号，互不重叠
+        # datacenter(5) + worker(5) + sequence(12) = 22 位，与既有实现位移一致，
+        # 确保默认配置下生成值与旧版相同且不会超出 int64
         return (
-            ((ts - self.EPOCH) << (self.WORKER_BITS + self.SEQUENCE_BITS))
-            | (self.datacenter_id << self.SEQUENCE_BITS)
+            ((ts - self.EPOCH) << (self.DATACENTER_BITS + self.WORKER_BITS + self.SEQUENCE_BITS))
+            | (self.datacenter_id << (self.WORKER_BITS + self.SEQUENCE_BITS))
+            | (self.worker_id << self.SEQUENCE_BITS)
             | self._lock_seq
-        ) + (self.worker_id << (self.SEQUENCE_BITS))  # 将 worker 叠加进高段以保证唯一性
+        )
 
 
 _sf = Snowflake(worker_id=3)

@@ -19,12 +19,25 @@ from app.schemas import VersionOut
 router = APIRouter(prefix="/controlled", tags=["controlled"])
 
 
+def _visible_pkg_ids(db: Session, user: User) -> set:
+    """与资料包列表一致的可见范围：提交人仅本人负责包，部门审核人仅本部门包，
+    COO/审计/管理员可见全部。"""
+    q = db.query(Package)
+    if user.role == "dept_reviewer":
+        q = q.filter(Package.dept_id == user.dept_id)
+    elif user.role == "submitter":
+        q = q.filter(Package.owner_user_id == user.id)
+    return {p.id for p in q.all()}
+
+
 @router.get("", response_model=list[dict])
 def controlled_area(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # 审计查看人只读受控区；其余角色也可查看
+    # 仅展示当前账号可见范围内已放行的版本
+    visible = _visible_pkg_ids(db, user)
     released = (
         db.query(PackageVersion)
-        .filter(PackageVersion.status == VersionStatus.RELEASED)
+        .filter(PackageVersion.status == VersionStatus.RELEASED,
+                PackageVersion.package_id.in_(visible))
         .order_by(PackageVersion.package_id, PackageVersion.version_no)
         .all()
     )
@@ -53,8 +66,8 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
     p = db.get(Package, pkg_id)
     if not v or v.package_id != pkg_id or v.status != VersionStatus.RELEASED:
         raise HTTPException(status_code=404, detail="受控版本不存在")
-    if not p:
-        raise HTTPException(status_code=404, detail="资料包不存在")
+    if not p or p.id not in _visible_pkg_ids(db, user):
+        raise HTTPException(status_code=404, detail="受控版本不存在")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -67,7 +80,8 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
             arc = f"{p.code}/{v.version_no}/{safe_name}"
             zf.write(src, arc)
             manifest.append([p.code, v.version_no, att.original_name, att.file_name, str(att.file_size)])
-        zf.writestr("_manifest.csv", "\ufeff" + "\n".join(",".join(f'"{c}"' for c in row) for row in manifest))
+        _q = lambda c: c.replace(chr(34), chr(34) * 2)
+        zf.writestr("_manifest.csv", "\ufeff" + "\n".join(",".join(f'"{_q(c)}"' for c in row) for row in manifest))
     buf.seek(0)
 
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,

@@ -20,6 +20,7 @@ export default function Orders() {
 
   const isAdmin = user!.role === 'admin'
   const canExport = user!.role !== 'submitter' && user!.role !== 'dept_reviewer'
+  const isReadOnly = user!.role === 'auditor'
 
   async function load() {
     setLoading(true)
@@ -55,7 +56,7 @@ export default function Orders() {
         title={t('orders')}
         extra={<Space>
           <Input prefix={<SearchOutlined />} placeholder={t('orders')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 220 }} allowClear />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>{t('create_order')}</Button>
+          {!isReadOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>{t('create_order')}</Button>}
         </Space>}
       >
         <Table
@@ -71,7 +72,7 @@ export default function Orders() {
             { title: t('quantity'), dataIndex: 'quantity', width: 80 },
             { title: t('export_date'), dataIndex: 'export_date', width: 110, render: (v: string) => v || '-' },
             { title: t('completion'), width: 140, render: (_, r) => <Progress percent={r.completion} size="small" /> },
-            { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => (s === 'active' ? <StatusTag status="draft" /> : <StatusTag status="released" />) },
+            { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <StatusTag status={s || 'active'} /> },
             {
               title: '', key: 'act', width: 150,
               render: (_, r) => (

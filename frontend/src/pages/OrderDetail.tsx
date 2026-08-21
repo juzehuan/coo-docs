@@ -146,6 +146,7 @@ export default function OrderDetail() {
   if (!order) return <Card variant="borderless">{t('no_data')}</Card>
 
   const canExport = user!.role !== 'submitter' && user!.role !== 'dept_reviewer'
+  const canEditOrder = user!.role !== 'auditor'
   const typeName = lang === 'en' ? (p: Package) => p.name_en || p.name_zh
     : lang === 'th' ? (p: Package) => p.name_th || p.name_zh : (p: Package) => p.name_zh
 
@@ -176,7 +177,7 @@ export default function OrderDetail() {
                 <Button icon={<FileZipOutlined />} onClick={() => orders.exportZip(order.id)}>{t('export_zip')}</Button>
               </>
             )}
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>{t('add_package')}</Button>
+            <Button type="primary" icon={<PlusOutlined />} disabled={!canEditOrder} onClick={() => setOpen(true)}>{t('add_package')}</Button>
           </Space>
         </Space>
         <Descriptions column={3} size="small" style={{ marginTop: 12 }}>
@@ -185,7 +186,7 @@ export default function OrderDetail() {
           <Descriptions.Item label={t('product')}>{order.product || '-'}</Descriptions.Item>
           <Descriptions.Item label={t('quantity')}>{order.quantity}</Descriptions.Item>
           <Descriptions.Item label={t('export_date')}>{order.export_date || '-'}</Descriptions.Item>
-          <Descriptions.Item label={t('status')}>{order.status === 'active' ? <StatusTag status="draft" /> : <StatusTag status="released" />}</Descriptions.Item>
+          <Descriptions.Item label={t('status')}><StatusTag status={order.status || 'active'} /></Descriptions.Item>
           <Descriptions.Item label={t('completion')} span={3}>{Math.round(order.completion)}%（{order.released_count}/{order.package_count}）</Descriptions.Item>
           {order.note && <Descriptions.Item label={t('change_note')} span={3}>{order.note}</Descriptions.Item>}
         </Descriptions>
@@ -206,7 +207,7 @@ export default function OrderDetail() {
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
             { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag color="blue">{t('required')}</Tag> : '-') },
-            { title: '', key: 'act', width: 64, render: (_, op: OrderPackage) => <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)} /> },
+            { title: '', key: 'act', width: 64, render: (_, op: OrderPackage) => canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)} /> },
           ]}
         />
       </Card>

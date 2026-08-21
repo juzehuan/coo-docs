@@ -80,7 +80,7 @@ class User(Base):
 
 
 class Package(Base):
-    """资料包配置（COO-01 ~ COO-13 等）。"""
+    """资料包配置（COO-01 ~ COO-18 等）。"""
     __tablename__ = "packages"
 
     id = Column(BigInteger, primary_key=True, default=_id)

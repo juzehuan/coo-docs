@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import NAS_BASE_DIRNAME
 from app.core.config import settings
-from app.models import Attachment, Package, PackageVersion, SyncRecord
+from app.models import Attachment, Order, OrderPackage, Package, PackageVersion, SyncRecord
 from app.services import s3
 
 CHUNK = 1024 * 1024
@@ -36,6 +36,15 @@ def _common_parts(ver: PackageVersion, pkg: Package) -> list[str]:
         ver.project_code or settings.PROJECT_CODE,
         f"{pkg.code}_{pkg.name_zh}",
         ver.version_no,
+    ]
+
+
+def _order_parts(op: OrderPackage, pkg: Package, order_no: str) -> list[str]:
+    return [
+        NAS_BASE_DIRNAME,
+        op.project_code or settings.PROJECT_CODE,
+        f"{pkg.code}_{pkg.name_zh}",
+        order_no,
     ]
 
 
@@ -59,8 +68,14 @@ class _LocalBackend:
     def version_base(self, ver: PackageVersion, pkg: Package) -> str:
         return os.path.join(settings.NAS_ROOT, *_common_parts(ver, pkg))
 
-    def target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
+    def order_base(self, op: OrderPackage, pkg: Package, order_no: str) -> str:
+        return os.path.join(settings.NAS_ROOT, *_order_parts(op, pkg, order_no))
+
+    def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
         return os.path.join(self.version_base(ver, pkg), att.original_name or att.file_name)
+
+    def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str) -> str:
+        return os.path.join(self.order_base(op, pkg, order_no), att.original_name or att.file_name)
 
     def sync_one(self, target: str, src: str, att: Attachment) -> bool:
         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -90,9 +105,16 @@ class _S3Backend:
     def version_base(self, ver: PackageVersion, pkg: Package) -> str:
         return "/".join(_common_parts(ver, pkg))
 
-    def target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
+    def order_base(self, op: OrderPackage, pkg: Package, order_no: str) -> str:
+        return "/".join(_order_parts(op, pkg, order_no))
+
+    def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
         name = att.original_name or att.file_name
         return f"{self.version_base(ver, pkg)}/{name}"
+
+    def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str) -> str:
+        name = att.original_name or att.file_name
+        return f"{self.order_base(op, pkg, order_no)}/{name}"
 
     def sync_one(self, key: str, src: str, att: Attachment) -> bool:
         if not s3.put_file(self.cli, key, src):
@@ -151,12 +173,24 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
             if not os.path.exists(src):
                 failures.append({"attachment_id": att.id, "reason": "源文件缺失"})
                 continue
-            ver = db.get(PackageVersion, att.version_id)
-            pkg = db.get(Package, ver.package_id) if ver else None
-            if not ver or not pkg:
-                failures.append({"attachment_id": att.id, "reason": "版本/资料包不存在"})
+            if att.version_id is not None:
+                ver = db.get(PackageVersion, att.version_id)
+                pkg = db.get(Package, ver.package_id) if ver else None
+                if not ver or not pkg:
+                    failures.append({"attachment_id": att.id, "reason": "版本/资料包不存在"})
+                    continue
+                target = backend.version_target(att, pkg, ver)
+            elif att.order_package_id is not None:
+                op = db.get(OrderPackage, att.order_package_id)
+                o = db.get(Order, op.order_id) if op else None
+                pkg = db.get(Package, op.package_id) if op else None
+                if not op or not o or not pkg:
+                    failures.append({"attachment_id": att.id, "reason": "订单/资料包不存在"})
+                    continue
+                target = backend.order_target(att, op, pkg, o.order_no)
+            else:
+                failures.append({"attachment_id": att.id, "reason": "无归属版本/订单"})
                 continue
-            target = backend.target(att, pkg, ver)
             if not backend.sync_one(target, src, att):
                 failures.append({"attachment_id": att.id, "reason": "上传或校验不一致"})
                 continue
@@ -182,7 +216,7 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
 
 
 def _write_manifests(db: Session, backend):
-    """为每个已放行版本的目录/前缀写 manifest.txt（清单/大小/MD5）。"""
+    """为每个已放行版本/订单实例的目录/前缀写 manifest.txt（清单/大小/MD5）。"""
     released = db.query(PackageVersion).filter(PackageVersion.status == "released").all()
     for ver in released:
         pkg = db.get(Package, ver.package_id)
@@ -192,5 +226,19 @@ def _write_manifests(db: Session, backend):
         lines = [f"# {pkg.code} {pkg.name_zh} {ver.version_no}",
                  f"# generated {datetime.utcnow().isoformat()}"]
         for att in ver.attachments:
+            lines.append(f"{att.original_name}\t{att.file_size}\t{att.md5}")
+        backend.write_manifest(base, lines)
+
+    released_ops = db.query(OrderPackage).filter(
+        OrderPackage.status == "released", OrderPackage.locked.is_(True)).all()
+    for op in released_ops:
+        o = db.get(Order, op.order_id)
+        pkg = db.get(Package, op.package_id)
+        if not o or not pkg:
+            continue
+        base = backend.order_base(op, pkg, o.order_no)
+        lines = [f"# {pkg.code} {pkg.name_zh} {o.order_no}",
+                 f"# generated {datetime.utcnow().isoformat()}"]
+        for att in op.attachments:
             lines.append(f"{att.original_name}\t{att.file_size}\t{att.md5}")
         backend.write_manifest(base, lines)

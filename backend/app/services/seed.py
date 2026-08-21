@@ -1,4 +1,4 @@
-"""初始化种子数据：工厂、部门、12 个资料包、角色账号与示例订单。"""
+"""初始化种子数据：工厂、部门、18 个资料包、角色账号与示例订单。"""
 from sqlalchemy.orm import Session
 
 from app.constants import Role
@@ -12,21 +12,45 @@ FACTORIES = [
     ("WEV", "WEV 工厂", "WEV Factory", "โรงงาน WEV"),
 ]
 
-# 内置 12 个资料包（COO-01 ~ COO-13）
+# 内置 18 个资料包（COO-01 ~ COO-18），对齐 RMA 美国审查资料分类（docs/美国审查资料）
+# 元组：编号 / 中文名 / 英文名 / 泰文名 / 责任部门code / 核查重点
 PACKAGE_SEED = [
-    ("COO-01", "成品原产地证", "Certificate of Origin", "ใบรับรองถิ่นกำเนิด"),
-    ("COO-02", "BOM 物料清单", "BOM", "BOM"),
-    ("COO-03", "客户订单与付款", "Customer PO & Payment", "คำสั่งซื้อและชำระเงิน"),
-    ("COO-04", "原材料采购订单", "Raw Material PO", "ใบสั่งซื้อวัตถุดิบ"),
-    ("COO-05", "原材料及零部件采购订单（供方）", "Supplier PO", "ใบสั่งซื้อซัพพลายเออร์"),
-    ("COO-06", "原材料发票", "Raw Material Invoice", "ใบแจ้งหนี้วัตถุดิบ"),
-    ("COO-07", "提单", "Bill of Lading", "ใบตราส่ง"),
-    ("COO-08", "付款证明", "Payment Proof", "หลักฐานการชำระเงิน"),
-    ("COO-09", "生产记录", "Production Records", "บันทึกการผลิต"),
-    ("COO-10", "设备清单", "Equipment List", "รายการอุปกรณ์"),
-    ("COO-11", "SOP 工艺文件", "SOP Documents", "เอกสาร SOP"),
-    ("COO-12", "公司资质", "Company Qualification", "คุณสมบัติบริษัท"),
-    ("COO-13", "其他支撑材料", "Other Supporting Docs", "เอกสารสนับสนุนอื่นๆ"),
+    ("COO-01", "成品原产地证及制造商声明", "Certificate of Origin & Manufacturer Declaration",
+     "ใบรับรองถิ่นกำเนิดและคำรับรองผู้ผลิต", "WAI", "证书、车型/批次与出口批次一一对应，制造商声明完整"),
+    ("COO-02", "BOM、物料清单及原产地/价值信息", "BOM & Origin/Value Information",
+     "BOM และข้อมูลถิ่นกำเนิด/มูลค่า", "ENG", "部件国别、价值、供应商及加工实质转型可追溯"),
+    ("COO-03", "客户采购订单 / 商务合同", "Customer PO / Commercial Contract",
+     "คำสั่งซื้อลูกค้า / สัญญาทางการค้า", "SAL", "PO、合同、修订及卖方确认完整对应"),
+    ("COO-04", "成品销售发票及客户付款证明", "Finished Goods Invoice & Payment Proof",
+     "ใบแจ้งหนี้สินค้าสำเร็จรูปและหลักฐานการชำระเงิน", "FIN", "成品发票、付款凭证与交易参与方信息可验证"),
+    ("COO-05", "原材料/零部件采购订单", "Raw Material / Component PO",
+     "ใบสั่งซื้อวัตถุดิบ/ชิ้นส่วน", "ENG", "按每个供应商对应订单逐份上传 PO"),
+    ("COO-06", "原材料/零部件供应商发票", "Supplier Invoice (Raw Material / Component)",
+     "ใบแจ้งหนี้ซัพพลายเออร์ (วัตถุดิบ/ชิ้นส่วน)", "ENG", "按每个供应商对应订单逐份上传供应商发票"),
+    ("COO-07", "原材料/零部件付款证明", "Payment Proof (Raw Material / Component)",
+     "หลักฐานการชำระเงิน (วัตถุดิบ/ชิ้นส่วน)", "FIN", "按每个供应商对应订单逐份上传付款证明"),
+    ("COO-08", "原材料/零部件进口提单及运输凭证", "Bill of Lading & Transport Docs (Import)",
+     "ใบตราส่งและเอกสารขนส่ง (นำเข้า)", "LOG", "按船运批次归档提单及运输凭证"),
+    ("COO-09", "原材料采购全链路凭证", "Raw Material Full-Chain Evidence",
+     "หลักฐานห่วงโซ่การจัดซื้อวัตถุดิบครบวงจร", "ENG", "原料 PO/发票/提单/付款/清关/入库全链路可追溯"),
+    ("COO-10", "生产计划、装配及车间生产记录", "Production Plan, Assembly & Floor Records",
+     "แผนการผลิต การประกอบ และบันทึกการผลิตหน้างาน", "PRD", "生产计划、装配及车间日/班次记录完整"),
+    ("COO-11", "生产检验及质量记录", "Production Inspection & Quality Records",
+     "บันทึกการตรวจสอบและการควบคุมคุณภาพการผลิต", "QAL", "检验、扭矩/终检等质量记录完整"),
+    ("COO-12", "包装、装柜及出货记录", "Packing, Container Loading & Shipment Records",
+     "บันทึกการบรรจุ การโหลดตู้ และการส่งออก", "LOG", "按批次/柜号归档装柜及出货记录（含装柜照片）"),
+    ("COO-13", "生产设备、工装及产能资料", "Production Equipment, Tooling & Capacity",
+     "ข้อมูลอุปกรณ์ แม่พิมพ์ และกำลังการผลิต", "PRD", "生产设备、工装清单与产能匹配"),
+    ("COO-14", "SOP、作业指导书及工艺流程", "SOP, Work Instructions & Process Flow",
+     "SOP เอกสารขั้นตอนการทำงาน และกระบวนการผลิต", "ENG", "工艺流程、SOP 与作业指导书完整"),
+    ("COO-15", "工厂、生产现场照片及视频证据", "Factory & Production Site Photo/Video Evidence",
+     "หลักฐานภาพถ่าย/วิดีโอโรงงานและหน้างานผลิต", "PRD", "工厂内外部照片与关键工序视频证据"),
+    ("COO-16", "公司资质、许可证及登记资料", "Company Qualifications, Licenses & Registration",
+     "คุณสมบัติบริษัท ใบอนุญาต และทะเบียน", "ADM", "营业执照、资质及登记资料有效"),
+    ("COO-17", "客户核查要求 / 内部对照清单", "Customer Audit Requirements / Internal Checklist",
+     "ข้อกำหนดการตรวจสอบลูกค้า / รายการตรวจสอบภายใน", "WAI", "客户核查要求与内部对照清单逐项覆盖"),
+    ("COO-18", "待人工确认的资料类型", "Pending Manual Confirmation",
+     "รอการยืนยันด้วยคน", "WAI", "待人工核实的资料类型，由关务合规牵头确认归口"),
 ]
 
 DEPARTMENTS = [
@@ -37,6 +61,7 @@ DEPARTMENTS = [
     ("LOG", "物流", "Logistics", "โลจิสติกส์"),
     ("PRD", "生产", "Production", "การผลิต"),
     ("ADM", "行政", "Admin", "ธุรการ"),
+    ("QAL", "质量", "Quality", "คุณภาพ"),
 ]
 
 # 账号：用户名 / 显示名 / 角色 / 部门code / 密码
@@ -77,14 +102,14 @@ def seed(db: Session):
         db.flush()
         dept_map[code] = d
 
-    # 资料包
-    for i, (code, zh, en, th) in enumerate(PACKAGE_SEED):
+    # 资料包（按 RMA 美国审查 18 类；dept 由种子显式指定）
+    for i, (code, zh, en, th, dept_code, focus) in enumerate(PACKAGE_SEED):
         if db.query(Package).filter(Package.code == code).first():
             continue
         pkg = Package(
             code=code, name_zh=zh, name_en=en, name_th=th,
-            dept_id=dept_map["ENG"].id if code.startswith("COO-0") else dept_map["WAI"].id,
-            required=True, sort_order=i,
+            dept_id=dept_map[dept_code].id,
+            review_focus=focus, required=True, sort_order=i,
         )
         db.add(pkg)
 

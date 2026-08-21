@@ -39,6 +39,7 @@ def require_roles(*roles: str):
 admin_only = require_roles("admin")
 coo_or_admin = require_roles("coo_reviewer", "admin")
 reviewer_or_above = require_roles("dept_reviewer", "coo_reviewer", "admin")
+audit_viewer = require_roles("dept_reviewer", "coo_reviewer", "auditor", "admin")
 any_staff = require_roles("submitter", "dept_reviewer", "coo_reviewer", "auditor", "admin")
 
 
@@ -65,4 +66,14 @@ def can_edit_package(u: User, package) -> bool:
         return True
     if u.role == "submitter":
         return package.owner_user_id == u.id
+    return False
+
+
+def can_edit_order_package(u: User, op) -> bool:
+    """订单实例的上传/删除附件、提交审核：管理员/审核角色可操作任意；
+    提交人仅能操作本人负责的实例。"""
+    if u.role in ("admin", "dept_reviewer", "coo_reviewer"):
+        return True
+    if u.role == "submitter":
+        return op.owner_user_id == u.id
     return False

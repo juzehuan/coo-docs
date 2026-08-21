@@ -19,10 +19,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
+    # 锁定期间直接拒绝，不再累计失败次数、也不延长锁定期
+    if user and user.locked_until and user.locked_until > datetime.utcnow():
+        log_event(db, AuditDomain.AUTH, "login_blocked", ip=client_ip(request),
+                  target=payload.username, detail="账号处于锁定期")
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="账号已锁定，请稍后重试")
+
     # 统一错误，避免用户名枚举
     if not user or not verify_password(payload.password, user.password_hash):
         # 记录失败次数（仅当账号存在）
-        if user and user.status == "active":
+        if user:
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
             if user.failed_login_attempts >= settings.MAX_LOGIN_FAILURES:
                 user.locked_until = datetime.utcnow() + timedelta(minutes=settings.LOGIN_LOCK_MINUTES)
@@ -33,10 +39,8 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
     if user.status == "disabled":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已停用")
-    if user.locked_until and user.locked_until > datetime.utcnow():
-        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="账号已锁定，请稍后重试")
 
-    # 重置失败计数
+    # 登录成功：重置失败计数与锁定状态
     user.failed_login_attempts = 0
     user.locked_until = None
     user.last_login_at = datetime.utcnow()

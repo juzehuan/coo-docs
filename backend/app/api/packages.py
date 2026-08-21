@@ -312,6 +312,9 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
 
     decision = payload.decision
     level = payload.level
+    # 退回必须填写整改要求：先校验，避免状态/审计日志已落库后才报错
+    if decision == ReviewDecision.REJECT and not payload.reason:
+        raise HTTPException(status_code=400, detail="退回必须填写整改要求")
 
     if level == ReviewLevel.DEPT:
         if v.status != VersionStatus.PENDING_DEPT:
@@ -347,9 +350,6 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
     else:
         raise HTTPException(status_code=400, detail="无效的审核层级")
 
-    if decision == ReviewDecision.REJECT and not payload.reason:
-        raise HTTPException(status_code=400, detail="退回必须填写整改要求")
-
     # 事件通知：部门通过→COO 终审人；退回/放行→资料责任人
     recipient = p.owner_user_id or v.submitted_by
     if level == ReviewLevel.DEPT and decision == ReviewDecision.APPROVE:
@@ -380,7 +380,8 @@ def withdraw_version(pkg_id: int, vid: int, request: Request,
         raise HTTPException(status_code=404, detail="资源不存在")
     if v.status not in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
         raise HTTPException(status_code=400, detail="当前状态不可撤回")
-    if user.role != "admin" and v.submitted_by != user.id:
+    # 仅提交人本人/责任人本人或管理员可撤回
+    if user.role != "admin" and v.submitted_by != user.id and p.owner_user_id != user.id:
         raise HTTPException(status_code=403, detail="仅提交人本人可撤回")
     v.status = VersionStatus.WITHDRAWN
     v.dept_reject_reason = ""
