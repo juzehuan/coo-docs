@@ -61,7 +61,7 @@ export default function Login() {
               border: '1px solid rgba(201, 176, 106, 0.6)',
               boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
             }}>C</span>
-            <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, letterSpacing: 4 }}>COO 平台</span>
+            <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, letterSpacing: 4 }}>{t('brand_short')}</span>
           </div>
 
           <div style={{ marginTop: 120, maxWidth: 420 }}>
@@ -70,12 +70,12 @@ export default function Login() {
               fontFamily: SERIF, color: '#f5f1e4', fontWeight: 700, fontSize: 34,
               lineHeight: 1.45, letterSpacing: 2, margin: 0, marginBottom: 18,
             }}>
-              合规档案
+              {t('login_brand_title1')}
               <br />
-              归集 · 双重审核
+              {t('login_brand_title2')}
             </Typography.Title>
             <Typography.Paragraph style={{ color: 'rgba(245,241,228,0.6)', fontSize: 14, lineHeight: 2, letterSpacing: 0.5, marginBottom: 0 }}>
-              面向美国审查的 COO 资料归集平台，覆盖 18 类核查档案，部门初审与 COO 终审双级把关，受控放行，全程留痕。
+              {t('login_brand_desc')}
             </Typography.Paragraph>
           </div>
         </div>

@@ -5,6 +5,10 @@ type Dict = Record<string, string>
 const zh: Dict = {
   app_name: 'COO 资料收集平台',
   subtitle: '原产地证（COO）资料高效收集 · 审核 · 归档',
+  brand_short: 'COO 平台',
+  login_brand_title1: '合规档案',
+  login_brand_title2: '归集 · 双重审核',
+  login_brand_desc: '面向美国审查的 COO 资料归集平台，覆盖 18 类核查档案，部门初审与 COO 终审双级把关，受控放行，全程留痕。',
   dashboard_desc: '资料收集进度与待办事项一览',
   orders_desc: '客户订单管理与资料包配套进度',
   packages_desc: 'COO 资料包配置、版本与附件管理',
@@ -148,6 +152,10 @@ const zh: Dict = {
 const en: Dict = {
   app_name: 'COO Material Collection Platform',
   subtitle: 'Efficient COO material collection · review · archive',
+  brand_short: 'COO Platform',
+  login_brand_title1: 'Compliance Dossier',
+  login_brand_title2: 'Collection · Dual Review',
+  login_brand_desc: 'A COO document collection platform for US audits, covering 18 categories of review files, with two-level department first review and COO final review, controlled release and a full audit trail.',
   dashboard_desc: 'Material collection progress and pending tasks at a glance',
   orders_desc: 'Customer order management and package progress',
   packages_desc: 'COO package configuration, versions and attachments',
@@ -291,6 +299,10 @@ const en: Dict = {
 const th: Dict = {
   app_name: 'แพลตฟอร์มรวบรวมข้อมูล COO',
   subtitle: 'รวบรวม · ตรวจสอบ · เก็บถาวรเอกสาร COO อย่างมีประสิทธิภาพ',
+  brand_short: 'แพลตฟอร์ม COO',
+  login_brand_title1: 'เอกสารการปฏิบัติตาม',
+  login_brand_title2: 'รวบรวม · ตรวจสอบสองชั้น',
+  login_brand_desc: 'แพลตฟอร์มรวบรวมเอกสาร COO สำหรับการตรวจสอบของสหรัฐฯ ครอบคลุมไฟล์ตรวจสอบ 18 ประเภท พร้อมการตรวจสอบสองชั้น ปล่อยแบบควบคุม และเก็บบันทึกครบถ้วน',
   dashboard_desc: 'ภาพรวมความคืบหน้าการรวบรวมข้อมูลและงานที่ต้องทำ',
   orders_desc: 'จัดการคำสั่งซื้อลูกค้าและความคืบหน้าของแพ็กเกจ',
   packages_desc: 'จัดการแพ็กเกจข้อมูล COO เวอร์ชัน และไฟล์แนบ',
