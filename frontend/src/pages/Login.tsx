@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, App, Button, Form, Input, Typography } from 'antd'
 import { LockOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
+import { auth } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { ROLE_LABELS } from '@/i18n/messages'
@@ -9,13 +11,15 @@ import { SERIF } from '@/theme'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import type { Lang, Role } from '@/types'
 
-// 演示账号一键登录（admin 密码已轮换，不在此列）
-const DEMO_ACCOUNTS: { role: Role; username: string; password: string }[] = [
-  { role: 'coo_reviewer', username: 'coo', password: 'coo123' },
-  { role: 'dept_reviewer', username: 'dept_wai', password: 'dept123' },
-  { role: 'submitter', username: 'submit_eng', password: 'user123' },
-  { role: 'auditor', username: 'auditor', password: 'audit123' },
-]
+// 演示账号的公开口令（admin 密码已轮换，不在此列）。
+// 按钮渲染与否由后端 /auth/demo-accounts 据实回答——生产部署没有这些账号，
+// 无条件渲染只会让用户点出 401，看起来像系统坏了。
+const DEMO_PASSWORDS: Record<string, string> = {
+  coo: 'coo123',
+  dept_wai: 'dept123',
+  submit_eng: 'user123',
+  auditor: 'audit123',
+}
 
 export default function Login() {
   const { login } = useAuth()
@@ -27,14 +31,24 @@ export default function Login() {
   // 会话失效的原因由拦截器通过查询串传来：整页跳转会让 toast 一起消失，
   // 只有落在登录页上的提示才能真正被用户看到
   const sessionReason = new URLSearchParams(location.search).get('reason')
+  // 仅当这些演示账号在当前环境真实存在时才显示快捷登录
+  const [demoAccounts, setDemoAccounts] = useState<{ username: string; role: Role }[]>([])
+  useEffect(() => {
+    auth.demoAccounts()
+      .then((list) => setDemoAccounts(list.filter((a) => DEMO_PASSWORDS[a.username])))
+      .catch(() => setDemoAccounts([]))   // 拿不到就不显示，宁可少一个入口也不给坏按钮
+  }, [])
 
   async function onFinish(values: { username: string; password: string }) {
     setLoading(true)
     try {
       await login(values.username.trim(), values.password)
       nav('/')
-    } catch (e: any) {
-      message.error(e?.message || t('login_failed'))
+    } catch (e: unknown) {
+      // 必须用 errMessage 取后端 detail：直接读 e.message 拿到的是 axios 的
+      // "Request failed with status code 401" —— 英文、且丢掉了后端说明。
+      // 账号锁定（423「账号已锁定，请稍后重试」）尤其致命：用户看不到需要等待。
+      message.error(errMessage(e) || t('login_failed'))
     } finally {
       setLoading(false)
     }
@@ -153,7 +167,8 @@ export default function Login() {
             <Button type="primary" htmlType="submit" size="large" block loading={loading} className="coo-btn-hero">{t('login')}</Button>
           </Form>
 
-          {/* 演示账号一键登录 */}
+          {/* 演示账号一键登录：仅演示环境显示 */}
+          {demoAccounts.length > 0 && (
           <div style={{ marginTop: 26 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <div style={{ flex: 1, height: 1, background: '#e5dfd0' }} />
@@ -161,12 +176,12 @@ export default function Login() {
               <div style={{ flex: 1, height: 1, background: '#e5dfd0' }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {DEMO_ACCOUNTS.map((a) => (
+              {demoAccounts.map((a) => (
                 <Button
                   key={a.username}
                   size="small"
                   disabled={loading}
-                  onClick={() => quickLogin(a.username, a.password)}
+                  onClick={() => quickLogin(a.username, DEMO_PASSWORDS[a.username])}
                   style={{ background: '#fffef8', borderColor: '#e5dfd0', color: '#75705f', fontSize: 12 }}
                   title={a.username}
                 >
@@ -175,6 +190,7 @@ export default function Login() {
               ))}
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

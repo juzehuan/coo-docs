@@ -16,6 +16,32 @@ from app.schemas import LoginRequest, Msg, PasswordChange, TokenResponse, UserOu
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# 登录页「演示账号一键登录」的候选账号（口令固定且公开，仅用于演示环境）。
+# 该列表与 services/seed.py 的 ACCOUNTS 对应，前端据此渲染按钮。
+DEMO_USERNAMES = ["coo", "dept_wai", "submit_eng", "auditor"]
+
+
+@router.get("/demo-accounts")
+def demo_accounts(db: Session = Depends(get_db)):
+    """返回当前环境中真实存在且可用的演示账号（无需认证）。
+
+    登录页此前无条件渲染演示快捷登录按钮，而生产部署（SEED_DEMO_DATA=false）
+    根本不会创建这些账号：用户点下去只会拿到 401，页面看起来像是坏了。
+    由后端据实回答"这些账号在不在"，前端按结果决定是否显示入口——
+    生产环境返回空数组，入口自然消失；演示环境不受影响。
+    只暴露用户名与角色，不返回口令（口令本就是公开的演示值，写在前端）。
+    """
+    if not DEMO_USERNAMES:
+        return []
+    rows = (db.query(User.username, User.role)
+            .filter(User.username.in_(DEMO_USERNAMES), User.status == "active").all())
+    order = {u: i for i, u in enumerate(DEMO_USERNAMES)}
+    return sorted(
+        [{"username": r.username, "role": r.role} for r in rows],
+        key=lambda x: order.get(x["username"], 99),
+    )
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()

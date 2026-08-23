@@ -47,9 +47,11 @@ class Settings(BaseSettings):
     # 站点时区：NAS 定时同步与超期判断按此时区计算（部署于曼谷/工厂在泰国）
     TIMEZONE: str = "Asia/Bangkok"
 
-    # 种子数据：默认含演示账号（admin/admin123 等公开已知密码）与示例订单，便于开发验收。
-    # 生产环境务必设为 false —— 首次启动将只创建 admin，密码随机生成并打印到启动日志（仅一次）。
-    SEED_DEMO_DATA: bool = True
+    # 种子数据：演示账号（公开已知口令）与示例订单必须**显式开启**。
+    # 默认 false 是安全默认值：忘记配置的部署不会平白多出一批公开口令的账号，
+    # 而是只创建 admin 并把随机初始口令打印到启动日志（仅一次）。
+    # 开发/验收环境显式设置 SEED_DEMO_DATA=true 即可恢复演示数据。
+    SEED_DEMO_DATA: bool = False
 
     @property
     def S3_ENABLED(self) -> bool:

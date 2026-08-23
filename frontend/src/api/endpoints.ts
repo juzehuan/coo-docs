@@ -4,7 +4,7 @@ import {
 import type {
   Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
-  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, SyncRecord, TodoItem, User, Version,
+  OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, Role, SyncRecord, TodoItem, User, Version,
 } from '@/types'
 
 // ---------- 认证 ----------
@@ -15,6 +15,8 @@ export const auth = {
   changePassword: (old_password: string, new_password: string) =>
     post('/auth/change-password', { old_password, new_password }),
   logout: () => post('/auth/logout'),
+  /** 当前环境真实存在的演示账号（生产部署返回空数组，登录页据此隐藏快捷登录入口） */
+  demoAccounts: () => get<{ username: string; role: Role }[]>('/auth/demo-accounts'),
 }
 
 // ---------- 工厂 ----------
