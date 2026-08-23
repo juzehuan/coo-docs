@@ -61,70 +61,85 @@ def controlled_area(limit: int = Query(50, ge=1, le=200), offset: int = Query(0,
     NAS 归档、ZIP 交付、工作台统计本就覆盖两条线，受控区是唯一的例外。
     """
     visible = _visible_pkg_ids(db, user)
-    out = []
-
-    # ---- 资料包版本线 ----
-    released = (
-        db.query(PackageVersion)
-        .filter(PackageVersion.status == VersionStatus.RELEASED,
-                PackageVersion.package_id.in_(visible))
-        .order_by(PackageVersion.package_id, PackageVersion.version_no)
-        .all()
-    )
-    pkgs = {p.id: p for p in db.query(Package).all()}
-    for v in released:
-        p = pkgs.get(v.package_id)
-        if not p:
-            continue
-        out.append({
-            "kind": "version",
-            "key": f"v-{v.id}",
-            "package_code": p.code,
-            "package_name": local_name(p),
-            "subject": v.version_no,
-            "attachment_count": len(v.attachments),
-            "locked": v.locked,
-            "released_at": v.coo_reviewed_at.isoformat() if v.coo_reviewed_at else None,
-            "ids": {"pkg_id": str(p.id), "version_id": str(v.id)},
-            "attachments": [AttachmentOut.model_validate(a).model_dump() for a in v.attachments],
-        })
-
-    # ---- 订单资料包实例线 ----
     fids = _visible_factory_ids(db, user)
-    ops = (
-        db.query(OrderPackage)
-        .join(Order, OrderPackage.order_id == Order.id)
-        .filter(OrderPackage.status == VersionStatus.RELEASED,
-                OrderPackage.locked.is_(True),
-                OrderPackage.package_id.in_(visible),
-                Order.factory_id.in_(fids) if fids else False)
-        .all()
-    )
-    orders = {o.id: o for o in db.query(Order).all()}
-    for op in ops:
-        p = pkgs.get(op.package_id)
-        o = orders.get(op.order_id)
-        if not p or not o:
-            continue
-        out.append({
-            "kind": "order",
-            "key": f"o-{op.id}",
-            "package_code": p.code,
-            "package_name": local_name(p),
-            "subject": o.order_no,
-            "attachment_count": len(op.attachments),
-            "locked": op.locked,
-            "released_at": op.coo_reviewed_at.isoformat() if op.coo_reviewed_at else None,
-            "ids": {"order_id": str(o.id), "op_id": str(op.id)},
-            "attachments": [AttachmentOut.model_validate(a).model_dump() for a in op.attachments],
-        })
+    pkgs = {p.id: p for p in db.query(Package).all()}
 
-    out.sort(key=lambda r: (r["package_code"], r["subject"]))
-    # 服务端分页：受控内容随每次放行永久增长，而界面一次只展示一页。
-    # 此前一次性下发全部（实测 63 条已 94KB，其中附件数组占 44%），
-    # 两年规模下会变成数 MB 的响应，只为显示 10 行。
-    total = len(out)
-    return {"total": total, "items": out[offset:offset + limit]}
+    # 分两阶段：先只取排序所需的轻量列（不含附件），排序分页后，
+    # 才为**本页**加载完整对象与附件。
+    # 直接把全部已放行内容连同附件读进内存再切片，会让响应体积有界、
+    # 数据库工作量却依旧随放行总量增长（实测 63 条时单请求已 207ms）。
+    keys: list[tuple] = []
+
+    for vid, pid, vno in (
+        db.query(PackageVersion.id, PackageVersion.package_id, PackageVersion.version_no)
+        .filter(PackageVersion.status == VersionStatus.RELEASED,
+                PackageVersion.package_id.in_(visible)).all()
+    ):
+        p = pkgs.get(pid)
+        if p:
+            keys.append((p.code, vno or "", "version", vid))
+
+    if fids:
+        for opid, pid, ono in (
+            db.query(OrderPackage.id, OrderPackage.package_id, Order.order_no)
+            .join(Order, OrderPackage.order_id == Order.id)
+            .filter(OrderPackage.status == VersionStatus.RELEASED,
+                    OrderPackage.locked.is_(True),
+                    OrderPackage.package_id.in_(visible),
+                    Order.factory_id.in_(fids)).all()
+        ):
+            p = pkgs.get(pid)
+            if p:
+                keys.append((p.code, ono or "", "order", opid))
+
+    keys.sort(key=lambda k: (k[0], k[1]))
+    total = len(keys)
+    page = keys[offset:offset + limit]
+
+    # 仅为本页加载完整对象（含附件）
+    vids = [k[3] for k in page if k[2] == "version"]
+    opids = [k[3] for k in page if k[2] == "order"]
+    vmap = {v.id: v for v in db.query(PackageVersion).filter(PackageVersion.id.in_(vids)).all()} if vids else {}
+    omap = {}
+    if opids:
+        for op in db.query(OrderPackage).filter(OrderPackage.id.in_(opids)).all():
+            omap[op.id] = op
+    order_map = {o.id: o for o in db.query(Order).filter(
+        Order.id.in_([op.order_id for op in omap.values()])).all()} if omap else {}
+
+    items = []
+    for code, subject, kind, oid in page:
+        if kind == "version":
+            v = vmap.get(oid)
+            p = pkgs.get(v.package_id) if v else None
+            if not v or not p:
+                continue
+            items.append({
+                "kind": "version", "key": f"v-{v.id}",
+                "package_code": p.code, "package_name": local_name(p),
+                "subject": v.version_no,
+                "attachment_count": len(v.attachments), "locked": v.locked,
+                "released_at": v.coo_reviewed_at.isoformat() if v.coo_reviewed_at else None,
+                "ids": {"pkg_id": str(p.id), "version_id": str(v.id)},
+                "attachments": [AttachmentOut.model_validate(a).model_dump() for a in v.attachments],
+            })
+        else:
+            op = omap.get(oid)
+            p = pkgs.get(op.package_id) if op else None
+            o = order_map.get(op.order_id) if op else None
+            if not op or not p or not o:
+                continue
+            items.append({
+                "kind": "order", "key": f"o-{op.id}",
+                "package_code": p.code, "package_name": local_name(p),
+                "subject": o.order_no,
+                "attachment_count": len(op.attachments), "locked": op.locked,
+                "released_at": op.coo_reviewed_at.isoformat() if op.coo_reviewed_at else None,
+                "ids": {"order_id": str(o.id), "op_id": str(op.id)},
+                "attachments": [AttachmentOut.model_validate(a).model_dump() for a in op.attachments],
+            })
+
+    return {"total": total, "items": items}
 
 
 @router.get("/orders/{order_id}/packages/{op_id}/export/zip")

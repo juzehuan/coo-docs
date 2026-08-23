@@ -67,10 +67,25 @@ def _ensure_indexes() -> None:
     import logging
     from sqlalchemy import inspect, text
 
-    wanted = [("sync_records", "started_at", "ix_sync_records_started_at")]
+    # (表, 列, 索引名)。历史库靠这里补齐 create_all 不会追加的索引。
+    wanted = [
+        ("sync_records", "started_at", "ix_sync_records_started_at"),
+        # 订单列表按 created_at DESC 排序+分页：缺索引时每次翻页都对全量可见订单 filesort
+        ("orders", "created_at", "ix_orders_created_at"),
+        # 受控区/工作台/待办按状态过滤：缺索引时是全表扫描
+        ("order_packages", "status", "ix_order_packages_status"),
+        ("package_versions", "status", "ix_package_versions_status"),
+        # NAS 待同步计数：/nas/status 每次打开都要数一遍，两年 1.2 万附件下为全表扫描
+        ("attachments", "nas_synced", "ix_attachments_nas_synced"),
+    ]
+    # 复合索引：单列索引无法同时服务"按 factory_id 过滤 + 按 created_at 排序"，
+    # MySQL 只会用其一，另一半仍要 filesort（实测订单列表补了 created_at 单列索引后
+    # 执行计划依旧是 Using filesort）。列顺序须与查询一致：先等值/范围过滤列，后排序列。
+    composite = [("orders", "factory_id, created_at", "ix_orders_factory_created")]
+
     insp = inspect(engine)
     with engine.connect() as conn:
-        for table, column, idx in wanted:
+        for table, column, idx in wanted + composite:
             try:
                 if table not in insp.get_table_names():
                     continue

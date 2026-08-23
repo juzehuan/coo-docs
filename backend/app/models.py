@@ -114,7 +114,7 @@ class Order(Base):
     status = Column(String(16), nullable=False, default="active")               # active/completed/closed
     note = Column(Text, default="")
     owner_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=True, index=True)  # 责任人
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     factory = relationship("Factory", back_populates="orders")
     packages = relationship("OrderPackage", back_populates="order", cascade="all, delete-orphan")
@@ -128,7 +128,7 @@ class OrderPackage(Base):
     order_id = Column(BigInteger, ForeignKey("orders.id"), nullable=False, index=True)
     package_id = Column(BigInteger, ForeignKey("packages.id"), nullable=False, index=True)  # 模板
     project_code = Column(String(64), nullable=False, default="Bintelli-US")
-    status = Column(String(16), nullable=False, default="draft")
+    status = Column(String(16), nullable=False, default="draft", index=True)
     owner_user_id = Column(BigInteger, nullable=True)   # 责任人（继承模板，可覆盖）
     required = Column(Boolean, default=True)
     due_date = Column(String(32), default="")
@@ -156,7 +156,7 @@ class PackageVersion(Base):
     package_id = Column(BigInteger, ForeignKey("packages.id"), nullable=False, index=True)
     project_code = Column(String(64), nullable=False, default="Bintelli-US")
     version_no = Column(String(16), nullable=False, default="V1.0")
-    status = Column(String(16), nullable=False, default="draft")  # draft/pending_dept/pending_coo/released/rejected
+    status = Column(String(16), nullable=False, default="draft", index=True)  # draft/pending_dept/pending_coo/released/rejected
     change_note = Column(Text, default="")          # 变更说明
     locked = Column(Boolean, default=False)         # 已放行锁定
     submitted_by = Column(BigInteger, nullable=True)
@@ -188,7 +188,7 @@ class Attachment(Base):
     batch_no = Column(String(128), default="")   # 批次号
     uploaded_by = Column(BigInteger, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
-    nas_synced = Column(Boolean, default=False)
+    nas_synced = Column(Boolean, default=False, index=True)
     nas_synced_at = Column(DateTime, nullable=True)
 
     version = relationship("PackageVersion", back_populates="attachments")
