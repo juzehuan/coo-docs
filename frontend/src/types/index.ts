@@ -79,6 +79,8 @@ export interface OrderPackage {
   package_code: string
   package_name: string
   package_dept_id: string | null
+  /** 是否可进行部门审核（含职责分离判定，由后端下发） */
+  reviewable_dept?: boolean
   attachment_count: number
   attachments?: OrderAttachment[]
 }

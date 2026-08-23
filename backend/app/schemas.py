@@ -177,6 +177,8 @@ class OrderPackageOut(BaseModel):
     package_name: str = ""
     package_dept_id: Optional[int] = None
     attachment_count: int = 0
+    # 是否可进行部门审核（含职责分离判定，需查库，故由后端下发）
+    reviewable_dept: bool = True
     attachments: list["AttachmentOut"] = []
 
 

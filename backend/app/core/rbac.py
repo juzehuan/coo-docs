@@ -63,6 +63,31 @@ def is_coo(u: User) -> bool:
     return u.role in ("coo_reviewer", "admin")
 
 
+def dept_review_block_reason(u: User, package_dept_id, submitted_by=None, db=None) -> str | None:
+    """不能进行部门审核的**具体原因**；可审则返回 None。
+
+    此前只有一个布尔返回，两种截然不同的情形共用同一句「非本部门审核人」：
+    实测本部门审核人审自己提交的内容时也收到这句话——他明明就是本部门审核人，
+    管理员照着这句去查部门配置只会白费功夫，审核人则会以为账号配错了。
+    """
+    if u.role in ("admin", "coo_reviewer"):
+        return None
+    if u.role != "dept_reviewer":
+        return "非本部门审核人"
+    if package_dept_id is None or package_dept_id != u.dept_id:
+        return "非本部门审核人"
+    if submitted_by is not None and submitted_by == u.id and db is not None:
+        others = db.query(func.count(User.id)).filter(
+            User.role == "dept_reviewer",
+            User.dept_id == u.dept_id,
+            User.id != u.id,
+            User.status == "active",
+        ).scalar() or 0
+        if others > 0:
+            return "职责分离：不能审核本人提交的内容，请由本部门其他审核人处理"
+    return None
+
+
 def can_review_dept(u: User, package_dept_id, submitted_by=None, db=None) -> bool:
     """部门审核人仅能审核本人责任部门范围内的资料包。
 

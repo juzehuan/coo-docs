@@ -108,7 +108,7 @@ def _order_row(db: Session, o: Order, fac_map: dict | None = None) -> dict:
     }
 
 
-def _op_out(op: OrderPackage) -> dict:
+def _op_out(op: OrderPackage, db: Session | None = None, user: User | None = None) -> dict:
     pkg = op.package
     out = OrderPackageOut.model_validate(op).model_dump()
     out["package_code"] = pkg.code if pkg else ""
@@ -116,6 +116,14 @@ def _op_out(op: OrderPackage) -> dict:
     out["package_dept_id"] = pkg.dept_id if pkg else None
     out["attachment_count"] = len(op.attachments)
     out["attachments"] = [AttachmentOut.model_validate(a).model_dump() for a in op.attachments]
+    # 是否真的可以部门审核：前端只按"角色+部门"判断，看不到职责分离这条规则，
+    # 于是审核人给自己提交的内容也会看到「通过/退回」按钮，点下去必然 403。
+    # 该规则需要查库（本部门是否还有其他审核人），只能由后端下发。
+    # 资料包线早已下发 reviewable_dept，订单线此前没有——又一处两条线的不对称。
+    if db is not None and user is not None:
+        from app.core.rbac import dept_review_block_reason
+        out["reviewable_dept"] = dept_review_block_reason(
+            user, pkg.dept_id if pkg else None, submitted_by=op.submitted_by, db=db) is None
     return out
 
 
@@ -187,7 +195,7 @@ def order_detail(order_id: int, db: Session = Depends(get_db), user: User = Depe
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
         raise HTTPException(status_code=404, detail="订单不存在")
     base = _order_row(db, o)
-    base["packages"] = [_op_out(op) for op in sorted(o.packages, key=lambda x: x.package.code if x.package else "")]
+    base["packages"] = [_op_out(op, db, user) for op in sorted(o.packages, key=lambda x: x.package.code if x.package else "")]
     return base
 
 
@@ -308,16 +316,17 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
     o, op = _get_op(db, order_id, op_id, user)
     # 加锁重读：与并发的上传/删除附件串行化，避免基于旧快照写回破坏状态机
     op = _lock_op(db, op_id) or op
-    from app.core.rbac import can_review_dept, is_coo
+    from app.core.rbac import dept_review_block_reason, is_coo
     decision, level = payload.decision, payload.level
     # 退回必须填写整改要求：先校验，避免状态/审计日志已落库后才报错
     if decision == ReviewDecision.REJECT and not payload.reason:
         raise HTTPException(status_code=400, detail="退回必须填写整改要求")
     if level == ReviewLevel.DEPT:
         # 先鉴权再校验状态：反过来会让无审核权的用户通过 400/403 的差异探知流程进展
-        if not can_review_dept(user, op.package.dept_id if op.package else None,
-                               submitted_by=op.submitted_by, db=db):
-            raise HTTPException(status_code=403, detail="非本部门审核人")
+        blocked = dept_review_block_reason(user, op.package.dept_id if op.package else None,
+                                           submitted_by=op.submitted_by, db=db)
+        if blocked:
+            raise HTTPException(status_code=403, detail=blocked)
         if op.status != VersionStatus.PENDING_DEPT:
             raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
         op.dept_reviewer_id = user.id

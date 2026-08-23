@@ -36,7 +36,9 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     (user.role === 'dept_reviewer' && op.package_dept_id != null && op.package_dept_id === user.dept_id)
   const ownerOk = user.role === 'submitter' && op.owner_user_id === user.id
   const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
-  const canReviewDept = user.role === 'dept_reviewer' && op.package_dept_id != null &&
+  // reviewable_dept 由后端下发：职责分离（本部门另有审核人时不得审自己提交的内容）
+  // 需要查库才能判定，前端单凭角色+部门算不出来，此前因此显示了必然 403 的按钮
+  const canReviewDept = op.reviewable_dept !== false && user.role === 'dept_reviewer' && op.package_dept_id != null &&
     op.package_dept_id === user.dept_id && op.status === 'pending_dept'
   const canReviewCoo = (user.role === 'coo_reviewer' || user.role === 'admin') && op.status === 'pending_coo'
   const canWithdraw = (user.role === 'admin' || ownerOk) &&

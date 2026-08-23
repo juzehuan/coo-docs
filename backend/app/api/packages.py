@@ -10,7 +10,8 @@ from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, Versi
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core.rbac import (
-    admin_only, can_edit_package, can_review_dept, can_view_package, get_current_user, is_coo,
+    admin_only, can_edit_package, can_review_dept, can_view_package,
+    dept_review_block_reason, get_current_user, is_coo,
 )
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
@@ -381,8 +382,9 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
 
     if level == ReviewLevel.DEPT:
         # 先鉴权再校验状态，避免用状态码差异泄露流程进展
-        if not can_review_dept(user, p.dept_id, db=db, submitted_by=v.submitted_by):
-            raise HTTPException(status_code=403, detail="非本部门审核人")
+        blocked = dept_review_block_reason(user, p.dept_id, db=db, submitted_by=v.submitted_by)
+        if blocked:
+            raise HTTPException(status_code=403, detail=blocked)
         if v.status != VersionStatus.PENDING_DEPT:
             raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
         v.dept_reviewer_id = user.id
