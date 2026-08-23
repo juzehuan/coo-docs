@@ -5,7 +5,9 @@ import urllib.request
 import urllib.error
 import time
 
-BASE = "http://localhost:8000/api"
+BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000/api"
+# admin 密码可经环境变量覆盖（生产已轮换，不再是 admin123）
+ADMIN_PWD = os.environ.get("COO_ADMIN_PWD", "admin123")
 
 
 def http(method, path, token=None, json_body=None):
@@ -33,7 +35,7 @@ def login(u, p):
 
 def main():
     sub = login("submit_eng", "user123")
-    admin = login("admin", "admin123")
+    admin = login("admin", ADMIN_PWD)
 
     print("== 1. submitter 可见资料包 ==")
     st, pkgs = http("GET", "/packages", token=sub)

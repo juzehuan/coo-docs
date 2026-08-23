@@ -2,12 +2,15 @@
 """准备浏览器回归所需数据：为 COO-02(ENG) / COO-03(SAL) 创建并提交 pending_dept 版本。"""
 import io
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 import uuid
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000/api"
+# admin 密码可经环境变量覆盖（生产已轮换，不再是 admin123）
+ADMIN_PWD = os.environ.get("COO_ADMIN_PWD", "admin123")
 
 
 def http(method, path, token=None, data=None, json_body=None, files=None):
@@ -54,7 +57,7 @@ def jget(method, path, token=None, json_body=None):
         return st, body.decode("utf-8", "replace")
 
 
-st, data = jget("POST", "/auth/login", json_body={"username": "admin", "password": "admin123"})
+st, data = jget("POST", "/auth/login", json_body={"username": "admin", "password": ADMIN_PWD})
 tok = data["access_token"]
 st, pkgs = jget("GET", "/packages", token=tok)
 txt = b"browser regression prep\n"

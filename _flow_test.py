@@ -5,6 +5,7 @@
 """
 import io
 import json
+import os
 import sys
 import tempfile
 import urllib.request
@@ -12,6 +13,8 @@ import urllib.parse
 import uuid
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000/api"
+# admin 密码可经环境变量覆盖（生产已轮换，不再是 admin123）
+ADMIN_PWD = os.environ.get("COO_ADMIN_PWD", "admin123")
 
 PASS = 0
 FAIL = 0
@@ -102,7 +105,7 @@ def main():
     )
 
     print("== ORDER FLOW ==")
-    admin = login("admin", "admin123")
+    admin = login("admin", ADMIN_PWD)
     ah = {"Authorization": admin}
 
     # 创建专用测试订单（幂等：用唯一订单号）

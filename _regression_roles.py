@@ -5,6 +5,7 @@
 """
 import io
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -12,6 +13,8 @@ import urllib.request
 import uuid
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000/api"
+# admin 密码可经环境变量覆盖（生产已轮换，不再是 admin123）
+ADMIN_PWD = os.environ.get("COO_ADMIN_PWD", "admin123")
 
 PASS = 0
 FAIL = 0
@@ -80,7 +83,7 @@ def login(user, pwd):
 
 
 def main():
-    admin = login("admin", "admin123")
+    admin = login("admin", ADMIN_PWD)
     dept_eng = login("dept_eng", "dept123")
     coo = login("coo", "coo123")
     auditor = login("auditor", "audit123")
