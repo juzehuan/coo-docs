@@ -26,7 +26,14 @@ client.interceptors.response.use(
     const sessionGone = st === 401 || (st === 403 && typeof detail === 'string' && detail.includes('停用'))
     if (sessionGone) {
       clearToken()
-      if (location.pathname !== '/login') location.href = '/login'
+      if (location.pathname !== '/login') {
+        // 带上原因跳转：这里是整页跳转，toast 会随页面一起消失，
+        // 用户只会看到自己"莫名其妙被踢回登录页、填了一半的内容也没了"。
+        // 通知轮询每 30s 一次，所以即便用户只是在填表没点任何按钮，
+        // 令牌一过期也会被后台请求触发登出 —— 更需要说清原因。
+        const reason = typeof detail === 'string' && detail.includes('停用') ? 'disabled' : 'expired'
+        location.href = `/login?reason=${reason}`
+      }
     }
     return Promise.reject(err)
   },

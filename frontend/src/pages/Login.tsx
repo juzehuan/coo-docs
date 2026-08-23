@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Form, Input, Typography } from 'antd'
+import { Alert, App, Button, Form, Input, Typography } from 'antd'
 import { LockOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -24,6 +24,9 @@ export default function Login() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm()
+  // 会话失效的原因由拦截器通过查询串传来：整页跳转会让 toast 一起消失，
+  // 只有落在登录页上的提示才能真正被用户看到
+  const sessionReason = new URLSearchParams(location.search).get('reason')
 
   async function onFinish(values: { username: string; password: string }) {
     setLoading(true)
@@ -130,6 +133,15 @@ export default function Login() {
             </Typography.Paragraph>
             <div style={{ width: 46, height: 2, background: 'linear-gradient(90deg,#c9b06a,#a8833c)', marginTop: 16 }} />
           </div>
+
+          {sessionReason && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={sessionReason === 'disabled' ? t('session_disabled') : t('session_expired')}
+            />
+          )}
 
           <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ username: '', password: '' }}>
             <Form.Item name="username" rules={[{ required: true, message: t('username') }]}>
