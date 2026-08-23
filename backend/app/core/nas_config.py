@@ -93,11 +93,15 @@ def get_config() -> dict:
     return _cache
 
 
-def save_config(db, patch: dict) -> dict:
-    """写入配置并刷新缓存；secret_key 为空或仍是掩码时保留原值。"""
-    from app.models import SystemSetting
+def save_config(db, patch: dict) -> tuple[dict, int]:
+    """写入配置并刷新缓存；secret_key 为空或仍是掩码时保留原值。
+
+    返回 (新配置, 因目标变更而被重新标记为待归档的附件数)。
+    """
+    from app.models import Attachment, SystemSetting
     global _cache
     cur = _load(db)
+    old_target = target_fingerprint(cur)
     new = dict(cur)
     for k in FIELDS:
         if k in patch and patch[k] is not None:
@@ -113,10 +117,21 @@ def save_config(db, patch: dict) -> dict:
         row.value = payload
     else:
         db.add(SystemSetting(key=_KEY_NAME, value=payload))
+
+    # 归档目标变了 = 换了一台 NAS：历史附件必须重新归档，否则新 NAS 上只会有
+    # manifest 而没有文件，且界面显示"待同步 0"，缺件全程无人察觉。
+    requeued = 0
+    if target_fingerprint(new) != old_target:
+        requeued = (db.query(Attachment)
+                    .filter(Attachment.nas_synced.is_(True))
+                    .update({Attachment.nas_synced: False, Attachment.nas_synced_at: None},
+                            synchronize_session=False))
+        logger.warning("NAS 归档目标由 %s 变更为 %s，已将 %s 个附件重新标记为待归档",
+                       old_target, target_fingerprint(new), requeued)
     db.commit()
     with _lock:
         _cache = new
-    return new
+    return new, requeued
 
 
 def masked(cfg: dict) -> dict:
@@ -129,3 +144,21 @@ def masked(cfg: dict) -> dict:
 def s3_enabled(cfg: dict | None = None) -> bool:
     c = cfg or get_config()
     return c["mode"] == "s3" and bool(c["endpoint_url"] and c["access_key"] and c["secret_key"])
+
+
+def target_fingerprint(cfg: dict | None = None) -> str:
+    """归档目标的唯一标识——换了 NAS 就会变。
+
+    附件的 nas_synced 只是个布尔值，不记录"同步到了哪一台 NAS"。一旦归档目标
+    改变，历史附件仍算"已同步"，新 NAS 永远拿不到它们；而 manifest 是按已放行
+    版本无条件重写的，于是新 NAS 上会出现**只有清单、没有文件**的目录——清单
+    逐条列着文件名与 MD5，目录里一个文件都没有，核查方看到的是完整的假象。
+    界面还会显示"待同步 0、一切正常"。
+
+    有了指纹就能在目标变化时把附件重新标记为待同步，让新 NAS 收到完整副本
+    （规格要求 NAS 保留一份完整副本）。
+    """
+    c = cfg or get_config()
+    if c["mode"] == "s3":
+        return f"s3://{c['bucket']}@{c['endpoint_url']}"
+    return f"local://{c['local_root']}"

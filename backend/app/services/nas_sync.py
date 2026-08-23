@@ -141,6 +141,9 @@ class _LocalBackend:
         with open(os.path.join(base, "manifest.txt"), "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
 
+    def manifest_exists(self, base: str) -> bool:
+        return os.path.exists(os.path.join(base, "manifest.txt"))
+
     def display(self) -> str:
         return _local_root()
 
@@ -179,6 +182,9 @@ class _S3Backend:
 
     def write_manifest(self, base: str, lines: list[str]) -> None:
         s3.put_bytes(self.cli, f"{base}/manifest.txt", ("\n".join(lines) + "\n").encode("utf-8"))
+
+    def manifest_exists(self, base: str) -> bool:
+        return bool(s3.head(self.cli, f"{base}/manifest.txt"))
 
     def display(self) -> str:
         cfg = nas_config.get_config()
@@ -343,8 +349,30 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
     return rec
 
 
+def _blank_manifest(backend, base: str, header: str) -> None:
+    """把一份"列着文件却没有文件"的旧清单改写为真实内容。
+
+    只在目标上确实已存在清单时才写——避免在全新 NAS 上凭空造出空清单。
+    不删除任何东西（同步始终是只增不删），但也绝不让清单继续说谎：
+    一个列着 MD5 却没有对应文件的目录，对核查方比空目录更具误导性。
+    """
+    if not backend.manifest_exists(base):
+        return
+    backend.write_manifest(base, [
+        header,
+        f"# generated {datetime.utcnow().isoformat()}",
+        "# 本目录当前无已归档文件（原始记录已删除或尚未同步）",
+    ])
+
+
 def _write_manifests(db: Session, backend):
-    """为每个已放行版本/订单实例的目录/前缀写 manifest.txt（清单/大小/MD5）。"""
+    """为每个已放行版本/订单实例的目录/前缀写 manifest.txt（清单/大小/MD5）。
+
+    只列出**确已归档到当前目标**的附件（nas_synced=True），并且该组一个文件都
+    没归档时不写清单。否则会出现"清单列着文件、目录里却没有"的目录——换归档
+    目标或上传失败时都会踩到，而这种目录对核查方而言比空目录更糟：它看起来
+    完整，只有逐个核对 MD5 时才会发现文件根本不存在。
+    """
     released = db.query(PackageVersion).filter(PackageVersion.status == "released").all()
     for ver in released:
         pkg = db.get(Package, ver.package_id)
@@ -352,11 +380,16 @@ def _write_manifests(db: Session, backend):
             continue
         base = backend.version_base(ver, pkg)
         # 列出的必须是 NAS 上的实际文件名，否则重名被区分后清单与目录对不上，审计核验会失败
+        archived = [a for a in ver.attachments if a.nas_synced]
+        if not archived:
+            _blank_manifest(backend, base, f"# {pkg.code} {pkg.name_zh} {ver.version_no}")
+            continue
+        # 重名判定仍基于全部附件：区分后缀必须与 sync 时算出的一致
         dup = duplicate_names(ver.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {ver.version_no}",
                  f"# generated {datetime.utcnow().isoformat()}",
                  "# 归档文件名\t字节数\tMD5\t上传原名"]
-        for att in ver.attachments:
+        for att in archived:
             an = archive_name(att, dup)
             lines.append(f"{an}\t{att.file_size}\t{att.md5}\t{att.original_name}")
         backend.write_manifest(base, lines)
@@ -369,11 +402,15 @@ def _write_manifests(db: Session, backend):
         if not o or not pkg:
             continue
         base = backend.order_base(op, pkg, o.order_no)
+        archived = [a for a in op.attachments if a.nas_synced]
+        if not archived:
+            _blank_manifest(backend, base, f"# {pkg.code} {pkg.name_zh} {o.order_no}")
+            continue
         dup = duplicate_names(op.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {o.order_no}",
                  f"# generated {datetime.utcnow().isoformat()}",
                  "# 归档文件名\t字节数\tMD5\t上传原名"]
-        for att in op.attachments:
+        for att in archived:
             an = archive_name(att, dup)
             lines.append(f"{an}\t{att.file_size}\t{att.md5}\t{att.original_name}")
         backend.write_manifest(base, lines)

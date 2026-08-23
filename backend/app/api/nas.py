@@ -62,12 +62,14 @@ def update_nas_config(payload: NasConfigIn, request: Request, db: Session = Depe
     这些信息（NAS 地址、访问密钥、桶名、挂载点、同步时间）此前只能改环境变量
     并重启整套服务，而它们恰恰是交付现场才确定、且会随换机/轮换密钥而变的内容。
     """
-    cfg = nas_config.save_config(db, payload.model_dump())
+    cfg, requeued = nas_config.save_config(db, payload.model_dump())
     # 审计留痕不记密钥本身，只记改了哪些关键项，便于事后追溯"归档目标何时被改动"
     log_event(db, AuditDomain.NAS, "config_update", actor=user, ip=client_ip(request),
               detail=f"mode={cfg['mode']},target={_target_of(cfg)},sync_time={cfg['sync_time']},"
-                     f"auto_sync={cfg['auto_sync']}")
-    return NasConfigOut(**nas_config.masked(cfg))
+                     f"auto_sync={cfg['auto_sync']},requeued={requeued}")
+    out = NasConfigOut(**nas_config.masked(cfg))
+    out.requeued = requeued
+    return out
 
 
 @router.post("/config/test", response_model=NasTestResult)

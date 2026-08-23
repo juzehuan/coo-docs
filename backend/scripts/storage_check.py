@@ -34,6 +34,10 @@ def human(n: int) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--purge-orphans", action="store_true", help="删除孤儿文件（默认仅报告）")
+    ap.add_argument("--check-nas", action="store_true",
+                    help="核对 NAS 归档：清单列出的文件是否真的存在")
+    ap.add_argument("--fix-nas-manifests", action="store_true",
+                    help="把「列着文件却没有文件」的清单改写为真实内容（需配合 --check-nas）")
     args = ap.parse_args()
 
     updir = settings.UPLOAD_DIR
@@ -80,8 +84,87 @@ def main() -> int:
     elif orphans:
         print("\n（如需回收，加 --purge-orphans 重新执行）")
 
-    # 悬空记录属数据完整性问题，用非零退出码让巡检/告警能捕获
-    return 1 if dangling else 0
+    nas_bad = 0
+    if args.check_nas:
+        nas_bad = check_nas(args.fix_nas_manifests)
+
+    # 悬空记录与归档缺件都属数据完整性问题，用非零退出码让巡检/告警能捕获
+    return 1 if (dangling or nas_bad) else 0
+
+
+def check_nas(fix: bool = False) -> int:
+    """核对 NAS 归档：每份 manifest 列出的文件是否真的存在于归档目标。
+
+    代码路径永远发现不了这类问题：订单/版本一旦从库里删除，_write_manifests
+    就再也不会访问那个目录，而 NAS 同步是只增不删——留在那里的清单会继续
+    逐条列出文件名与 MD5，核查方看到的是一个"看起来完整"的目录。
+    因此只能靠巡检从归档侧反向核对。
+    """
+    import posixpath
+
+    from app.core import nas_config
+    from app.services import s3
+
+    cfg = nas_config.get_config()
+    print(f"\n=== NAS 归档核对（{nas_config.target_fingerprint(cfg)}）===")
+    if cfg["mode"] != "s3":
+        root = cfg["local_root"]
+        manifests = []
+        for dirpath, _dirs, files in os.walk(root):
+            if "manifest.txt" in files:
+                manifests.append(dirpath)
+        listed_total = missing_total = empty_dirs = 0
+        for d in manifests:
+            with open(os.path.join(d, "manifest.txt"), encoding="utf-8") as f:
+                names = [ln.split("\t")[0] for ln in f.read().splitlines()
+                         if ln and not ln.startswith("#")]
+            miss = [n for n in names if not os.path.exists(os.path.join(d, n))]
+            listed_total += len(names)
+            missing_total += len(miss)
+            if names and len(miss) == len(names):
+                empty_dirs += 1
+                if fix:
+                    with open(os.path.join(d, "manifest.txt"), "w", encoding="utf-8") as f:
+                        f.write("# 本目录当前无已归档文件（原始记录已删除或尚未同步）\n")
+        print(f"清单 {len(manifests)} 份，列出 {listed_total} 份文件，实际缺失 {missing_total} 份")
+        print(f"只有清单、没有任何文件的目录：{empty_dirs} 个")
+        return missing_total
+
+    cli = s3.client()
+    if not cli:
+        print("S3 未启用，跳过")
+        return 0
+    bucket = cfg["bucket"]
+    keys, token = [], None
+    while True:
+        r = cli.list_objects_v2(Bucket=bucket, **({"ContinuationToken": token} if token else {}))
+        keys += [o["Key"] for o in r.get("Contents", [])]
+        if not r.get("IsTruncated"):
+            break
+        token = r["NextContinuationToken"]
+    kset = set(keys)
+    manifests = [k for k in keys if k.endswith("manifest.txt")]
+    listed_total = missing_total = empty_dirs = fixed = 0
+    for k in manifests:
+        d = posixpath.dirname(k)
+        body = cli.get_object(Bucket=bucket, Key=k)["Body"].read().decode("utf-8", "replace")
+        names = [ln.split("\t")[0] for ln in body.splitlines() if ln and not ln.startswith("#")]
+        miss = [n for n in names if f"{d}/{n}" not in kset]
+        listed_total += len(names)
+        missing_total += len(miss)
+        if names and len(miss) == len(names):
+            empty_dirs += 1
+            if fix:
+                cli.put_object(Bucket=bucket, Key=k,
+                               Body="# 本目录当前无已归档文件（原始记录已删除或尚未同步）\n".encode("utf-8"))
+                fixed += 1
+    print(f"清单 {len(manifests)} 份，列出 {listed_total} 份文件，实际缺失 {missing_total} 份")
+    print(f"只有清单、没有任何文件的目录：{empty_dirs} 个")
+    if fixed:
+        print(f"已改写 {fixed} 份不实清单（未删除任何归档文件）")
+    elif empty_dirs:
+        print("（如需改写为真实内容，加 --fix-nas-manifests 重新执行）")
+    return missing_total
 
 
 if __name__ == "__main__":

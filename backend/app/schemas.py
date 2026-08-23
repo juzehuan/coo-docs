@@ -356,6 +356,8 @@ class NasConfigOut(BaseModel):
     local_root: str = ""
     sync_time: str = "01:00"
     auto_sync: bool = True
+    # 换归档目标时被重新标记为待归档的附件数（仅保存接口返回，用于提示管理员）
+    requeued: int = 0
 
 
 class NasConfigIn(BaseModel):
