@@ -5,6 +5,7 @@ import { useAuth } from './store/AuthContext'
 import { useI18n } from './i18n'
 import { canAccess } from './routes'
 import AppLayout from './components/AppLayout'
+import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 // 业务页面按路由懒加载：此前全部静态引入，主包 1.86MB（gzip 594KB）一次下发，
 // 4G 网络下首屏 4.9 秒才出现登录框。登录页不在此列——它是首屏必需的。
@@ -52,6 +53,9 @@ function RequireRole({ children }: { children: JSX.Element }) {
 
 export default function App() {
   const { user, loading } = useAuth()
+  // 显式取路由 location：用全局 window.location 虽然也能读到 pathname，
+  // 但本组件不会订阅路由变化，客户端跳转时 key 不一定重算
+  const routeLoc = useLocation()
   if (loading) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -69,6 +73,11 @@ export default function App() {
             <AppLayout>
               <RequireRole>
               {/* 切页时分块尚未到达的短暂等待态，避免白屏 */}
+              {/* 内层边界：只兜住页面内容，出错时侧边栏与顶栏仍在，
+                  用户可以直接切到别的页面，而不是被困在一片空白里。
+                  key 绑定路径——换页即重建边界，否则一次出错会让后续页面
+                  一直停留在错误态 */}
+              <ErrorBoundary key={routeLoc.pathname}>
               <Suspense fallback={<div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
@@ -85,6 +94,7 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               </Suspense>
+              </ErrorBoundary>
               </RequireRole>
             </AppLayout>
           </RequireAuth>

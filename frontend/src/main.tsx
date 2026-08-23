@@ -8,6 +8,7 @@ import thTH from 'antd/locale/th_TH'
 import { I18nProvider, useI18n } from './i18n'
 import { AuthProvider } from './store/AuthContext'
 import App from './App'
+import ErrorBoundary from './components/ErrorBoundary'
 import { theme } from './theme'
 import './styles.css'
 
@@ -18,11 +19,14 @@ function Root() {
   return (
     <ConfigProvider theme={{ ...theme, algorithm: antdTheme.defaultAlgorithm }} locale={localeMap[lang]}>
       <AntdApp>
+      {/* 外层边界：内层只包页面内容，若布局/上下文本身出错仍会白屏 */}
+      <ErrorBoundary>
         <BrowserRouter>
           <AuthProvider>
             <App />
           </AuthProvider>
         </BrowserRouter>
+      </ErrorBoundary>
       </AntdApp>
     </ConfigProvider>
   )
