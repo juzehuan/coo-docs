@@ -159,7 +159,7 @@ export interface Dashboard {
   released: number
   overdue: number
   package_progress: { code: string; name: string; status: string; percent: number; attachments: number; overdue?: boolean }[]
-  need_attention: { code: string; name: string; issue: string; reason: string; overdue?: boolean }[]
+  need_attention: { code: string; name: string; issue_code: string; due_date?: string; reason: string; overdue?: boolean }[]
 }
 
 export interface AuditLog {

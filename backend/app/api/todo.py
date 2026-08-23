@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
+from app.core.i18n import local_name
 from app.core.overdue import is_overdue
 from app.core.rbac import get_current_user
 from app.db import get_db
@@ -80,12 +81,12 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             "kind": "package",
             "package_id": p.id,
             "package_code": p.code,
-            "package_name": p.name_zh,
+            "package_name": local_name(p),
             "order_id": None,
             "version_id": lv.id,
             "version_no": lv.version_no,
             "status": lv.status,
-            "dept_name": dept.name_zh if dept else "",
+            "dept_name": local_name(dept),
             "owner_name": name(users.get(p.owner_user_id)),
             "submitter_name": name(users.get(lv.submitted_by)),
             "submitted_at": lv.submitted_at,
@@ -135,12 +136,12 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             "kind": "order",
             "package_id": op.id,
             "package_code": pkg.code,
-            "package_name": pkg.name_zh,
+            "package_name": local_name(pkg),
             "order_id": order.id,
             "version_id": None,
             "version_no": order.order_no,
             "status": op.status,
-            "dept_name": dept.name_zh if dept else "",
+            "dept_name": local_name(dept),
             "owner_name": name(users.get(op.owner_user_id)),
             "submitter_name": name(users.get(op.submitted_by)),
             "submitted_at": op.submitted_at,

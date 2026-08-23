@@ -7,6 +7,7 @@ from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.csv_safe import csv_row
 from app.core.overdue import is_overdue
+from app.core.i18n import local_name
 from app.core.rbac import can_view_package, export_viewer, get_current_user
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
@@ -115,18 +116,19 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         # 进度：已放行=100，待终审=80，待部门=50，退回/撤回=30，草稿=10，无=0
         pct = {"released": 100, "pending_coo": 80, "pending_dept": 50,
                "rejected": 30, "withdrawn": 30, "draft": 10, "none": 0}.get(st, 0)
-        progress.append({"code": p.code, "name": p.name_zh, "status": st, "percent": pct,
+        progress.append({"code": p.code, "name": local_name(p), "status": st, "percent": pct,
                          "attachments": att_n, "overdue": od})
         if od:
-            need_attention.append({"code": p.code, "name": p.name_zh,
-                                   "issue": f"已超期（截止 {p.due_date}）", "reason": "", "overdue": True})
+            need_attention.append({"code": p.code, "name": local_name(p),
+                                   "issue_code": "overdue", "due_date": p.due_date or "",
+                                   "reason": "", "overdue": True})
         if st == "rejected":
-            need_attention.append({"code": p.code, "name": p.name_zh, "issue": "已退回，待整改",
+            need_attention.append({"code": p.code, "name": local_name(p), "issue_code": "rejected",
                                    "reason": v.dept_reject_reason or v.coo_reject_reason})
         elif st == "pending_coo":
-            need_attention.append({"code": p.code, "name": p.name_zh, "issue": "待 COO 终审", "reason": ""})
+            need_attention.append({"code": p.code, "name": local_name(p), "issue_code": "pending_coo", "reason": ""})
         elif st == "pending_dept":
-            need_attention.append({"code": p.code, "name": p.name_zh, "issue": "待部门审核", "reason": ""})
+            need_attention.append({"code": p.code, "name": local_name(p), "issue_code": "pending_dept", "reason": ""})
     # 订单资料包实例的超期（按可见工厂范围）
     for op in ops:
         if is_overdue(op.due_date, op.status):
@@ -154,7 +156,7 @@ def export_archive_list(request: Request, db: Session = Depends(get_db),
     for v in versions:
         p = pkgs.get(v.package_id)
         synced = sum(1 for a in v.attachments if a.nas_synced)
-        lines.append(csv_row([p.code if p else "", p.name_zh if p else "", v.version_no, v.status,
+        lines.append(csv_row([p.code if p else "", local_name(p), v.version_no, v.status,
                               str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"]))
     csv = "\n".join(lines)
     log_event(db, AuditDomain.EXPORT, "archive_csv", actor=user, ip=client_ip(request))

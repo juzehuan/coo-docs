@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App, Button, Card, Col, Progress, Row, Table, Spin, Typography } from 'antd'
 import { AuditOutlined, DownloadOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
+import type { Lang } from '@/types'
 import { errMessage } from '@/api/client'
 import { dashboard } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
@@ -77,7 +78,15 @@ export default function Dashboard() {
                   columns={[
                     { title: 'COO', dataIndex: 'code', width: 90 },
                     { title: t('packages'), dataIndex: 'name' },
-                    { title: t('issue'), dataIndex: 'issue', width: 150, render: (v: string, r) => <span style={{ color: r.overdue ? '#cf1322' : '#b97a1e', fontWeight: r.overdue ? 600 : 400 }}>{v}</span> },
+                    // 事项文案由前端按 issue_code 翻译：后端此前直接下发中文，
+                    // 英文/泰文界面下这一列会整列漏出中文
+                    { title: t('issue'), dataIndex: 'issue_code', width: 170, render: (_: string, r) => (
+                      <span style={{ color: r.overdue ? '#cf1322' : '#b97a1e', fontWeight: r.overdue ? 600 : 400 }}>
+                        {r.issue_code === 'overdue'
+                          ? `${t('overdue_issue')}${r.due_date ? `（${r.due_date}）` : ''}`
+                          : STATUS_LABELS[r.issue_code]?.[lang as Lang] ?? r.issue_code}
+                      </span>
+                    ) },
                     { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
                   ]}
                 />

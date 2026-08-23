@@ -12,6 +12,18 @@ interface I18nCtx {
 
 const Ctx = createContext<I18nCtx | null>(null)
 
+/** 按界面语言取业务对象名称（资料包/部门/工厂都存了 zh/en/th 三份）。
+ *  缺译时回退中文：宁可语言不对，也不能让名称变成空白而无法辨认。 */
+export function localName(
+  obj: { name_zh?: string; name_en?: string; name_th?: string } | null | undefined,
+  lang: Lang,
+  fallback = '',
+): string {
+  if (!obj) return fallback
+  const v = obj[`name_${lang}` as const]
+  return (v && v.trim()) || obj.name_zh || fallback
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>((localStorage.getItem(LANG_KEY) as Lang) || 'zh')
 

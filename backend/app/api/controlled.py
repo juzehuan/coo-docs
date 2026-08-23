@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.constants import AuditDomain, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
+from app.core.i18n import local_name
 from app.core.csv_safe import csv_row
 from app.core.http_headers import content_disposition
 from app.services.nas_sync import archive_name, duplicate_names
@@ -55,7 +56,7 @@ def controlled_area(db: Session = Depends(get_db), user: User = Depends(controll
             continue
         out.append({
             "package_code": p.code,
-            "package_name": p.name_zh,
+            "package_name": local_name(p),
             "version": VersionOut.model_validate(v).model_dump(),
             "attachment_count": len(v.attachments),
             "locked": v.locked,

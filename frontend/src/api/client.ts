@@ -12,6 +12,9 @@ const client = axios.create({ baseURL: '/api', timeout: 30000 })
 client.interceptors.request.use((config) => {
   const t = getToken()
   if (t) config.headers.Authorization = `Bearer ${t}`
+  // 界面语言随请求带给后端：资料包名/部门名/工厂名是后端扁平化后下发的，
+  // 后端不知道语言就只能一律给中文，英文与泰文界面下的清单会全是中文。
+  config.headers['X-Lang'] = localStorage.getItem('coo_lang') || 'zh'
   return config
 })
 

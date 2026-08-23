@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
+from app.core.i18n import local_name
 from app.core.rbac import (
     can_edit_order, can_edit_order_package, export_viewer, get_current_user,
 )
@@ -99,7 +100,7 @@ def _order_row(db: Session, o: Order, fac_map: dict | None = None) -> dict:
     return {
         **OrderOut.model_validate(o).model_dump(),
         "factory_code": fac.code if fac else "",
-        "factory_name": fac.name_zh if fac else "",
+        "factory_name": local_name(fac),
         "package_count": total,
         "released_count": released,
         "completion": completion,
@@ -110,7 +111,7 @@ def _op_out(op: OrderPackage) -> dict:
     pkg = op.package
     out = OrderPackageOut.model_validate(op).model_dump()
     out["package_code"] = pkg.code if pkg else ""
-    out["package_name"] = pkg.name_zh if pkg else ""
+    out["package_name"] = local_name(pkg)
     out["package_dept_id"] = pkg.dept_id if pkg else None
     out["attachment_count"] = len(op.attachments)
     out["attachments"] = [AttachmentOut.model_validate(a).model_dump() for a in op.attachments]

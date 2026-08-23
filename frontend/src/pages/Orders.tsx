@@ -4,13 +4,13 @@ import { App, Button, Card, Form, Input, InputNumber, Modal, Progress, Select, S
 import { DownloadOutlined, EyeOutlined, FileZipOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
-import { useI18n } from '@/i18n'
+import { localName, useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import type { Factory, Order } from '@/types'
 
 export default function Orders() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const { user } = useAuth()
   const { message } = App.useApp()
   const nav = useNavigate()
@@ -32,7 +32,7 @@ export default function Orders() {
   }
   useEffect(() => { load() }, [])
 
-  const factName = (id: string) => factList.find((f) => f.id === id)?.name_zh || ''
+  const factName = (id: string) => localName(factList.find((f) => f.id === id), lang)
 
   const data = rows.filter((r) =>
     r.order_no.toLowerCase().includes(kw.toLowerCase()) ||
@@ -96,7 +96,7 @@ export default function Orders() {
           <Form.Item name="factory_id" label={t('factory')} rules={[{ required: true }]}>
             {/* 已停用工厂不再出现在新建订单可选项（后端同样拒绝，见 orders.create_order）；
                 factList 本身保留全量，订单列表仍需按 id 显示历史工厂名 */}
-            <Select options={factList.filter((f) => f.status === 'active' && (isAdmin || user!.factory_ids.includes(f.id))).map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} placeholder={t('factory')} />
+            <Select options={factList.filter((f) => f.status === 'active' && (isAdmin || user!.factory_ids.includes(f.id))).map((f) => ({ label: `${f.code} · ${localName(f, lang)}`, value: f.id }))} placeholder={t('factory')} />
           </Form.Item>
           <Form.Item name="order_no" label={t('order_no')} rules={[{ required: true }]}><Input maxLength={64} placeholder="ORD-XXX-001" /></Form.Item>
           <Form.Item name="customer" label={t('customer')}><Input /></Form.Item>

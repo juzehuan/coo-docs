@@ -3,7 +3,7 @@ import { Alert, App, Button, Card, Form, Input, Modal, Select, Table, Tabs, Tag,
 import { EditOutlined, PlusOutlined, ReloadOutlined, SafetyOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { factories, org } from '@/api/endpoints'
 import { clearToken, errMessage } from '@/api/client'
-import { useI18n } from '@/i18n'
+import { localName, useI18n } from '@/i18n'
 import RoleTag from '@/components/RoleTag'
 import PageHeader from '@/components/PageHeader'
 import { ROLES } from '@/types'
@@ -26,10 +26,10 @@ export default function Org() {
   }
   useEffect(() => { load() }, [])
 
-  const deptName = (id: string | null) => depts.find((d) => d.id === id)?.name_zh || '-'
+  const deptName = (id: string | null) => localName(depts.find((d) => d.id === id), lang, '-')
   const factLabel = (id: string) => {
     const f = factList.find((x) => x.id === id)
-    return f ? `${f.code} · ${f.name_zh}` : String(id)
+    return f ? `${f.code} · ${localName(f, lang)}` : String(id)
   }
 
   // ---- 部门 ----
@@ -295,7 +295,7 @@ export default function Org() {
           <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
           <Form.Item name="dept_id" label={t('dept')}><Select allowClear options={depts.map((d) => ({ label: d.name_zh, value: d.id }))} /></Form.Item>
           <Form.Item name="factory_ids" label={t('factory')} extra={t('factory_hint')}>
-            <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} />
+            <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${localName(f, lang)}`, value: f.id }))} />
           </Form.Item>
         </Form>
       </Modal>
@@ -305,7 +305,7 @@ export default function Org() {
           <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
           <Form.Item name="dept_id" label={t('dept')}><Select allowClear options={depts.map((d) => ({ label: d.name_zh, value: d.id }))} /></Form.Item>
           <Form.Item name="factory_ids" label={t('factory')} extra={t('factory_hint')}>
-            <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} />
+            <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${localName(f, lang)}`, value: f.id }))} />
           </Form.Item>
         </Form>
       </Modal>

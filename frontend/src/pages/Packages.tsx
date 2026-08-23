@@ -5,7 +5,7 @@ import { EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-de
 import { errMessage } from '@/api/client'
 import { org, packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
-import { useI18n } from '@/i18n'
+import { localName, useI18n } from '@/i18n'
 import { STATUS_LABELS } from '@/i18n/messages'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
@@ -63,7 +63,7 @@ export default function Packages() {
   const deptLabel = (id: string | null) => {
     const d = depts.find((x) => x.id === id)
     if (!d) return '-'
-    return (lang === 'en' ? d.name_en : lang === 'th' ? d.name_th : d.name_zh) || d.name_zh
+    return localName(d, lang)
   }
   const ownerLabel = (id: string | null) => {
     const u = users.find((x) => x.id === id)
@@ -107,7 +107,7 @@ export default function Packages() {
         extra={<Space>
           <Input prefix={<SearchOutlined />} placeholder={t('packages')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 200 }} allowClear />
           <Select allowClear placeholder={t('dept')} style={{ width: 150 }} value={deptFilter} onChange={setDeptFilter}
-            options={depts.map((d) => ({ label: lang === 'en' ? (d.name_en || d.name_zh) : lang === 'th' ? (d.name_th || d.name_zh) : d.name_zh, value: d.id }))} />
+            options={depts.map((d) => ({ label: localName(d, lang), value: d.id }))} />
           <Select allowClear placeholder={t('status')} style={{ width: 140 }} value={statusFilter} onChange={setStatusFilter}
             options={STATUS_FILTERS.map((v) => ({ label: STATUS_LABELS[v]?.[lang as Lang] ?? v, value: v }))} />
           {isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>{t('create')}</Button>}
@@ -121,7 +121,7 @@ export default function Packages() {
         pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         columns={[
           { title: 'COO', dataIndex: 'code', width: 90 },
-          { title: t('packages'), render: (_, r) => lang === 'en' ? r.name_en || r.name_zh : lang === 'th' ? r.name_th || r.name_zh : r.name_zh },
+          { title: t('packages'), render: (_, r) => localName(r, lang) },
           { title: t('dept'), width: 120, render: (_, r) => deptLabel(r.dept_id) },
           { title: t('owner'), width: 110, render: (_, r) => ownerLabel(r.owner_user_id) },
           { title: t('version'), dataIndex: 'current_version', width: 90, render: (v: string) => v || '-' },
@@ -157,7 +157,7 @@ export default function Packages() {
           <Form.Item label={t('name_th')} name="name_th"><Input /></Form.Item>
           <Space size="large" style={{ display: 'flex' }}>
             <Form.Item label={t('dept')} name="dept_id" style={{ width: 220 }}>
-              <Select allowClear placeholder={t('dept')} options={depts.map((d) => ({ label: `${d.code} · ${d.name_zh}`, value: d.id }))} />
+              <Select allowClear placeholder={t('dept')} options={depts.map((d) => ({ label: `${d.code} · ${localName(d, lang)}`, value: d.id }))} />
             </Form.Item>
             <Form.Item name="required" label={t('required')} valuePropName="checked">
               <Switch />

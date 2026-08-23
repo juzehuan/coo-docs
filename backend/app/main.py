@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DataError, OperationalError
 
 from app.core.config import settings
+from app.core.i18n import LangMiddleware
 from app.core.json import SafeIntJSONResponse
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.reqlog import RequestLogMiddleware
@@ -42,6 +43,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(SecurityHeadersMiddleware)
+    # 语言上下文需在业务代码取名之前就绪
+    app.add_middleware(LangMiddleware)
     app.add_middleware(RateLimitMiddleware)
     # 最后添加即最外层：限流拒绝(429)与所有异常响应同样会被记录
     app.add_middleware(RequestLogMiddleware)
