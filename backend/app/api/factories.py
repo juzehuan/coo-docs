@@ -12,8 +12,17 @@ router = APIRouter(prefix="/factories", tags=["factories"])
 
 
 @router.get("", response_model=list[FactoryOut])
-def list_factories(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(Factory).order_by(Factory.sort_order, Factory.code).all()
+def list_factories(active_only: bool = False, db: Session = Depends(get_db),
+                   _: User = Depends(get_current_user)):
+    """列出工厂。
+
+    active_only=True 供"新建订单"等选择场景使用；默认返回全部，
+    因为历史订单仍需按 id 显示已停用工厂的名称（过滤掉会让工厂列显示为空）。
+    """
+    q = db.query(Factory)
+    if active_only:
+        q = q.filter(Factory.status == "active")
+    return q.order_by(Factory.sort_order, Factory.code).all()
 
 
 @router.post("", response_model=FactoryOut, status_code=status.HTTP_201_CREATED)

@@ -52,6 +52,26 @@ export default function Org() {
     setFactOpen(false); factForm.resetFields(); load()
   }
 
+  // 工厂启停：规格「支持停用/启用」，后端 PATCH /factories/{id} 一直存在但无界面入口。
+  // 停用的工厂不再出现在新建订单的可选项里（已有订单不受影响）。
+  function toggleFactory(f: Factory) {
+    const disabling = f.status === 'active'
+    Modal.confirm({
+      title: `${disabling ? t('disabled') : t('active')} · ${f.code}`,
+      okText: disabling ? t('disabled') : t('active'),
+      okButtonProps: disabling ? { danger: true } : undefined,
+      cancelText: t('cancel'),
+      onOk: async () => {
+        try {
+          await factories.update(f.id, { status: disabling ? 'disabled' : 'active' })
+          message.success(t('save')); load()
+        } catch (e) {
+          message.error(errMessage(e))
+        }
+      },
+    })
+  }
+
   // ---- 用户 ----
   const [userOpen, setUserOpen] = useState(false)
   const [userForm] = Form.useForm()
@@ -146,6 +166,16 @@ export default function Org() {
         { title: t('name_en'), dataIndex: 'name_en' },
         { title: t('name_th'), dataIndex: 'name_th' },
         { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag className="coo-tag" style={{ background: s === 'active' ? '#eaf2ec' : '#f9ece9', color: s === 'active' ? '#2f6b4a' : '#9c4134', border: 'none' }}>{s === 'active' ? t('active') : t('disabled')}</Tag> },
+        {
+          title: '', width: 100,
+          render: (_, f) => (
+            <Button size="small" danger={f.status === 'active'}
+              icon={f.status === 'active' ? <StopOutlined /> : <CheckCircleOutlined />}
+              onClick={() => toggleFactory(f)}>
+              {f.status === 'active' ? t('disabled') : t('active')}
+            </Button>
+          ),
+        },
       ]} />
     </Card>
   )

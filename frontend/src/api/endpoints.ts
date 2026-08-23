@@ -19,8 +19,9 @@ export const auth = {
 
 // ---------- 工厂 ----------
 export const factories = {
-  list: () => get<Factory[]>('/factories'),
+  list: (activeOnly?: boolean) => get<Factory[]>('/factories', activeOnly ? { active_only: true } : undefined),
   create: (data: Partial<Factory>) => post<Factory>('/factories', data),
+  update: (id: string, data: Partial<Factory>) => patch<Factory>(`/factories/${id}`, data),
 }
 
 // ---------- 订单 ----------
@@ -114,6 +115,8 @@ export const packages = {
 // ---------- 看板 / 受控区 / 审计 / NAS ----------
 export const dashboard = {
   get: () => get<Dashboard>('/dashboard'),
+  // F-10「归档清单可导出为 Excel/CSV」：后端一直有此接口，此前前端未封装、界面也无入口
+  exportCsv: () => downloadBlob('/dashboard/export'),
 }
 
 // ---------- 待办队列 ----------

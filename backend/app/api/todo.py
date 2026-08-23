@@ -97,7 +97,9 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
         })
 
     # ---- 订单资料包实例待办 ----
-    fids = ([f.id for f in db.query(Factory).filter(Factory.status == "active").all()]
+    # 不按 status 过滤：工厂停用只阻止新建订单，不应让该厂在办事项从管理员待办里消失
+    # （待办漏掉 = 无人跟进，比多显示几条严重得多）
+    fids = ([f.id for f in db.query(Factory).all()]
             if user.role == "admin" else [f.id for f in user.factories])
     ops = (
         db.query(OrderPackage)

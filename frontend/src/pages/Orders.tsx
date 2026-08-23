@@ -94,7 +94,9 @@ export default function Orders() {
       <Modal title={t('create_order')} open={open} onOk={submit} onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={form} layout="vertical" initialValues={{ status: 'active', quantity: 0, required: true }}>
           <Form.Item name="factory_id" label={t('factory')} rules={[{ required: true }]}>
-            <Select options={factList.filter((f) => isAdmin || user!.factory_ids.includes(f.id)).map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} placeholder={t('factory')} />
+            {/* 已停用工厂不再出现在新建订单可选项（后端同样拒绝，见 orders.create_order）；
+                factList 本身保留全量，订单列表仍需按 id 显示历史工厂名 */}
+            <Select options={factList.filter((f) => f.status === 'active' && (isAdmin || user!.factory_ids.includes(f.id))).map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} placeholder={t('factory')} />
           </Form.Item>
           <Form.Item name="order_no" label={t('order_no')} rules={[{ required: true }]}><Input maxLength={64} placeholder="ORD-XXX-001" /></Form.Item>
           <Form.Item name="customer" label={t('customer')}><Input /></Form.Item>

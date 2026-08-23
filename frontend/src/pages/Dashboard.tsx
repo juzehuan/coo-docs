@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Col, Progress, Row, Table, Spin, Typography } from 'antd'
-import { AuditOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
+import { App, Button, Card, Col, Progress, Row, Table, Spin, Typography } from 'antd'
+import { AuditOutlined, DownloadOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { dashboard } from '@/api/endpoints'
+import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { STATUS_LABELS } from '@/i18n/messages'
 import { formatTime } from '@/utils/format'
@@ -13,7 +15,22 @@ import type { Dashboard as Dash } from '@/types'
 export default function Dashboard() {
   const { t, lang } = useI18n()
   const nav = useNavigate()
+  const { user } = useAuth()
+  const { message } = App.useApp()
   const [d, setD] = useState<Dash | null>(null)
+  // 导出角色与后端 export_viewer 一致：COO 终审人 / 审计查看人 / 管理员
+  const canExport = ['coo_reviewer', 'auditor', 'admin'].includes(user?.role || '')
+  async function exportArchive() {
+    try {
+      const blob = await dashboard.exportCsv()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'archive_list.csv'; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      message.error(errMessage(e))
+    }
+  }
 
   useEffect(() => { dashboard.get().then(setD).catch(() => {}) }, [])
 
@@ -26,6 +43,10 @@ export default function Dashboard() {
           <h1 className="coo-pagehead-title">{t('dashboard')}</h1>
           <div className="coo-pagehead-desc">{t('dashboard_desc')}</div>
         </div>
+        {/* F-10「归档清单可导出为 Excel/CSV」：后端接口一直存在但界面无入口 */}
+        {canExport && (
+          <Button icon={<DownloadOutlined />} onClick={exportArchive}>{t('export_csv')}</Button>
+        )}
       </div>
 
       <Row gutter={[16, 16]}>

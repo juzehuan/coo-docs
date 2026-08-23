@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Layout, Menu, Avatar, Dropdown, Button, theme as antdTheme } from 'antd'
+import { App, Layout, Menu, Avatar, Dropdown, Button, Form, Input, Modal, theme as antdTheme } from 'antd'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
-  AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
+  AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined, MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { errMessage } from '@/api/client'
+import { auth } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { ROUTE_ROLES } from '@/routes'
@@ -48,6 +50,21 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     contentRef.current?.scrollTo({ top: 0, left: 0 })
   }, [location.pathname])
   const { token } = antdTheme.useToken()
+  const { message } = App.useApp()
+  // 修改密码：规格 F-01 与用户手册都写明"登录后在右上角修改密码"，
+  // 后端 /auth/change-password 一直存在，但界面此前没有任何入口
+  const [pwdOpen, setPwdOpen] = useState(false)
+  const [pwdForm] = Form.useForm()
+  async function submitPwd() {
+    const v = await pwdForm.validateFields()
+    try {
+      await auth.changePassword(v.old_password, v.new_password)
+      message.success(t('save'))
+      setPwdOpen(false); pwdForm.resetFields()
+    } catch (e) {
+      message.error(errMessage(e))
+    }
+  }
 
   if (!user) return null
   const items = MENU.filter((m) => m.roles.includes(user.role)).map((m) => ({
@@ -121,7 +138,10 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             <LanguageSwitcher />
             <Dropdown
               menu={{
-                items: [{ key: 'logout', icon: <LogoutOutlined />, label: t('logout'), onClick: () => { logout(); navigate('/login') } }],
+                items: [
+                  { key: 'pwd', icon: <KeyOutlined />, label: t('change_password'), onClick: () => setPwdOpen(true) },
+                  { key: 'logout', icon: <LogoutOutlined />, label: t('logout'), onClick: () => { logout(); navigate('/login') } },
+                ],
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '4px 8px', borderRadius: 8 }}>
@@ -136,6 +156,27 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
           {children ?? <Outlet />}
         </Content>
       </Layout>
+
+      <Modal title={t('change_password')} open={pwdOpen} onOk={submitPwd}
+             onCancel={() => { setPwdOpen(false); pwdForm.resetFields() }}
+             okText={t('save')} cancelText={t('cancel')} destroyOnHidden>
+        <Form form={pwdForm} layout="vertical">
+          <Form.Item name="old_password" label={t('old_password')} rules={[{ required: true }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item name="new_password" label={t('new_password')}
+                     rules={[{ required: true }, { min: 6, message: t('v_too_short').replace('{n}', '6') }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item name="confirm" label={t('confirm_password')} dependencies={['new_password']}
+            rules={[{ required: true }, ({ getFieldValue }) => ({
+              validator: (_, value) => (!value || getFieldValue('new_password') === value)
+                ? Promise.resolve() : Promise.reject(new Error(t('v_invalid'))),
+            })]}>
+            <Input.Password />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   )
 }

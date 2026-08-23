@@ -33,9 +33,16 @@ PREVIEW_MIME = {"application/pdf", "image/png", "image/jpeg", "image/gif", "imag
 
 
 def _factory_ids(user: User, db: Session) -> list[int]:
-    """当前账号可见的工厂 ID；admin 可见全部激活工厂。"""
+    """当前账号可见的工厂 ID；admin 可见全部工厂。
+
+    这里**不能**按 status 过滤：本函数同时用于 _visible_orders_q（可见性），
+    停用一个工厂会让该厂的历史订单对管理员整体消失、详情返回 404，
+    看起来与数据丢失无异；而普通用户走 user.factories 不受影响，
+    结果是唯一看不到的反而是管理员。
+    "停用"只应阻止新建订单，该约束在 create_order 里按工厂 status 单独判断。
+    """
     if user.role == "admin":
-        return [f.id for f in db.query(Factory).filter(Factory.status == "active").all()]
+        return [f.id for f in db.query(Factory).all()]
     return [f.id for f in user.factories]
 
 
@@ -132,6 +139,11 @@ def create_order(payload: OrderCreate, request: Request, db: Session = Depends(g
     fids = _factory_ids(user, db)
     if payload.factory_id not in fids:
         raise HTTPException(status_code=403, detail="无权为该工厂创建订单")
+    # 停用的工厂不得再承接新订单，否则"停用"只是个显示标签、不产生任何约束。
+    # 已有订单不受影响（停用表达的是"不再新接单"，不是"抹掉历史"）。
+    fac = db.get(Factory, payload.factory_id)
+    if fac is not None and fac.status != "active":
+        raise HTTPException(status_code=400, detail="该工厂已停用，无法创建新订单")
     if db.query(Order).filter(Order.order_no == payload.order_no).first():
         raise HTTPException(status_code=400, detail="订单号已存在")
     data = payload.model_dump()
