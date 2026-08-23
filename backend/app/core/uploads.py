@@ -10,6 +10,7 @@ import os
 from fastapi import HTTPException, UploadFile
 
 from app.constants import ALLOWED_EXTENSIONS
+from app.core.filetype import content_matches, guess_mime
 
 _CHUNK = 1024 * 1024
 
@@ -43,10 +44,29 @@ def safe_original_name(filename: str | None, ext: str) -> str:
     return name[:max(keep, 1)] + ext
 
 
-async def read_validated_upload(f: UploadFile, max_mb: int) -> tuple[bytes, str, str, str]:
-    """校验扩展名白名单 + 限量读取，返回 (内容, 扩展名, md5, 安全原始文件名)。"""
+async def read_validated_upload(f: UploadFile, max_mb: int) -> tuple[bytes, str, str, str, str]:
+    """校验扩展名白名单 + 内容名实相符 + 限量读取。
+
+    返回 (内容, 扩展名, md5, 安全原始文件名, 服务端判定的 MIME)。
+
+    MIME 由扩展名判定而非采信 `f.content_type`：那是客户端可随意填写的字段，
+    让它决定"能不能预览"意味着一份真 PDF 可能因声明成 text/plain 而无法预览，
+    而任意内容只要声明成 application/pdf 就会被当成 PDF 打开。
+
+    内容校验拦的是"名实不符"：一个纯文本改名 `发票.pdf` 会一路入库、同步 NAS、
+    打进交付给核查方的 ZIP，MD5 一应俱全，直到对方打开才发现打不开——对归集
+    核查证据的系统而言这就是无效证据，而全程没有任何提示。
+    """
     ext = os.path.splitext(f.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型：{ext}")
     content = await read_upload_limited(f, max_mb)
-    return content, ext, hashlib.md5(content).hexdigest(), safe_original_name(f.filename, ext)
+    if not content:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    if not content_matches(content, ext):
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件内容与扩展名 {ext} 不符，请确认上传的是真实的 {ext} 文件",
+        )
+    return (content, ext, hashlib.md5(content).hexdigest(),
+            safe_original_name(f.filename, ext), guess_mime(ext))

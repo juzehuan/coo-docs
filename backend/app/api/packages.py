@@ -14,6 +14,7 @@ from app.core.rbac import (
 )
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
+from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload
 from app.db import get_db
 from app.models import (
@@ -253,8 +254,8 @@ async def upload_attachments(
     # 先读入内存并校验（耗时段），尚未落盘、未写库
     pending: list[tuple[bytes, str, str, str, str]] = []
     for f in files:
-        content, ext, md5, oname = await read_validated_upload(f, settings.MAX_FILE_MB)
-        pending.append((content, ext, md5, oname, (f.content_type or "application/octet-stream")[:128]))
+        content, ext, md5, oname, ctype = await read_validated_upload(f, settings.MAX_FILE_MB)
+        pending.append((content, ext, md5, oname, ctype))
     # 读取期间可能已被并发终审放行：加锁重读后按最新状态再判一次
     v = _lock_version(db, vid)
     if not v:
@@ -324,8 +325,11 @@ def download_attachment(pkg_id: int, vid: int, aid: int, request: Request, previ
     # 记录 IP：规格 F-10 要求下载留痕含 IP
     log_event(db, AuditDomain.ATTACHMENT, "download", actor=user, ip=client_ip(request),
               target=f"{att.original_name}")
-    if preview and att.mime_type in PREVIEW_MIME:
-        return FileResponse(path, media_type=att.mime_type, filename=att.original_name)
+    # 按扩展名判定而非库里存的 mime_type：历史附件的 mime_type 来自客户端声明，
+    # 一份真 PDF 若当初被声明成 text/plain，至今仍无法预览
+    mime = guess_mime(os.path.splitext(att.original_name or att.file_name or "")[1])
+    if preview and mime in PREVIEW_MIME:
+        return FileResponse(path, media_type=mime, filename=att.original_name)
     return FileResponse(path, filename=att.original_name)
 
 
