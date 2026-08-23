@@ -12,8 +12,8 @@ from app.core.i18n import local_name
 from app.core.rbac import (
     can_edit_order, can_edit_order_package, export_viewer, get_current_user,
 )
-from app.core.csv_safe import csv_row
 from app.core.http_headers import content_disposition
+from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
 from app.core.uploads import read_validated_upload
@@ -495,18 +495,18 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
     from fastapi import Response
     fac = db.get(Factory, o.factory_id) if o.factory_id else None
     header = ["工厂", "订单号", "资料包编号", "资料包名称", "状态", "责任人ID", "附件数", "已放行锁定", "截止日期"]
-    lines = [",".join(header)]
+    data = []
     for op in sorted(o.packages, key=lambda x: x.package.code if x.package else ""):
         pkg = op.package
-        lines.append(csv_row([
+        data.append([
             fac.code if fac else "", o.order_no, pkg.code if pkg else "",
-            pkg.name_zh if pkg else "", op.status, str(op.owner_user_id or ""),
+            local_name(pkg), op.status, str(op.owner_user_id or ""),
             str(len(op.attachments)), "是" if op.locked else "否", op.due_date,
-        ]))
-    csv = "\n".join(lines)
+        ])
+    content = build_xlsx(header, data, sheet_title="订单资料清单")
     log_event(db, AuditDomain.EXPORT, "order_export", actor=user, ip=client_ip(request), target=o.order_no)
-    return Response(content="\ufeff" + csv, media_type="text/csv",
-                    headers={"Content-Disposition": content_disposition(f"order_{o.order_no}.csv")})
+    return Response(content=content, media_type=XLSX_MEDIA_TYPE,
+                    headers={"Content-Disposition": content_disposition(f"order_{o.order_no}.xlsx")})
 
 
 @router.get("/{order_id}/export/zip")
@@ -545,8 +545,9 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
                 zf.write(src, arc)
                 manifest.append([fac_code, o.order_no, pkg_code, safe_name, att.original_name,
                                  att.file_name, str(att.file_size), att.md5 or ""])
-        meta = "\n".join(csv_row(row) for row in manifest)
-        zf.writestr("_manifest.csv", "\ufeff" + meta)
+        # 交付给核查方的清单同样用 Excel：MD5 与订单号是纯数字/长串时，
+        # CSV 会被 Excel 改写成科学计数法，清单便与实际文件对不上
+        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
     buf.seek(0)
     log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request), target=o.order_no)
     return StreamingResponse(

@@ -14,3 +14,4 @@ starlette==0.46.2
 # 注：pyasn1 无法升级 —— python-jose 3.4.0 硬性要求 pyasn1<0.5.0；
 # 其 CVE 位于 RSA/ECDSA 解析路径，本系统 JWT 使用 HS256(HMAC)，不经过该路径。
 # 同理 ecdsa 的 Minerva 计时攻击(PYSEC-2026-1325，上游无修复)对 HS256 亦不适用。
+openpyxl==3.1.5

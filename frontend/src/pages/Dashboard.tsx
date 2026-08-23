@@ -26,7 +26,7 @@ export default function Dashboard() {
       const blob = await dashboard.exportCsv()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url; a.download = 'archive_list.csv'; a.click()
+      a.href = url; a.download = 'archive_list.xlsx'; a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
       message.error(errMessage(e))

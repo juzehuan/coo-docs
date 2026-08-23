@@ -12,7 +12,7 @@ from app.constants import AuditDomain, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core.i18n import local_name
-from app.core.csv_safe import csv_row
+from app.core.xlsx import build_xlsx
 from app.core.http_headers import content_disposition
 from app.services.nas_sync import archive_name, duplicate_names
 from app.core.rbac import require_roles
@@ -92,7 +92,7 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
             zf.write(src, arc)
             manifest.append([p.code, v.version_no, safe_name, att.original_name, att.file_name,
                              str(att.file_size), att.md5 or ""])
-        zf.writestr("_manifest.csv", "\ufeff" + "\n".join(csv_row(row) for row in manifest))
+        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
     buf.seek(0)
 
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,

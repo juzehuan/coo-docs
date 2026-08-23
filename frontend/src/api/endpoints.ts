@@ -56,7 +56,7 @@ export const orders = {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `order_${orderNo}.csv`
+      a.download = `order_${orderNo}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     }),

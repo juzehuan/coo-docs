@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
-from app.core.csv_safe import csv_row
 from app.core.overdue import is_overdue
+from app.core.http_headers import content_disposition
 from app.core.i18n import local_name
+from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.rbac import can_view_package, export_viewer, get_current_user
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
@@ -148,17 +149,17 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
 @router.get("/export")
 def export_archive_list(request: Request, db: Session = Depends(get_db),
                         user: User = Depends(export_viewer)):
-    """归档清单导出（CSV）。审计查看人/COO/管理员可用。"""
+    """归档清单导出（Excel）。审计查看人/COO/管理员可用。"""
     versions = db.query(PackageVersion).all()
     pkgs = {p.id: p for p in db.query(Package).all()}
     header = ["资料包编号", "资料包名称", "版本", "状态", "责任人", "附件数", "已同步NAS"]
-    lines = [",".join(header)]
+    data = []
     for v in versions:
         p = pkgs.get(v.package_id)
         synced = sum(1 for a in v.attachments if a.nas_synced)
-        lines.append(csv_row([p.code if p else "", local_name(p), v.version_no, v.status,
-                              str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"]))
-    csv = "\n".join(lines)
-    log_event(db, AuditDomain.EXPORT, "archive_csv", actor=user, ip=client_ip(request))
-    return Response(content="\ufeff" + csv, media_type="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=archive_list.csv"})
+        data.append([p.code if p else "", local_name(p), v.version_no, v.status,
+                     str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"])
+    content = build_xlsx(header, data, sheet_title="归档清单")
+    log_event(db, AuditDomain.EXPORT, "archive_xlsx", actor=user, ip=client_ip(request))
+    return Response(content=content, media_type=XLSX_MEDIA_TYPE,
+                    headers={"Content-Disposition": content_disposition("archive_list.xlsx")})

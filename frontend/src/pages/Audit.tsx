@@ -39,13 +39,13 @@ export default function Audit() {
   }
   useEffect(() => { load() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function exportCsv() {
+  async function exportXlsx() {
     try {
       const blob = await audit.exportCsv()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'audit_logs.csv'
+      a.download = 'audit_logs.xlsx'
       a.click()
       URL.revokeObjectURL(url)
     } catch (e: any) {
@@ -70,7 +70,7 @@ export default function Audit() {
             <Select allowClear placeholder={t('domain_action')} style={{ width: 140 }} value={domain} onChange={(v) => { setDomain(v); load(v ?? null) }}
               options={DOMAINS.map((d) => ({ label: d, value: d }))} />
             <Button type="primary" icon={<SearchOutlined />} onClick={() => load()}>{t('search')}</Button>
-            {canExport && <Button icon={<DownloadOutlined />} onClick={exportCsv}>{t('export_csv')}</Button>}
+            {canExport && <Button icon={<DownloadOutlined />} onClick={exportXlsx}>{t('export_csv')}</Button>}
           </Space>
         }
       />

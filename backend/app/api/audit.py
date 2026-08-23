@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
-from app.core.csv_safe import csv_row
+from app.core.http_headers import content_disposition
 from app.core.timefmt import fmt as time_fmt
+from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.rbac import audit_viewer
 from app.db import get_db
 from app.models import AuditDomain, AuditLog, User
@@ -56,16 +57,14 @@ def export_logs(
         q = q.filter(AuditLog.event_domain == domain)
     rows = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
     header = ["时间（站点时区）", "域", "动作", "操作人", "角色", "IP", "目标", "说明"]
-    lines = [",".join(header)]
-    for r in rows:
-        lines.append(csv_row([
-            time_fmt(r.created_at),   # 站点时区 + 显式偏移，导出的证据必须自解释
-            r.event_domain, r.action, r.actor_name, r.actor_role, r.ip, r.target, r.detail,
-        ]))
-    csv = "\n".join(lines)
-    log_event(db, AuditDomain.EXPORT, "audit_csv", actor=user, ip=client_ip(request))
+    data = [[
+        time_fmt(r.created_at),   # 站点时区 + 显式偏移，导出的证据必须自解释
+        r.event_domain, r.action, r.actor_name, r.actor_role, r.ip, r.target, r.detail,
+    ] for r in rows]
+    content = build_xlsx(header, data, sheet_title="操作日志")
+    log_event(db, AuditDomain.EXPORT, "audit_xlsx", actor=user, ip=client_ip(request))
     return Response(
-        content="\ufeff" + csv,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=audit_logs.csv"},
+        content=content,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": content_disposition("audit_logs.xlsx")},
     )
