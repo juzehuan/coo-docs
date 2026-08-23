@@ -1,5 +1,6 @@
 """站内通知中心：列表 / 未读数 / 标记已读。"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.rbac import get_current_user
@@ -10,11 +11,13 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("")
-def list_notifications(limit: int = 30, offset: int = 0,
+def list_notifications(limit: int = Query(30, ge=1, le=200), offset: int = Query(0, ge=0),
                        db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     q = db.query(Notification).filter(Notification.user_id == user.id)
-    total = q.count()
-    unread = q.filter(Notification.is_read.is_(False)).count()
+    # func.count 聚合，避免 Query.count() 的全字段子查询（通知表随使用无限增长）
+    cnt = db.query(func.count(Notification.id)).filter(Notification.user_id == user.id)
+    total = cnt.scalar() or 0
+    unread = cnt.filter(Notification.is_read.is_(False)).scalar() or 0
     rows = (
         q.order_by(Notification.is_read.asc(), Notification.created_at.desc())
         .offset(offset).limit(limit).all()
@@ -36,8 +39,8 @@ def list_notifications(limit: int = 30, offset: int = 0,
 
 @router.get("/unread-count")
 def unread_count(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    n = db.query(Notification).filter(
-        Notification.user_id == user.id, Notification.is_read.is_(False)).count()
+    n = db.query(func.count(Notification.id)).filter(
+        Notification.user_id == user.id, Notification.is_read.is_(False)).scalar() or 0
     return {"count": n}
 
 

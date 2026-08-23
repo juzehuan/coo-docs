@@ -1,5 +1,6 @@
 """认证依赖与基于角色+部门的权限控制。"""
 from fastapi import Depends, HTTPException, status
+from sqlalchemy import func
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -23,7 +24,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if not user:
         raise cred_exc
     if user.status == "disabled":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已停用")
+        # 用 401 而非 403：账号停用意味着这张令牌不再是有效凭证（认证失效），
+        # 403 表示"已认证但无权限"，前端不会据此登出，用户会卡在数据全空却无提示的界面里。
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已停用，请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -66,12 +73,12 @@ def can_review_dept(u: User, package_dept_id, submitted_by=None, db=None) -> boo
         if package_dept_id is None or package_dept_id != u.dept_id:
             return False
         if submitted_by is not None and submitted_by == u.id and db is not None:
-            others = db.query(User).filter(
+            others = db.query(func.count(User.id)).filter(
                 User.role == "dept_reviewer",
                 User.dept_id == u.dept_id,
                 User.id != u.id,
                 User.status == "active",
-            ).count()
+            ).scalar() or 0
             if others > 0:
                 return False
         return True

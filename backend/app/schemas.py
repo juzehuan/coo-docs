@@ -33,18 +33,23 @@ class PasswordChange(BaseModel):
     new_password: str = Field(min_length=6)
 
 
+class SecretRotate(BaseModel):
+    """超管轮换 JWT 密钥：custom_key 留空则随机生成（推荐）。"""
+    custom_key: str = ""
+
+
 # ---------- 部门 ----------
 class DepartmentCreate(BaseModel):
-    code: str
-    name_zh: str
-    name_en: str = ""
-    name_th: str = ""
+    code: str = Field(max_length=32)
+    name_zh: str = Field(max_length=128)
+    name_en: str = Field("", max_length=128)
+    name_th: str = Field("", max_length=128)
 
 
 class DepartmentUpdate(BaseModel):
-    name_zh: Optional[str] = None
-    name_en: Optional[str] = None
-    name_th: Optional[str] = None
+    name_zh: Optional[str] = Field(None, max_length=128)
+    name_en: Optional[str] = Field(None, max_length=128)
+    name_th: Optional[str] = Field(None, max_length=128)
 
 
 class DepartmentOut(BaseModel):
@@ -59,23 +64,23 @@ class DepartmentOut(BaseModel):
 
 # ---------- 用户 ----------
 class UserCreate(BaseModel):
-    username: str
+    username: str = Field(max_length=64)
     password: str = Field(min_length=6)
-    display_name: str = ""
-    email: str = ""
-    phone: str = ""
+    display_name: str = Field("", max_length=128)
+    email: str = Field("", max_length=128)
+    phone: str = Field("", max_length=32)
     dept_id: Optional[int] = None
-    role: str = "submitter"
+    role: str = Field("submitter", max_length=32)
     factory_ids: list[int] = []   # 授权工厂
 
 
 class UserUpdate(BaseModel):
-    display_name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
+    display_name: Optional[str] = Field(None, max_length=128)
+    email: Optional[str] = Field(None, max_length=128)
+    phone: Optional[str] = Field(None, max_length=32)
     dept_id: Optional[int] = None
-    role: Optional[str] = None
-    status: Optional[str] = None
+    role: Optional[str] = Field(None, max_length=32)
+    status: Optional[str] = Field(None, max_length=16)
     factory_ids: Optional[list[int]] = None
 
 
@@ -96,18 +101,18 @@ class UserOut(BaseModel):
 
 # ---------- 工厂 ----------
 class FactoryCreate(BaseModel):
-    code: str
-    name_zh: str
-    name_en: str = ""
-    name_th: str = ""
+    code: str = Field(max_length=32)
+    name_zh: str = Field(max_length=128)
+    name_en: str = Field("", max_length=128)
+    name_th: str = Field("", max_length=128)
     sort_order: int = 0
 
 
 class FactoryUpdate(BaseModel):
-    name_zh: Optional[str] = None
-    name_en: Optional[str] = None
-    name_th: Optional[str] = None
-    status: Optional[str] = None
+    name_zh: Optional[str] = Field(None, max_length=128)
+    name_en: Optional[str] = Field(None, max_length=128)
+    name_th: Optional[str] = Field(None, max_length=128)
+    status: Optional[str] = Field(None, max_length=16)
     sort_order: Optional[int] = None
 
 
@@ -126,23 +131,23 @@ class FactoryOut(BaseModel):
 # ---------- 订单 ----------
 class OrderCreate(BaseModel):
     factory_id: int
-    order_no: str
-    customer: str = ""
-    product: str = ""
+    order_no: str = Field(max_length=64)
+    customer: str = Field("", max_length=255)
+    product: str = Field("", max_length=255)
     quantity: int = 0
-    export_date: str = ""
-    status: str = "active"
+    export_date: str = Field("", max_length=32)
+    status: str = Field("active", max_length=16)
     note: str = ""
     owner_user_id: Optional[int] = None
 
 
 class OrderUpdate(BaseModel):
     factory_id: Optional[int] = None
-    customer: Optional[str] = None
-    product: Optional[str] = None
+    customer: Optional[str] = Field(None, max_length=255)
+    product: Optional[str] = Field(None, max_length=255)
     quantity: Optional[int] = None
-    export_date: Optional[str] = None
-    status: Optional[str] = None
+    export_date: Optional[str] = Field(None, max_length=32)
+    status: Optional[str] = Field(None, max_length=16)
     note: Optional[str] = None
     owner_user_id: Optional[int] = None
 
@@ -204,32 +209,32 @@ class OrderInstanceCreate(BaseModel):
     package_id: int
     owner_user_id: Optional[int] = None
     required: bool = True
-    due_date: str = ""
+    due_date: str = Field("", max_length=32)
 
 
 # ---------- 资料包 ----------
 class PackageCreate(BaseModel):
-    code: str
-    name_zh: str
-    name_en: str = ""
-    name_th: str = ""
+    code: str = Field(max_length=32)
+    name_zh: str = Field(max_length=255)
+    name_en: str = Field("", max_length=255)
+    name_th: str = Field("", max_length=255)
     dept_id: Optional[int] = None
     owner_user_id: Optional[int] = None
     review_focus: str = ""
-    due_date: str = ""
+    due_date: str = Field("", max_length=32)
     required: bool = True
 
 
 class PackageUpdate(BaseModel):
-    name_zh: Optional[str] = None
-    name_en: Optional[str] = None
-    name_th: Optional[str] = None
+    name_zh: Optional[str] = Field(None, max_length=255)
+    name_en: Optional[str] = Field(None, max_length=255)
+    name_th: Optional[str] = Field(None, max_length=255)
     dept_id: Optional[int] = None
     owner_user_id: Optional[int] = None
     review_focus: Optional[str] = None
-    due_date: Optional[str] = None
+    due_date: Optional[str] = Field(None, max_length=32)
     required: Optional[bool] = None
-    status: Optional[str] = None
+    status: Optional[str] = Field(None, max_length=16)
     sort_order: Optional[int] = None
 
 
@@ -292,7 +297,7 @@ class VersionOut(BaseModel):
 
 class VersionCreate(BaseModel):
     change_note: str = ""
-    project_code: str = ""
+    project_code: str = Field("", max_length=64)
 
 
 # ---------- 审核 ----------
