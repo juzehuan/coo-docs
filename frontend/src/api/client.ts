@@ -110,8 +110,8 @@ export async function upload<T>(url: string, form: FormData): Promise<T> {
   return r.data
 }
 
-export async function downloadBlob(url: string): Promise<Blob> {
-  const r = await client.get(url, { responseType: 'blob' })
+export async function downloadBlob(url: string, params?: unknown): Promise<Blob> {
+  const r = await client.get(url, { responseType: 'blob', params })
   return r.data
 }
 

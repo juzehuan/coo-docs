@@ -322,6 +322,16 @@ class AuditLogOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class AuditLogList(BaseModel):
+    """带命中总数的日志列表。
+
+    只返回一页数据时，界面无从区分"确实没有更多记录"与"被 limit 截断了"，
+    而审计场景里这两者的结论完全相反。total 让界面能如实说明。
+    """
+    total: int = 0
+    items: list[AuditLogOut] = []
+
+
 # ---------- NAS ----------
 class SyncRecordOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

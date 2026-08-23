@@ -17,6 +17,20 @@ export interface PasswordResetOut {
   password: string
 }
 
+export interface AuditQuery {
+  domain?: string
+  actor_id?: string
+  actor?: string
+  target?: string
+  start?: string
+  end?: string
+}
+
+export interface AuditLogList {
+  total: number
+  items: AuditLog[]
+}
+
 export interface NasConfig {
   mode: 's3' | 'local'
   endpoint_url: string

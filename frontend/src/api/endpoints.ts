@@ -2,7 +2,7 @@ import {
   del, downloadBlob, get, patch, post, put, upload,
 } from './client'
 import type {
-  Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
+  Attachment, AuditLogList, AuditQuery, ControlledItem, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
   OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, Role, SyncRecord, TodoItem, User, Version,
 } from '@/types'
@@ -148,9 +148,11 @@ export const controlled = {
 }
 
 export const audit = {
-  list: (params?: { domain?: string; actor_id?: string; actor?: string; target?: string; start?: string; end?: string; limit?: number }) =>
-    get<AuditLog[]>('/audit/logs', params),
-  exportCsv: () => downloadBlob('/audit/export'),
+  list: (params?: AuditQuery & { limit?: number }) =>
+    get<AuditLogList>('/audit/logs', params),
+  // 导出必须带上与列表相同的筛选：否则用户筛出十几条、导出却拿到全部日志，
+  // 而这份文件是要作为佐证材料交出去的
+  exportXlsx: (params?: AuditQuery) => downloadBlob('/audit/export', params),
 }
 
 export const nas = {

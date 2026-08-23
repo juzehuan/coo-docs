@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { App, Button, Card, DatePicker, Input, Select, Space, Table } from 'antd'
+import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Table } from 'antd'
 import { DownloadOutlined, SearchOutlined } from '@ant-design/icons'
 import type { Dayjs } from 'dayjs'
 import { errMessage } from '@/api/client'
@@ -8,15 +8,21 @@ import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { formatTime } from '@/utils/format'
 import PageHeader from '@/components/PageHeader'
-import type { AuditLog } from '@/types'
+import type { AuditLog, AuditQuery } from '@/types'
 
 const DOMAINS = ['auth', 'package', 'attachment', 'review', 'version', 'nas', 'export', 'org']
+
+// 单次拉取上限；命中数超过它时界面会明确提示，而不是让用户以为看到了全部
+const LIST_LIMIT = 1000
 
 export default function Audit() {
   const { t } = useI18n()
   const { user } = useAuth()
   const { message } = App.useApp()
   const [logs, setLogs] = useState<AuditLog[]>([])
+  // total 是命中总数（可能大于本次返回的条数）：只给一页数据时，界面无从区分
+  // "确实没有更多记录"与"被上限截断了"，而审计场景这两者结论完全相反
+  const [total, setTotal] = useState(0)
   const [domain, setDomain] = useState<string | undefined>()
   const [actor, setActor] = useState('')
   const [target, setTarget] = useState('')
@@ -24,24 +30,27 @@ export default function Audit() {
   const [loading, setLoading] = useState(true)
 
   // d：undefined = 用当前 state；null = 明确清除（Select 的 allowClear 触发时 state 尚未更新）
+  // 当前筛选条件：列表与导出共用同一份，避免"导出的内容和屏幕上不一样"
+  const query = (d?: string | null): AuditQuery => ({
+    domain: d === null ? undefined : (d ?? domain),
+    actor: actor.trim() || undefined,
+    target: target.trim() || undefined,
+    start: range?.[0]?.format('YYYY-MM-DD') || undefined,
+    end: range?.[1]?.format('YYYY-MM-DD') || undefined,
+  })
+
   const load = (d?: string | null) => {
     setLoading(true)
-    audit.list({
-      limit: 1000,
-      domain: d === null ? undefined : (d ?? domain),
-      actor: actor.trim() || undefined,
-      target: target.trim() || undefined,
-      start: range?.[0]?.format('YYYY-MM-DD') || undefined,
-      end: range?.[1]?.format('YYYY-MM-DD') || undefined,
-    }).then(setLogs)
-      .catch((e) => { setLogs([]); message.error(errMessage(e)) })   // 空列表不等于无日志，失败要说清楚
+    audit.list({ ...query(d), limit: LIST_LIMIT })
+      .then((r) => { setLogs(r.items); setTotal(r.total) })
+      .catch((e) => { setLogs([]); setTotal(0); message.error(errMessage(e)) })   // 空列表不等于无日志，失败要说清楚
       .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function exportXlsx() {
     try {
-      const blob = await audit.exportCsv()
+      const blob = await audit.exportXlsx(query())
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -49,7 +58,7 @@ export default function Audit() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (e: any) {
-      message.error(e?.message || 'export failed')
+      message.error(errMessage(e))
     }
   }
 
@@ -75,6 +84,12 @@ export default function Audit() {
         }
       />
       <Card variant="borderless" className="coo-card">
+      {/* 命中数超过单次上限时必须说清楚：否则"没有更多记录"与"被截断了"
+          在界面上长得一模一样，而审计场景两者结论完全相反 */}
+      {total > logs.length && (
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+          message={t('audit_truncated').replace('{shown}', String(logs.length)).replace('{total}', String(total))} />
+      )}
       <Table
         rowKey="id"
         loading={loading}
