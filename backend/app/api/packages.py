@@ -14,6 +14,7 @@ from app.core.rbac import (
 )
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
+from app.core.uploads import read_validated_upload
 from app.db import get_db
 from app.models import (
     Attachment, AuditDomain, Package, PackageVersion, User,
@@ -43,7 +44,18 @@ def _latest_version(db: Session, pkg_id: int):
     return (
         db.query(PackageVersion)
         .filter(PackageVersion.package_id == pkg_id)
-        .order_by(PackageVersion.created_at.desc())
+        .order_by(PackageVersion.id.desc())   # 按雪花 ID：created_at 是秒级精度，同秒创建时排序不确定
+        .first()
+    )
+
+
+def _lock_version(db: Session, vid: int) -> PackageVersion | None:
+    """行级锁重读版本行：与订单线 _lock_op 同理，防止审核与附件改动并发破坏状态机。"""
+    return (
+        db.query(PackageVersion)
+        .populate_existing()
+        .with_for_update()
+        .filter(PackageVersion.id == vid)
         .first()
     )
 
@@ -129,7 +141,7 @@ def package_detail(pkg_id: int, db: Session = Depends(get_db), user: User = Depe
     versions = (
         db.query(PackageVersion)
         .filter(PackageVersion.package_id == pkg_id)
-        .order_by(PackageVersion.created_at.desc())
+        .order_by(PackageVersion.id.desc())   # 按雪花 ID：created_at 是秒级精度，同秒创建时排序不确定
         .all()
     )
     return {
@@ -223,8 +235,8 @@ def _reset_status_on_edit(v: PackageVersion):
 async def upload_attachments(
     pkg_id: int, vid: int, request: Request,
     files: list[UploadFile] = File(...),
-    order_no: str = Form(""),
-    batch_no: str = Form(""),
+    order_no: str = Form("", max_length=128),   # 对齐 attachments 列宽
+    batch_no: str = Form("", max_length=128),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -238,21 +250,24 @@ async def upload_attachments(
         raise HTTPException(status_code=400, detail="已放行版本不可修改，请创建新版本")
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    created = []
+    # 先读入内存并校验（耗时段），尚未落盘、未写库
+    pending: list[tuple[bytes, str, str, str, str]] = []
     for f in files:
-        ext = os.path.splitext(f.filename)[1].lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            raise HTTPException(status_code=400, detail=f"不支持的文件类型：{ext}")
-        content = await f.read()
-        if len(content) > settings.MAX_FILE_MB * 1024 * 1024:
-            raise HTTPException(status_code=400, detail=f"文件超过 {settings.MAX_FILE_MB}MB 上限")
-        import hashlib
-        md5 = hashlib.md5(content).hexdigest()
+        content, ext, md5, oname = await read_validated_upload(f, settings.MAX_FILE_MB)
+        pending.append((content, ext, md5, oname, (f.content_type or "application/octet-stream")[:128]))
+    # 读取期间可能已被并发终审放行：加锁重读后按最新状态再判一次
+    v = _lock_version(db, vid)
+    if not v:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    if v.status == VersionStatus.RELEASED or v.locked:
+        raise HTTPException(status_code=400, detail="已放行版本不可修改，请创建新版本")
+    created = []
+    for content, ext, md5, fname, ctype in pending:
         att_id = next_id()
         stored = save_upload(content, ext)
         att = Attachment(
-            id=att_id, version_id=vid, file_name=stored, original_name=f.filename,
-            file_size=len(content), md5=md5, mime_type=f.content_type or "application/octet-stream",
+            id=att_id, version_id=vid, file_name=stored, original_name=fname,
+            file_size=len(content), md5=md5, mime_type=ctype,
             order_no=order_no, batch_no=batch_no, uploaded_by=user.id,
         )
         db.add(att)
@@ -276,7 +291,8 @@ def delete_attachment(pkg_id: int, vid: int, aid: int, request: Request,
         raise HTTPException(status_code=404, detail="资源不存在")
     if not can_edit_package(user, p):
         raise HTTPException(status_code=403, detail="无权操作")
-    if v.status == VersionStatus.RELEASED:
+    v = _lock_version(db, vid) or v   # 加锁重读，避免与并发终审放行竞态
+    if v.status == VersionStatus.RELEASED or v.locked:
         raise HTTPException(status_code=400, detail="已放行版本不可修改")
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
     reused = db.query(Attachment.id).filter(
@@ -293,7 +309,7 @@ def delete_attachment(pkg_id: int, vid: int, aid: int, request: Request,
 
 
 @router.get("/{pkg_id}/versions/{vid}/attachments/{aid}/file")
-def download_attachment(pkg_id: int, vid: int, aid: int, preview: bool = False,
+def download_attachment(pkg_id: int, vid: int, aid: int, request: Request, preview: bool = False,
                         db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     att = db.get(Attachment, aid)
     v = db.get(PackageVersion, vid) if att else None
@@ -305,7 +321,8 @@ def download_attachment(pkg_id: int, vid: int, aid: int, preview: bool = False,
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="文件不存在")
-    log_event(db, AuditDomain.ATTACHMENT, "download", actor=user,
+    # 记录 IP：规格 F-10 要求下载留痕含 IP
+    log_event(db, AuditDomain.ATTACHMENT, "download", actor=user, ip=client_ip(request),
               target=f"{att.original_name}")
     if preview and att.mime_type in PREVIEW_MIME:
         return FileResponse(path, media_type=att.mime_type, filename=att.original_name)
@@ -322,6 +339,7 @@ def submit_version(pkg_id: int, vid: int, request: Request, db: Session = Depend
         raise HTTPException(status_code=404, detail="资源不存在")
     if not can_edit_package(user, p):
         raise HTTPException(status_code=403, detail="无权操作")
+    v = _lock_version(db, vid) or v   # 与并发审核串行化
     if v.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
         raise HTTPException(status_code=400, detail="当前状态不可提交")
     if not v.attachments:
@@ -349,6 +367,7 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
     if not p or not v or v.package_id != pkg_id:
         raise HTTPException(status_code=404, detail="资源不存在")
 
+    v = _lock_version(db, vid) or v   # 加锁重读，与并发上传/删除附件串行化
     decision = payload.decision
     level = payload.level
     # 退回必须填写整改要求：先校验，避免状态/审计日志已落库后才报错
@@ -356,10 +375,11 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
         raise HTTPException(status_code=400, detail="退回必须填写整改要求")
 
     if level == ReviewLevel.DEPT:
-        if v.status != VersionStatus.PENDING_DEPT:
-            raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
+        # 先鉴权再校验状态，避免用状态码差异泄露流程进展
         if not can_review_dept(user, p.dept_id, db=db, submitted_by=v.submitted_by):
             raise HTTPException(status_code=403, detail="非本部门审核人")
+        if v.status != VersionStatus.PENDING_DEPT:
+            raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
         v.dept_reviewer_id = user.id
         v.dept_reviewed_at = __import__("datetime").datetime.utcnow()
         if decision == ReviewDecision.APPROVE:
@@ -371,10 +391,10 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
                   actor=user, ip=client_ip(request), target=f"{p.code}/{v.version_no}",
                   detail=payload.reason)
     elif level == ReviewLevel.COO:
-        if v.status != VersionStatus.PENDING_COO:
-            raise HTTPException(status_code=400, detail="当前不在待COO终审状态")
         if not is_coo(user):
             raise HTTPException(status_code=403, detail="仅 COO 终审人可终审")
+        if v.status != VersionStatus.PENDING_COO:
+            raise HTTPException(status_code=400, detail="当前不在待COO终审状态")
         v.coo_reviewer_id = user.id
         v.coo_reviewed_at = __import__("datetime").datetime.utcnow()
         if decision == ReviewDecision.APPROVE:
@@ -417,6 +437,8 @@ def withdraw_version(pkg_id: int, vid: int, request: Request,
     v = db.get(PackageVersion, vid)
     if not p or not v or v.package_id != pkg_id:
         raise HTTPException(status_code=404, detail="资源不存在")
+    # 与并发审核串行化：撤回同样是"检查状态后写状态"，不加锁会与终审放行竞态
+    v = _lock_version(db, vid) or v
     if v.status not in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
         raise HTTPException(status_code=400, detail="当前状态不可撤回")
     # 仅提交人本人/责任人本人或管理员可撤回

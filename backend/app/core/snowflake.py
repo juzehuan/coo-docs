@@ -4,6 +4,7 @@ Worker ID 分配（与既有设计规范一致）：
   1=IAM(账号/组织) 2=Audit(审计) 3=Platform Core(业务主体)
 业务实体统一使用 worker_id=3。
 """
+import threading
 import time
 from typing import Optional
 
@@ -26,29 +27,33 @@ class Snowflake:
         self.datacenter_id = datacenter_id
         self._lock_seq = 0
         self._last_ts = -1
+        # FastAPI 同步端点跑在线程池中，next_id 会被并发调用，
+        # 无锁访问 _lock_seq/_last_ts 会生成重复 ID（主键冲突）。
+        self._lock = threading.Lock()
 
     def _now(self) -> int:
         return int(time.time() * 1000)
 
     def next_id(self) -> int:
-        ts = self._now()
-        if ts == self._last_ts:
-            self._lock_seq = (self._lock_seq + 1) & self.MAX_SEQUENCE
-            if self._lock_seq == 0:
-                while ts <= self._last_ts:
-                    ts = self._now()
-        else:
-            self._lock_seq = 0
-        self._last_ts = ts
-        # 位域布局：时间戳 | datacenter_id | worker_id | 序列号，互不重叠
-        # datacenter(5) + worker(5) + sequence(12) = 22 位，与既有实现位移一致，
-        # 确保默认配置下生成值与旧版相同且不会超出 int64
-        return (
-            ((ts - self.EPOCH) << (self.DATACENTER_BITS + self.WORKER_BITS + self.SEQUENCE_BITS))
-            | (self.datacenter_id << (self.WORKER_BITS + self.SEQUENCE_BITS))
-            | (self.worker_id << self.SEQUENCE_BITS)
-            | self._lock_seq
-        )
+        with self._lock:
+            ts = self._now()
+            if ts == self._last_ts:
+                self._lock_seq = (self._lock_seq + 1) & self.MAX_SEQUENCE
+                if self._lock_seq == 0:
+                    while ts <= self._last_ts:
+                        ts = self._now()
+            else:
+                self._lock_seq = 0
+            self._last_ts = ts
+            # 位域布局：时间戳 | datacenter_id | worker_id | 序列号，互不重叠
+            # datacenter(5) + worker(5) + sequence(12) = 22 位，与既有实现位移一致，
+            # 确保默认配置下生成值与旧版相同且不会超出 int64
+            return (
+                ((ts - self.EPOCH) << (self.DATACENTER_BITS + self.WORKER_BITS + self.SEQUENCE_BITS))
+                | (self.datacenter_id << (self.WORKER_BITS + self.SEQUENCE_BITS))
+                | (self.worker_id << self.SEQUENCE_BITS)
+                | self._lock_seq
+            )
 
 
 _sf = Snowflake(worker_id=3)

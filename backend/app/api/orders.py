@@ -11,8 +11,11 @@ from app.core.config import settings
 from app.core.rbac import (
     can_edit_order, can_edit_order_package, export_viewer, get_current_user,
 )
+from app.core.csv_safe import csv_row
+from app.core.http_headers import content_disposition
 from app.core.snowflake import next_id
 from app.core.storage import save_upload
+from app.core.uploads import read_validated_upload
 from app.db import get_db
 from app.models import (
     Attachment, AuditDomain, Factory, Order, OrderPackage, Package, User,
@@ -21,6 +24,7 @@ from app.schemas import (
     AttachmentOut, Msg, OrderCreate, OrderDetailOut, OrderInstanceCreate, OrderOut,
     OrderPackageOut, OrderUpdate, ReviewRequest,
 )
+from app.services.nas_sync import archive_name, duplicate_names
 from app.services.notify import coo_reviewer_ids, dept_reviewer_ids, notify_users
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -75,8 +79,12 @@ def _purge_files(db: Session, atts: list) -> None:
                 pass
 
 
-def _order_row(db: Session, o: Order) -> dict:
-    fac = db.get(Factory, o.factory_id) if o.factory_id else None
+def _order_row(db: Session, o: Order, fac_map: dict | None = None) -> dict:
+    # 列表场景传入 fac_map，避免每行各查一次工厂（两年规模下等于数百条 SQL）
+    if fac_map is not None:
+        fac = fac_map.get(o.factory_id)
+    else:
+        fac = db.get(Factory, o.factory_id) if o.factory_id else None
     opkgs = o.packages
     released = sum(1 for p in opkgs if p.status == VersionStatus.RELEASED)
     total = len(opkgs)
@@ -105,7 +113,17 @@ def _op_out(op: OrderPackage) -> dict:
 # ---------- 列表 / 详情 ----------
 @router.get("", response_model=list[OrderOut])
 def list_orders(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return [_order_row(db, o) for o in _visible_orders_q(db, user).order_by(Order.created_at.desc()).all()]
+    # selectinload 一次性载入全部订单的资料包实例，工厂用一次查询做成字典：
+    # 否则 _order_row 会为每个订单各发一次查询（两年规模下等于数百条 SQL）
+    from sqlalchemy.orm import selectinload
+    fac_map = {f.id: f for f in db.query(Factory).all()}
+    rows = (
+        _visible_orders_q(db, user)
+        .options(selectinload(Order.packages))
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+    return [_order_row(db, o, fac_map) for o in rows]
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -167,6 +185,15 @@ def delete_order(order_id: int, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="订单不存在")
     if not can_edit_order(user, o):
         raise HTTPException(status_code=403, detail="仅责任人/管理员可删除订单")
+    # 保护已放行归档：单独移除已放行实例已被拒绝，但删除整个订单会经 cascade
+    # 连带销毁其下已终审放行且锁定的实例与附件，绕开"已放行不可删除、历史永久留存"的约束。
+    locked = [op for op in o.packages
+              if op.locked or op.status == VersionStatus.RELEASED]
+    if locked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"订单含 {len(locked)} 个已放行归档实例，不可删除；如需停用请将订单状态改为已关闭",
+        )
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
     atts = [att for op in o.packages for att in op.attachments]
     db.delete(o)
@@ -234,6 +261,7 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
 def submit_order_package(order_id: int, op_id: int, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    op = _lock_op(db, op_id) or op   # 与并发审核串行化
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     if op.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
@@ -248,7 +276,7 @@ def submit_order_package(order_id: int, op_id: int, request: Request,
     log_event(db, AuditDomain.REVIEW, "op_submit", actor=user, ip=client_ip(request),
               target=f"{o.order_no}/{op.package.code}")
     dept_id = op.package.dept_id if op.package else None
-    notify_users(db, dept_reviewer_ids(db, dept_id),
+    notify_users(db, dept_reviewer_ids(db, dept_id, factory_id=o.factory_id),
                  title=f"{o.order_no}/{op.package.code} 待部门审核",
                  body=op.package.name_zh, ntype="submit", link=f"/orders/{o.id}", exclude=user.id)
     db.commit()
@@ -259,17 +287,20 @@ def submit_order_package(order_id: int, op_id: int, request: Request,
 def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    # 加锁重读：与并发的上传/删除附件串行化，避免基于旧快照写回破坏状态机
+    op = _lock_op(db, op_id) or op
     from app.core.rbac import can_review_dept, is_coo
     decision, level = payload.decision, payload.level
     # 退回必须填写整改要求：先校验，避免状态/审计日志已落库后才报错
     if decision == ReviewDecision.REJECT and not payload.reason:
         raise HTTPException(status_code=400, detail="退回必须填写整改要求")
     if level == ReviewLevel.DEPT:
-        if op.status != VersionStatus.PENDING_DEPT:
-            raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
+        # 先鉴权再校验状态：反过来会让无审核权的用户通过 400/403 的差异探知流程进展
         if not can_review_dept(user, op.package.dept_id if op.package else None,
                                submitted_by=op.submitted_by, db=db):
             raise HTTPException(status_code=403, detail="非本部门审核人")
+        if op.status != VersionStatus.PENDING_DEPT:
+            raise HTTPException(status_code=400, detail="当前不在待部门审核状态")
         op.dept_reviewer_id = user.id
         op.dept_reviewed_at = _utcnow()
         if decision == ReviewDecision.APPROVE:
@@ -280,10 +311,10 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
         log_event(db, AuditDomain.REVIEW, "op_dept_approve" if decision == "approve" else "op_dept_reject",
                   actor=user, ip=client_ip(request), target=f"{o.order_no}/{op_id}", detail=payload.reason)
     elif level == ReviewLevel.COO:
-        if op.status != VersionStatus.PENDING_COO:
-            raise HTTPException(status_code=400, detail="当前不在待COO终审状态")
         if not is_coo(user):
             raise HTTPException(status_code=403, detail="仅 COO 终审人可终审")
+        if op.status != VersionStatus.PENDING_COO:
+            raise HTTPException(status_code=400, detail="当前不在待COO终审状态")
         op.coo_reviewer_id = user.id
         op.coo_reviewed_at = _utcnow()
         if decision == ReviewDecision.APPROVE:
@@ -301,7 +332,7 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
     recipient = op.owner_user_id or op.submitted_by
     pcode = op.package.code if op.package else ""
     if level == ReviewLevel.DEPT and decision == ReviewDecision.APPROVE:
-        notify_users(db, coo_reviewer_ids(db),
+        notify_users(db, coo_reviewer_ids(db, factory_id=o.factory_id),
                      title=f"{o.order_no}/{pcode} 待COO终审",
                      body=op.package.name_zh if op.package else "", ntype="coo_review",
                      link=f"/orders/{o.id}", exclude=user.id)
@@ -326,6 +357,9 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
                            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """提交人撤回：待部门审核 / 待COO终审的实例可撤回，撤回复审后重新提交。"""
     o, op = _get_op(db, order_id, op_id, user)
+    # 与并发审核串行化：撤回同样是"检查状态后写状态"，不加锁时可与终审放行竞态，
+    # 产生 locked=True 却显示已撤回的破损状态（实测 5 次并发中复现 2 次）
+    op = _lock_op(db, op_id) or op
     if op.status not in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
         raise HTTPException(status_code=400, detail="当前状态不可撤回")
     # 仅提交人本人/责任人本人或管理员可撤回
@@ -340,7 +374,7 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
               target=f"{o.order_no}/{op_id}")
     dept_id = op.package.dept_id if op.package else None
     pcode = op.package.code if op.package else ""
-    notify_users(db, dept_reviewer_ids(db, dept_id),
+    notify_users(db, dept_reviewer_ids(db, dept_id, factory_id=o.factory_id),
                  title=f"{o.order_no}/{pcode} 已撤回",
                  body=op.package.name_zh if op.package else "", ntype="withdrawn",
                  link=f"/orders/{o.id}", exclude=user.id)
@@ -353,7 +387,7 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
 async def upload_order_attachment(
     order_id: int, op_id: int, request: Request,
     files: list[UploadFile] = File(...),
-    batch_no: str = Form(""),
+    batch_no: str = Form("", max_length=128),   # 对齐 attachments.batch_no 列宽
     db: Session = Depends(get_db), user: User = Depends(get_current_user),
 ):
     o, op = _get_op(db, order_id, op_id, user)
@@ -362,21 +396,24 @@ async def upload_order_attachment(
     if op.locked:
         raise HTTPException(status_code=400, detail="已放行版本不可修改，请移除后重新实例化")
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    created = []
+    # 先把文件读入内存并校验（耗时段），此时尚未落盘、未写库
+    pending: list[tuple[bytes, str, str, str, str]] = []
     for f in files:
-        ext = os.path.splitext(f.filename)[1].lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            raise HTTPException(status_code=400, detail=f"不支持的文件类型：{ext}")
-        content = await f.read()
-        if len(content) > settings.MAX_FILE_MB * 1024 * 1024:
-            raise HTTPException(status_code=400, detail=f"文件超过 {settings.MAX_FILE_MB}MB 上限")
-        import hashlib
-        md5 = hashlib.md5(content).hexdigest()
+        content, ext, md5, oname = await read_validated_upload(f, settings.MAX_FILE_MB)
+        pending.append((content, ext, md5, oname, (f.content_type or "application/octet-stream")[:128]))
+    # 读取期间可能已被并发终审放行：加锁重读后按最新状态再判一次，避免向已锁定版本追加附件
+    op = _lock_op(db, op_id)
+    if not op:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    if op.locked or op.status == VersionStatus.RELEASED:
+        raise HTTPException(status_code=400, detail="已放行版本不可修改，请移除后重新实例化")
+    created = []
+    for content, ext, md5, fname, ctype in pending:
         att_id = next_id()
         stored = save_upload(content, ext)
         att = Attachment(
-            id=att_id, order_package_id=op.id, file_name=stored, original_name=f.filename,
-            file_size=len(content), md5=md5, mime_type=f.content_type or "application/octet-stream",
+            id=att_id, order_package_id=op.id, file_name=stored, original_name=fname,
+            file_size=len(content), md5=md5, mime_type=ctype,
             order_no=o.order_no, batch_no=batch_no, uploaded_by=user.id,
         )
         db.add(att)
@@ -396,10 +433,12 @@ def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Reques
     o, op = _get_op(db, order_id, op_id, user)
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
+    # 加锁重读，避免与并发终审放行竞态导致向已锁定版本删除附件
+    op = _lock_op(db, op_id) or op
     att = db.get(Attachment, aid)
     if not att or att.order_package_id != op.id:
         raise HTTPException(status_code=404, detail="附件不存在")
-    if op.locked:
+    if op.locked or op.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行版本不可修改")
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
     _purge_files(db, [att])
@@ -412,7 +451,7 @@ def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Reques
 
 
 @router.get("/{order_id}/packages/{op_id}/attachments/{aid}/file")
-def download_order_attachment(order_id: int, op_id: int, aid: int, preview: bool = False,
+def download_order_attachment(order_id: int, op_id: int, aid: int, request: Request, preview: bool = False,
                               db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
     att = db.get(Attachment, aid)
@@ -421,7 +460,9 @@ def download_order_attachment(order_id: int, op_id: int, aid: int, preview: bool
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="文件不存在")
-    log_event(db, AuditDomain.ATTACHMENT, "op_download", actor=user, target=f"{att.original_name}")
+    # 记录 IP：规格 F-10 要求下载留痕含 IP，这是追溯核查资料外泄去向的关键线索
+    log_event(db, AuditDomain.ATTACHMENT, "op_download", actor=user, ip=client_ip(request),
+              target=f"{att.original_name}")
     if preview and att.mime_type in PREVIEW_MIME:
         return FileResponse(path, media_type=att.mime_type, filename=att.original_name)
     return FileResponse(path, filename=att.original_name)
@@ -440,8 +481,7 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
     lines = [",".join(header)]
     for op in sorted(o.packages, key=lambda x: x.package.code if x.package else ""):
         pkg = op.package
-        _q = lambda c: str(c).replace(chr(34), chr(34) * 2)
-        lines.append(",".join(f'"{_q(c)}"' for c in [
+        lines.append(csv_row([
             fac.code if fac else "", o.order_no, pkg.code if pkg else "",
             pkg.name_zh if pkg else "", op.status, str(op.owner_user_id or ""),
             str(len(op.attachments)), "是" if op.locked else "否", op.due_date,
@@ -449,7 +489,7 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
     csv = "\n".join(lines)
     log_event(db, AuditDomain.EXPORT, "order_export", actor=user, ip=client_ip(request), target=o.order_no)
     return Response(content="\ufeff" + csv, media_type="text/csv",
-                    headers={"Content-Disposition": f"attachment; filename=order_{o.order_no}.csv"})
+                    headers={"Content-Disposition": content_disposition(f"order_{o.order_no}.csv")})
 
 
 @router.get("/{order_id}/export/zip")
@@ -470,29 +510,31 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        manifest = [["工厂", "订单号", "资料包编号", "附件原名", "存储文件名", "大小(字节)"]]
+        manifest = [["工厂", "订单号", "资料包编号", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
         for op in sorted(o.packages, key=lambda x: (x.package.code if x.package else "", x.id)):
             pkg_code = op.package.code if op.package else "NA"
+            # 同一资料包内的同名附件（如多个供应商各自的"发票.pdf"）若都用原文件名，
+            # 在 ZIP 里会生成路径完全相同的条目，解压时互相覆盖 —— 交付给核查方的
+            # 材料静默缺件，而清单仍列出全部。复用 NAS 归档的命名规则以保持一致。
+            dup = duplicate_names(op.attachments)
             for att in op.attachments:
                 src = os.path.join(settings.UPLOAD_DIR, att.file_name)
                 if not os.path.exists(src):
                     continue
                 # 安全化归档目录名与文件名，防路径穿越（ZIP Slip）
                 safe_code = re.sub(r"[^A-Za-z0-9_\-\u4e00-\u9fff]", "_", pkg_code)
-                safe_name = re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff]", "_", att.original_name or att.file_name)
+                safe_name = archive_name(att, dup)
                 arc = f"{fac_code}/{safe_order}/{safe_code}/{safe_name}"
                 zf.write(src, arc)
-                manifest.append([fac_code, o.order_no, pkg_code, att.original_name, att.file_name,
-                                 str(att.file_size)])
-        _q = lambda c: str(c).replace(chr(34), chr(34) * 2)
-        meta = "\n".join(",".join(f'"{_q(c)}"' for c in row) for row in manifest)
+                manifest.append([fac_code, o.order_no, pkg_code, safe_name, att.original_name,
+                                 att.file_name, str(att.file_size), att.md5 or ""])
+        meta = "\n".join(csv_row(row) for row in manifest)
         zf.writestr("_manifest.csv", "\ufeff" + meta)
     buf.seek(0)
     log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request), target=o.order_no)
-    safe_no = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no)
     return StreamingResponse(
         buf, media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=order_{safe_no}_archive.zip"},
+        headers={"Content-Disposition": content_disposition(f"order_{o.order_no}_archive.zip")},
     )
 
 
@@ -500,6 +542,24 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
 def _utcnow():
     import datetime
     return datetime.datetime.utcnow()
+
+
+def _lock_op(db: Session, op_id: int) -> OrderPackage | None:
+    """行级锁重读订单资料包实例。
+
+    审核与上传/删除附件都会改写状态机（status/locked），二者并发时若各自基于
+    进入时的旧快照写回，会产生 locked=True 但 status=pending_dept 这类破损状态，
+    并让已放行版本被追加附件（违反"放行即锁定"的合规约束）。
+    改写前统一在此加锁重读，让并发请求串行化：后到者看到的是前者提交后的真实状态。
+    populate_existing 强制刷新身份映射中的旧属性；SQLite 无 FOR UPDATE，方言会自动忽略。
+    """
+    return (
+        db.query(OrderPackage)
+        .populate_existing()
+        .with_for_update()
+        .filter(OrderPackage.id == op_id)
+        .first()
+    )
 
 
 def _get_op(db: Session, order_id: int, op_id: int, user: User):
