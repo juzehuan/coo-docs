@@ -18,7 +18,7 @@ from app.core.storage import save_upload
 from app.core.uploads import read_validated_upload
 from app.db import get_db
 from app.models import (
-    Attachment, AuditDomain, Factory, Order, OrderPackage, Package, User,
+    Attachment, AuditDomain, Factory, Notification, Order, OrderPackage, Package, User,
 )
 from app.schemas import (
     AttachmentOut, Msg, OrderCreate, OrderDetailOut, OrderInstanceCreate, OrderOut,
@@ -196,6 +196,10 @@ def delete_order(order_id: int, request: Request, db: Session = Depends(get_db),
         )
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
     atts = [att for op in o.packages for att in op.attachments]
+    # 一并清理指向该订单的通知：link 是字符串字段不受外键约束，订单删除后
+    # 这些通知会永久留存成死链接，用户点进去只看到空白页且无从判断原因
+    db.query(Notification).filter(Notification.link == f"/orders/{o.id}").delete(
+        synchronize_session=False)
     db.delete(o)
     db.commit()
     _purge_files(db, atts)

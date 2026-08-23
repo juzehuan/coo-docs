@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Typography, Upload,
+import { App, Button, Card, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Typography, Upload,
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -173,7 +173,16 @@ export default function OrderDetail() {
   }, [load])
 
   if (loading) return <Card variant="borderless" loading />
-  if (!order) return <Card variant="borderless">{t('no_data')}</Card>
+  // 明确区分"加载不到"与"没有数据"：通知里可能残留指向已删除订单的链接，
+  // 只显示"暂无数据"会让用户以为系统出错而非该订单已不存在
+  if (!order) return (
+    <Result
+      status="404"
+      title="404"
+      subTitle={t('order_not_found')}
+      extra={<Button type="primary" onClick={() => nav('/orders')}>{t('orders')}</Button>}
+    />
+  )
 
   const canExport = user!.role !== 'submitter' && user!.role !== 'dept_reviewer'
   // 增删订单资料包/删订单：COO/管理员任意；提交人仅本人负责订单（与后端 can_edit_order 对齐）

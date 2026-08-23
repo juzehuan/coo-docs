@@ -5,6 +5,7 @@ type Dict = Record<string, string>
 const zh: Dict = {
   search: '查询',
   no_permission: '你没有访问此页面的权限',
+  order_not_found: '该订单不存在或已被删除',
   demo_login: '演示账号一键登录',
   request_failed: '请求失败',
   sec_settings: '安全设置',
@@ -170,6 +171,7 @@ const zh: Dict = {
 const en: Dict = {
   search: 'Search',
   no_permission: 'You do not have permission to view this page',
+  order_not_found: 'This order does not exist or has been deleted',
   demo_login: 'Demo quick sign-in',
   request_failed: 'Request failed',
   sec_settings: 'Security',
@@ -335,6 +337,7 @@ const en: Dict = {
 const th: Dict = {
   search: 'ค้นหา',
   no_permission: 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้',
+  order_not_found: 'ไม่พบคำสั่งซื้อนี้ หรือถูกลบไปแล้ว',
   demo_login: 'เข้าสู่ระบบด่วนด้วยบัญชีสาธิต',
   request_failed: 'คำขอล้มเหลว',
   sec_settings: 'การตั้งค่าความปลอดภัย',
