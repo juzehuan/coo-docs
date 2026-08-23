@@ -8,6 +8,7 @@ import { downloadFile, errMessage } from '@/api/client'
 import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { useSubmit } from '@/hooks/useSubmit'
 import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentPreview from '@/components/AttachmentPreview'
@@ -150,6 +151,7 @@ export default function OrderDetail() {
   const { id } = useParams()
   const { user } = useAuth()
   const { t, lang } = useI18n()
+  const { loading: submitting, run: submitRun } = useSubmit()
   const nav = useNavigate()
   const { message, modal } = App.useApp()
   const [order, setOrder] = useState<OrderDetailResp | null>(null)
@@ -193,13 +195,12 @@ export default function OrderDetail() {
 
   async function addPkg() {
     if (!order) return
-    const v = await form.validateFields()
-    try {
-      await orders.addPackage(order.id, { package_id: v.package_id, due_date: v.due_date || '' })
-      message.success(t('add_package')); setOpen(false); form.resetFields(); load()
-    } catch (e) {
-      message.error(errMessage(e))   // 如"该资料包已在订单中"，原先失败时无任何提示
-    }
+    const v = await form.validateFields().catch(() => null)
+    if (!v) return
+    const ok = await submitRun(
+      () => orders.addPackage(order.id, { package_id: v.package_id, due_date: v.due_date || '' }),
+      t('add_package'))
+    if (ok) { setOpen(false); form.resetFields(); load() }
   }
   function removeOp(op: OrderPackage) {
     if (!order) return
@@ -267,7 +268,8 @@ export default function OrderDetail() {
         />
       </Card>
 
-      <Modal title={t('add_package')} open={open} onOk={addPkg} onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={t('add_package')} open={open} onOk={addPkg} confirmLoading={submitting}
+        onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={form} layout="vertical">
           <Form.Item name="package_id" label={t('packages')} rules={[{ required: true }]}>
             <Select options={templates.map((p) => ({ label: `${p.code} · ${typeName(p)}`, value: p.id }))} />

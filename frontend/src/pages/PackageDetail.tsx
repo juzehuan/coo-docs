@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { App, Button, Card, Descriptions, Divider, Space, Tabs, Tag, Typography } from 'antd'
 import { ArrowLeftOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
@@ -23,6 +23,9 @@ export default function PackageDetail() {
   const [pkg, setPkg] = useState<PackageDetailResp | null>(null)
   const [activeVid, setActiveVid] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  // ref 而非 state：state 要等重渲染才生效，同一批次内的连点可能全都读到旧值
+  const busyRef = useRef(false)
 
   const load = useCallback(() => {
     if (!id) return
@@ -50,13 +53,21 @@ export default function PackageDetail() {
     (ver.status === 'pending_dept' || ver.status === 'pending_coo')
 
   // 统一补齐错误提示：原先失败时静默无反馈（如"请先上传至少一个附件""当前状态不可提交"）
+  // busy 防重：OrderDetail 的同名函数早有此保护，这里此前遗漏——而「发起新版本」
+  // 恰恰不是幂等操作，实测连点三次真的创建了 V1.0/V1.1/V1.2 三个版本。
   async function run(fn: () => Promise<unknown>, okMsg: string) {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
     try {
       await fn()
       message.success(okMsg)
       load()
     } catch (e) {
       message.error(errMessage(e))
+    } finally {
+      busyRef.current = false
+      setBusy(false)
     }
   }
 
@@ -80,7 +91,7 @@ export default function PackageDetail() {
         title={`${pkg.code} · ${lang === 'en' ? pkg.name_en : lang === 'th' ? pkg.name_th : pkg.name_zh}`}
         desc={pkg.review_focus ? `${t('review_focus')}：${pkg.review_focus}` : undefined}
         extra={<Space>
-          <Button icon={<PlusOutlined />} onClick={newVersion}>{t('new_version')}</Button>
+          <Button icon={<PlusOutlined />} onClick={newVersion} loading={busy} disabled={busy}>{t('new_version')}</Button>
           {canWithdraw && <Button danger icon={<UndoOutlined />} onClick={withdrawVersion}>{t('withdraw')}</Button>}
           {ver && canEdit && ver.attachments.length > 0 && <Button type="primary" icon={<SendOutlined />} onClick={submitVersion}>{t('submit')}</Button>}
         </Space>}

@@ -4,6 +4,7 @@ import { EditOutlined, PlusOutlined, ReloadOutlined, SafetyOutlined, StopOutline
 import { factories, org } from '@/api/endpoints'
 import { clearToken, errMessage } from '@/api/client'
 import { localName, useI18n } from '@/i18n'
+import { useSubmit } from '@/hooks/useSubmit'
 import RoleTag from '@/components/RoleTag'
 import PageHeader from '@/components/PageHeader'
 import { ROLES } from '@/types'
@@ -11,6 +12,7 @@ import type { Department, Factory, User } from '@/types'
 
 export default function Org() {
   const { t, lang } = useI18n()
+  const { loading: submitting, run: submitRun } = useSubmit()
   const { message } = App.useApp()
   const [depts, setDepts] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -36,20 +38,22 @@ export default function Org() {
   const [deptOpen, setDeptOpen] = useState(false)
   const [deptForm] = Form.useForm()
   async function submitDept() {
-    const v = await deptForm.validateFields()
-    await org.createDepartment(v)
-    message.success(t('create'))
-    setDeptOpen(false); deptForm.resetFields(); load()
+    const v = await deptForm.validateFields().catch(() => null)
+    if (!v) return
+    if (await submitRun(() => org.createDepartment(v), t('create'))) {
+      setDeptOpen(false); deptForm.resetFields(); load()
+    }
   }
 
   // ---- 工厂 ----
   const [factOpen, setFactOpen] = useState(false)
   const [factForm] = Form.useForm()
   async function submitFactory() {
-    const v = await factForm.validateFields()
-    await factories.create(v)
-    message.success(t('create'))
-    setFactOpen(false); factForm.resetFields(); load()
+    const v = await factForm.validateFields().catch(() => null)
+    if (!v) return
+    if (await submitRun(() => factories.create(v), t('create'))) {
+      setFactOpen(false); factForm.resetFields(); load()
+    }
   }
 
   // 工厂启停：规格「支持停用/启用」，后端 PATCH /factories/{id} 一直存在但无界面入口。
@@ -76,10 +80,12 @@ export default function Org() {
   const [userOpen, setUserOpen] = useState(false)
   const [userForm] = Form.useForm()
   async function submitUser() {
-    const v = await userForm.validateFields()
-    await org.createUser({ ...v, dept_id: v.dept_id || null, factory_ids: v.factory_ids || [] })
-    message.success(t('create'))
-    setUserOpen(false); userForm.resetFields(); load()
+    const v = await userForm.validateFields().catch(() => null)
+    if (!v) return
+    const ok = await submitRun(
+      () => org.createUser({ ...v, dept_id: v.dept_id || null, factory_ids: v.factory_ids || [] }),
+      t('create'))
+    if (ok) { setUserOpen(false); userForm.resetFields(); load() }
   }
   const [pwdReset, setPwdReset] = useState<{ username: string; password: string } | null>(null)
   async function resetPwd(r: User) {
@@ -98,14 +104,12 @@ export default function Org() {
     })
   }
   async function submitEditUser() {
-    const v = await editForm.validateFields()
-    try {
-      await org.updateUser(editUser!.id, { ...v, dept_id: v.dept_id || null, factory_ids: v.factory_ids || [] })
-      message.success(t('save'))
-      setEditUser(null); load()
-    } catch (e) {
-      message.error(errMessage(e))
-    }
+    const v = await editForm.validateFields().catch(() => null)
+    if (!v) return
+    const ok = await submitRun(
+      () => org.updateUser(editUser!.id, { ...v, dept_id: v.dept_id || null, factory_ids: v.factory_ids || [] }),
+      t('save'))
+    if (ok) { setEditUser(null); load() }
   }
   function toggleUserStatus(r: User) {
     const disabling = r.status === 'active'
@@ -136,13 +140,10 @@ export default function Org() {
     editDeptForm.setFieldsValue({ name_zh: d.name_zh, name_en: d.name_en, name_th: d.name_th })
   }
   async function submitEditDept() {
-    const v = await editDeptForm.validateFields()
-    try {
-      await org.updateDepartment(editDept!.id, v)
-      message.success(t('save'))
+    const v = await editDeptForm.validateFields().catch(() => null)
+    if (!v) return
+    if (await submitRun(() => org.updateDepartment(editDept!.id, v), t('save'))) {
       setEditDept(null); load()
-    } catch (e) {
-      message.error(errMessage(e))
     }
   }
 
@@ -269,7 +270,7 @@ export default function Org() {
         ]}
       />
 
-      <Modal title={t('create_dept')} open={deptOpen} onOk={submitDept} onCancel={() => setDeptOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={t('create_dept')} open={deptOpen} onOk={submitDept} confirmLoading={submitting} onCancel={() => setDeptOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={deptForm} layout="vertical">
           <Form.Item name="code" label={t('dept_code')} rules={[{ required: true }]}><Input maxLength={32} /></Form.Item>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
@@ -278,7 +279,7 @@ export default function Org() {
         </Form>
       </Modal>
 
-      <Modal title={t('create_factory')} open={factOpen} onOk={submitFactory} onCancel={() => setFactOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={t('create_factory')} open={factOpen} onOk={submitFactory} confirmLoading={submitting} onCancel={() => setFactOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={factForm} layout="vertical">
           <Form.Item name="code" label={t('factory_code')} rules={[{ required: true }]}><Input maxLength={32} placeholder="RMA / WEV" /></Form.Item>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
@@ -287,7 +288,7 @@ export default function Org() {
         </Form>
       </Modal>
 
-      <Modal title={t('create_user')} open={userOpen} onOk={submitUser} onCancel={() => setUserOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={t('create_user')} open={userOpen} onOk={submitUser} confirmLoading={submitting} onCancel={() => setUserOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter', password: 'user123' }}>
           <Form.Item name="username" label={t('username')} rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
           <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
@@ -299,7 +300,7 @@ export default function Org() {
           </Form.Item>
         </Form>
       </Modal>
-      <Modal title={`${t('edit')} · ${editUser?.display_name || editUser?.username || ''}`} open={!!editUser} onOk={submitEditUser} onCancel={() => setEditUser(null)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={`${t('edit')} · ${editUser?.display_name || editUser?.username || ''}`} open={!!editUser} onOk={submitEditUser} confirmLoading={submitting} onCancel={() => setEditUser(null)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={editForm} layout="vertical">
           <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
           <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
@@ -310,7 +311,7 @@ export default function Org() {
         </Form>
       </Modal>
 
-      <Modal title={`${t('edit')} · ${editDept?.code || ''}`} open={!!editDept} onOk={submitEditDept} onCancel={() => setEditDept(null)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={`${t('edit')} · ${editDept?.code || ''}`} open={!!editDept} onOk={submitEditDept} confirmLoading={submitting} onCancel={() => setEditDept(null)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={editDeptForm} layout="vertical">
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>

@@ -6,6 +6,7 @@ import { errMessage } from '@/api/client'
 import { org, packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { localName, useI18n } from '@/i18n'
+import { useSubmit } from '@/hooks/useSubmit'
 import { STATUS_LABELS } from '@/i18n/messages'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
@@ -16,6 +17,7 @@ const STATUS_FILTERS = ['none', 'draft', 'pending_dept', 'pending_coo', 'release
 
 export default function Packages() {
   const { t, lang } = useI18n()
+  const { loading: submitting, run: submitRun } = useSubmit()
   const { user } = useAuth()
   const nav = useNavigate()
   const { message } = App.useApp()
@@ -82,21 +84,13 @@ export default function Packages() {
     setOpen(true)
   }
   async function save() {
-    const v = await form.validateFields()
+    const v = await form.validateFields().catch(() => null)
+    if (!v) return
     const payload = { ...v, dept_id: v.dept_id ?? null, owner_user_id: v.owner_user_id ?? null, required: !!v.required }
-    try {
-      if (editing) {
-        await packages.update(editing.id, payload)
-        message.success(t('save'))
-      } else {
-        await packages.create(payload)
-        message.success(t('create'))
-      }
-      setOpen(false)
-      load()
-    } catch (e: any) {
-      message.error(errMessage(e))
-    }
+    const ok = await submitRun(
+      () => (editing ? packages.update(editing.id, payload) : packages.create(payload)),
+      editing ? t('save') : t('create'))
+    if (ok) { setOpen(false); load() }
   }
 
   return (
@@ -140,6 +134,7 @@ export default function Packages() {
         title={editing ? `${t('edit')} · ${editing.code}` : t('create')}
         open={open}
         onOk={save}
+        confirmLoading={submitting}
         onCancel={() => setOpen(false)}
         width={560}
         okText={t('save')}

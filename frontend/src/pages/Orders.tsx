@@ -5,12 +5,14 @@ import { DownloadOutlined, EyeOutlined, FileZipOutlined, PlusOutlined, SearchOut
 import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { localName, useI18n } from '@/i18n'
+import { useSubmit } from '@/hooks/useSubmit'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import type { Factory, Order } from '@/types'
 
 export default function Orders() {
   const { t, lang } = useI18n()
+  const { loading: submitting, run: submitRun } = useSubmit()
   const { user } = useAuth()
   const { message } = App.useApp()
   const nav = useNavigate()
@@ -44,10 +46,12 @@ export default function Orders() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   async function submit() {
-    const v = await form.validateFields()
-    await orders.create(v)
-    message.success(t('create'))
-    setOpen(false); form.resetFields(); load()
+    // 校验失败交给 antd 行内提示，不进 submitRun（否则会弹出无意义的错误 toast）
+    const v = await form.validateFields().catch(() => null)
+    if (!v) return
+    const ok = await submitRun(() => orders.create(v), t('create'))
+    // 仅成功时关窗重置：失败时保留用户已填内容
+    if (ok) { setOpen(false); form.resetFields(); load() }
   }
 
   return (
@@ -91,7 +95,8 @@ export default function Orders() {
         />
       </Card>
 
-      <Modal title={t('create_order')} open={open} onOk={submit} onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
+      <Modal title={t('create_order')} open={open} onOk={submit} confirmLoading={submitting}
+        onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={form} layout="vertical" initialValues={{ status: 'active', quantity: 0, required: true }}>
           <Form.Item name="factory_id" label={t('factory')} rules={[{ required: true }]}>
             {/* 已停用工厂不再出现在新建订单可选项（后端同样拒绝，见 orders.create_order）；

@@ -9,6 +9,7 @@ import { errMessage } from '@/api/client'
 import { auth } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { useSubmit } from '@/hooks/useSubmit'
 import { ROUTE_ROLES } from '@/routes'
 import { SERIF } from '@/theme'
 import LanguageSwitcher from './LanguageSwitcher'
@@ -41,6 +42,7 @@ const MENU: MenuItem[] = ROUTE_ROLES.map((r) => ({ key: r.key, icon: ICONS[r.key
 export default function AppLayout({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth()
   const { t } = useI18n()
+  const { loading: submitting, run: submitRun } = useSubmit()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
@@ -56,13 +58,11 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const [pwdOpen, setPwdOpen] = useState(false)
   const [pwdForm] = Form.useForm()
   async function submitPwd() {
-    const v = await pwdForm.validateFields()
-    try {
-      await auth.changePassword(v.old_password, v.new_password)
-      message.success(t('save'))
+    const v = await pwdForm.validateFields().catch(() => null)
+    if (!v) return
+    // 连点尤其要防：第二次请求的"原密码"已经失效，用户会在成功之后紧接着看到一条报错
+    if (await submitRun(() => auth.changePassword(v.old_password, v.new_password), t('save'))) {
       setPwdOpen(false); pwdForm.resetFields()
-    } catch (e) {
-      message.error(errMessage(e))
     }
   }
 
@@ -157,7 +157,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
         </Content>
       </Layout>
 
-      <Modal title={t('change_password')} open={pwdOpen} onOk={submitPwd}
+      <Modal title={t('change_password')} open={pwdOpen} onOk={submitPwd} confirmLoading={submitting}
              onCancel={() => { setPwdOpen(false); pwdForm.resetFields() }}
              okText={t('save')} cancelText={t('cancel')} destroyOnHidden>
         <Form form={pwdForm} layout="vertical">
