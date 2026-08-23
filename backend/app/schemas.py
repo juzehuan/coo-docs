@@ -202,6 +202,12 @@ class OrderOut(BaseModel):
     completion: float = 0.0
 
 
+class OrderList(BaseModel):
+    """带命中总数的订单列表（服务端搜索+分页）。"""
+    total: int = 0
+    items: list[OrderOut] = []
+
+
 class OrderDetailOut(OrderOut):
     packages: list[OrderPackageOut] = []
 

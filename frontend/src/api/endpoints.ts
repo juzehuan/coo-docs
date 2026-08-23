@@ -2,7 +2,7 @@ import {
   del, downloadBlob, get, patch, post, put, upload,
 } from './client'
 import type {
-  Attachment, AuditLogList, AuditQuery, ControlledItem, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
+  Attachment, AuditLogList, AuditQuery, ControlledList, OrderList, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
   OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, Role, SyncRecord, TodoItem, User, Version,
 } from '@/types'
@@ -28,7 +28,8 @@ export const factories = {
 
 // ---------- 订单 ----------
 export const orders = {
-  list: () => get<Order[]>('/orders'),
+  // 服务端搜索+分页：订单是唯一随业务量无限增长的列表
+  list: (params?: { q?: string; limit?: number; offset?: number }) => get<OrderList>('/orders', params),
   detail: (id: string) => get<OrderDetail>(`/orders/${id}`),
   create: (data: Partial<Order>) => post<Order>('/orders', data),
   update: (id: string, data: Partial<Order>) => patch<Order>(`/orders/${id}`, data),
@@ -136,7 +137,7 @@ export const notifications = {
 }
 
 export const controlled = {
-  list: () => get<ControlledItem[]>('/controlled'),
+  list: (limit?: number, offset?: number) => get<ControlledList>('/controlled', { limit, offset }),
   // 订单实例线的受控归档下载（此前受控区完全没有这条线）
   exportOrderZip: (orderId: string, opId: string, filename: string) =>
     downloadBlob(`/controlled/orders/${orderId}/packages/${opId}/export/zip`).then((blob) => {

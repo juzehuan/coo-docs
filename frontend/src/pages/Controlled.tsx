@@ -10,19 +10,26 @@ import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import type { ControlledItem } from '@/types'
 
+const PAGE_SIZE = 20
+
 export default function Controlled() {
   const { t } = useI18n()
   const { message } = App.useApp()
   const [rows, setRows] = useState<ControlledItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
+    // 服务端分页：受控内容随放行永久增长，不能一次性全量下发
+    setLoading(true)
     // 失败要提示：空表格会被误读为"没有已放行资料"，掩盖真正的加载失败
-    controlled.list().then(setRows)
-      .catch((e) => { setRows([]); message.error(errMessage(e)) })
+    controlled.list(PAGE_SIZE, (page - 1) * PAGE_SIZE)
+      .then((d) => { setRows(d.items); setTotal(d.total) })
+      .catch((e) => { setRows([]); setTotal(0); message.error(errMessage(e)) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [page, message])
 
   function downloadZip(r: ControlledItem) {
     const name = `controlled_${r.package_code}_${r.subject}.zip`
@@ -48,7 +55,8 @@ export default function Controlled() {
         rowKey={(r) => r.key}
         loading={loading}
         dataSource={rows}
-        pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+        pagination={{ current: page, pageSize: PAGE_SIZE, total, showSizeChanger: false, onChange: setPage,
+          showTotal: (n) => t('audit_total').replace('{total}', String(n)) }}
         expandable={{
           expandedRowRender: (r) => {
             const atts = r.attachments || []

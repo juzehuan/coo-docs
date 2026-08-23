@@ -4,7 +4,7 @@ import os
 import re
 import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ from app.services.nas_sync import archive_name, duplicate_names
 from app.core.rbac import require_roles
 from app.db import get_db
 from app.models import Order, OrderPackage, Package, PackageVersion, User
-from app.schemas import AttachmentOut, VersionOut
+from app.schemas import AttachmentOut
 
 router = APIRouter(prefix="/controlled", tags=["controlled"])
 
@@ -49,8 +49,9 @@ def _visible_factory_ids(db: Session, user: User) -> set:
     return {f.id for f in user.factories}
 
 
-@router.get("", response_model=list[dict])
-def controlled_area(db: Session = Depends(get_db), user: User = Depends(controlled_access)):
+@router.get("", response_model=dict)
+def controlled_area(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+                    db: Session = Depends(get_db), user: User = Depends(controlled_access)):
     """受控区清单：COO 已终审放行的全部受控单元。
 
     此前只查 PackageVersion，**遗漏了订单资料包实例这条线**——而订单线才是
@@ -86,8 +87,6 @@ def controlled_area(db: Session = Depends(get_db), user: User = Depends(controll
             "released_at": v.coo_reviewed_at.isoformat() if v.coo_reviewed_at else None,
             "ids": {"pkg_id": str(p.id), "version_id": str(v.id)},
             "attachments": [AttachmentOut.model_validate(a).model_dump() for a in v.attachments],
-            # 兼容旧字段：前端历史实现读 version.version_no
-            "version": VersionOut.model_validate(v).model_dump(),
         })
 
     # ---- 订单资料包实例线 ----
@@ -121,7 +120,11 @@ def controlled_area(db: Session = Depends(get_db), user: User = Depends(controll
         })
 
     out.sort(key=lambda r: (r["package_code"], r["subject"]))
-    return out
+    # 服务端分页：受控内容随每次放行永久增长，而界面一次只展示一页。
+    # 此前一次性下发全部（实测 63 条已 94KB，其中附件数组占 44%），
+    # 两年规模下会变成数 MB 的响应，只为显示 10 行。
+    total = len(out)
+    return {"total": total, "items": out[offset:offset + limit]}
 
 
 @router.get("/orders/{order_id}/packages/{op_id}/export/zip")

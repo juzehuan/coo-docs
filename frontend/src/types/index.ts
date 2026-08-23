@@ -238,8 +238,16 @@ export interface ControlledItem {
   released_at: string | null
   ids: { pkg_id?: string; version_id?: string; order_id?: string; op_id?: string }
   attachments: Attachment[]
-  /** 仅版本线保留，供历史字段兼容 */
-  version?: Version
+}
+
+export interface OrderList {
+  total: number
+  items: Order[]
+}
+
+export interface ControlledList {
+  total: number
+  items: ControlledItem[]
 }
 
 export interface TodoItem {

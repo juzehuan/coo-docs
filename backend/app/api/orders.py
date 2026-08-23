@@ -1,8 +1,9 @@
 """客户订单管理：订单 CRUD、订单-资料包实例化、附件与审核（方案核心数据模型）。"""
 import os
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
@@ -23,7 +24,7 @@ from app.models import (
     Attachment, AuditDomain, Factory, Notification, Order, OrderPackage, Package, User,
 )
 from app.schemas import (
-    AttachmentOut, Msg, OrderCreate, OrderDetailOut, OrderInstanceCreate, OrderOut,
+    AttachmentOut, Msg, OrderCreate, OrderDetailOut, OrderInstanceCreate, OrderList, OrderOut,
     OrderPackageOut, OrderUpdate, ReviewRequest,
 )
 from app.services.nas_sync import archive_name, duplicate_names
@@ -128,19 +129,39 @@ def _op_out(op: OrderPackage, db: Session | None = None, user: User | None = Non
 
 
 # ---------- 列表 / 详情 ----------
-@router.get("", response_model=list[OrderOut])
-def list_orders(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # selectinload 一次性载入全部订单的资料包实例，工厂用一次查询做成字典：
-    # 否则 _order_row 会为每个订单各发一次查询（两年规模下等于数百条 SQL）
+@router.get("", response_model=OrderList)
+def list_orders(q: str | None = Query(None, max_length=128),
+                limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """订单列表：服务端搜索 + 分页。
+
+    此前一次性下发全部订单、由前端做关键词过滤。订单是唯一随业务量无限增长的
+    列表（实测 126 条 46KB，约 365 字节/条，千单规模即 365KB，每次打开页面都要
+    重新拉一遍），而界面一次只显示十几行。
+
+    搜索必须同时挪到服务端：只加分页会让关键词只在当前页内匹配，用户搜不到
+    却以为"没有这张订单"——与第 35 轮审计导出忽略筛选属同一类静默错误。
+    """
+    from sqlalchemy import or_
     from sqlalchemy.orm import selectinload
+    base = _visible_orders_q(db, user)
+    if q and q.strip():
+        kw = q.strip()
+        # autoescape：转义 % 与 _，否则用户输入的通配符会悄悄放大结果集（第 37 轮同因）
+        base = base.filter(or_(
+            Order.order_no.contains(kw, autoescape=True),
+            Order.customer.contains(kw, autoescape=True),
+            Order.product.contains(kw, autoescape=True),
+        ))
+    total = base.with_entities(func.count(Order.id)).scalar() or 0
     fac_map = {f.id: f for f in db.query(Factory).all()}
     rows = (
-        _visible_orders_q(db, user)
-        .options(selectinload(Order.packages))
+        base.options(selectinload(Order.packages))
         .order_by(Order.created_at.desc())
+        .offset(offset).limit(limit)
         .all()
     )
-    return [_order_row(db, o, fac_map) for o in rows]
+    return {"total": total, "items": [_order_row(db, o, fac_map) for o in rows]}
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

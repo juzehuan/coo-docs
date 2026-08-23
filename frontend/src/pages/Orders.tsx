@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App, Button, Card, Form, Input, InputNumber, Modal, Progress, Select, Space, Table } from 'antd'
 import { DownloadOutlined, EyeOutlined, FileZipOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { localName, useI18n } from '@/i18n'
@@ -9,6 +10,8 @@ import { useSubmit } from '@/hooks/useSubmit'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import type { Factory, Order } from '@/types'
+
+const PAGE_SIZE = 20
 
 export default function Orders() {
   const { t, lang } = useI18n()
@@ -19,28 +22,34 @@ export default function Orders() {
   const [rows, setRows] = useState<Order[]>([])
   const [factList, setFactList] = useState<Factory[]>([])
   const [kw, setKw] = useState('')
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
 
   const isAdmin = user!.role === 'admin'
   const canExport = user!.role !== 'submitter' && user!.role !== 'dept_reviewer'
   const isReadOnly = user!.role === 'auditor'
 
-  async function load() {
+  // 搜索与分页都走服务端：订单随业务量无限增长，一次性全量下发在千单规模下
+  // 每次打开页面都要拉数百 KB；而只加分页不改搜索，会让关键词只在当前页内匹配，
+  // 用户搜不到却以为"没有这张订单"（与第 35 轮审计导出忽略筛选同类）。
+  const load = useCallback(async (keyword?: string, p = 1) => {
     setLoading(true)
     try {
-      const [os, fs] = await Promise.all([orders.list(), factories.list()])
-      setRows(os); setFactList(fs)
-    } catch { setRows([]); setFactList([]) } finally { setLoading(false) }
-  }
-  useEffect(() => { load() }, [])
+      const [os, fs] = await Promise.all([
+        orders.list({ q: (keyword ?? kw).trim() || undefined, limit: PAGE_SIZE, offset: (p - 1) * PAGE_SIZE }),
+        factories.list(),
+      ])
+      setRows(os.items); setTotal(os.total); setFactList(fs)
+    } catch (e) {
+      setRows([]); setTotal(0); message.error(errMessage(e))
+    } finally { setLoading(false) }
+  }, [kw, message])
+  useEffect(() => { load(undefined, 1) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const factName = (id: string) => localName(factList.find((f) => f.id === id), lang)
 
-  const data = rows.filter((r) =>
-    r.order_no.toLowerCase().includes(kw.toLowerCase()) ||
-    r.customer.toLowerCase().includes(kw.toLowerCase()) ||
-    (r.factory_name || '').includes(kw),
-  )
+  const data = rows
 
   // ---- 新建订单 ----
   const [open, setOpen] = useState(false)
@@ -60,7 +69,11 @@ export default function Orders() {
         title={t('orders')}
         desc={t('orders_desc')}
         extra={<Space>
-          <Input prefix={<SearchOutlined />} placeholder={t('orders')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 220 }} allowClear />
+          {/* 回车或点清除即查询：服务端搜索，覆盖全部订单而非当前页 */}
+          <Input prefix={<SearchOutlined />} placeholder={t('orders')} value={kw} style={{ width: 220 }} allowClear
+            onChange={(e) => { setKw(e.target.value); if (!e.target.value) { setPage(1); load('', 1) } }}
+            onPressEnter={() => { setPage(1); load(undefined, 1) }} />
+          <Button icon={<SearchOutlined />} onClick={() => { setPage(1); load(undefined, 1) }}>{t('search')}</Button>
           {!isReadOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>{t('create_order')}</Button>}
         </Space>}
       />
@@ -69,7 +82,9 @@ export default function Orders() {
           rowKey="id"
           loading={loading}
           dataSource={data}
-          pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'] }}
+          pagination={{ current: page, pageSize: PAGE_SIZE, total, showSizeChanger: false,
+            onChange: (p) => { setPage(p); load(undefined, p) },
+            showTotal: (n) => t('audit_total').replace('{total}', String(n)) }}
           columns={[
             { title: t('factory'), width: 110, render: (_, r) => <span>{r.factory_code} · {r.factory_name || factName(r.factory_id)}</span> },
             { title: t('order_no'), dataIndex: 'order_no', width: 170 },
