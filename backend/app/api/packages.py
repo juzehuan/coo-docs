@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
+from app.core import dl_ticket
 from app.core.rbac import (
     admin_only, can_edit_package, can_review_dept, can_view_package,
     dept_review_block_reason, get_current_user, is_coo,
+    optional_current_user, user_from_download_ticket,
 )
 from app.core.snowflake import next_id
 from app.core.storage import save_upload, storage_guard
@@ -316,9 +318,29 @@ def delete_attachment(pkg_id: int, vid: int, aid: int, request: Request,
     return Msg(msg="已删除")
 
 
+@router.post("/{pkg_id}/versions/{vid}/attachments/{aid}/ticket")
+def issue_download_ticket(pkg_id: int, vid: int, aid: int,
+                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """签发下载票据（先走常规权限判定，通过后才发）。"""
+    att = db.get(Attachment, aid)
+    v = db.get(PackageVersion, vid) if att else None
+    p = db.get(Package, pkg_id) if v else None
+    if not att or not v or not p or att.version_id != vid or v.package_id != pkg_id:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    if not can_view_package(user, p):
+        raise HTTPException(status_code=404, detail="资源不存在")
+    return {"ticket": dl_ticket.issue(aid, user.id), "expires_in": dl_ticket.TICKET_TTL_SECONDS}
+
+
 @router.get("/{pkg_id}/versions/{vid}/attachments/{aid}/file")
 def download_attachment(pkg_id: int, vid: int, aid: int, request: Request, preview: bool = False,
-                        db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+                        ticket: str | None = None,
+                        db: Session = Depends(get_db),
+                        user: User | None = Depends(optional_current_user)):
+    # 票据优先：浏览器原生下载带不了 Authorization 头
+    user = user_from_download_ticket(request, aid, ticket, db) or user
+    if user is None:
+        raise HTTPException(status_code=401, detail="无效或过期的凭证")
     att = db.get(Attachment, aid)
     v = db.get(PackageVersion, vid) if att else None
     p = db.get(Package, pkg_id) if v else None

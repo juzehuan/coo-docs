@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
+from app.core import dl_ticket
 from app.core.i18n import local_name
 from app.core.rbac import (
     can_edit_order, can_edit_order_package, export_viewer, get_current_user,
+    optional_current_user, user_from_download_ticket,
 )
 from app.core.http_headers import content_disposition
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
@@ -507,9 +509,25 @@ def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Reques
     return Msg(msg="已删除")
 
 
+@router.post("/{order_id}/packages/{op_id}/attachments/{aid}/ticket")
+def issue_order_download_ticket(order_id: int, op_id: int, aid: int,
+                                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """签发下载票据（先走常规权限判定，通过后才发）。"""
+    o, op = _get_op(db, order_id, op_id, user)
+    att = db.get(Attachment, aid)
+    if not att or att.order_package_id != op.id:
+        raise HTTPException(status_code=404, detail="附件不存在")
+    return {"ticket": dl_ticket.issue(aid, user.id), "expires_in": dl_ticket.TICKET_TTL_SECONDS}
+
+
 @router.get("/{order_id}/packages/{op_id}/attachments/{aid}/file")
 def download_order_attachment(order_id: int, op_id: int, aid: int, request: Request, preview: bool = False,
-                              db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+                              ticket: str | None = None,
+                              db: Session = Depends(get_db),
+                              user: User | None = Depends(optional_current_user)):
+    user = user_from_download_ticket(request, aid, ticket, db) or user
+    if user is None:
+        raise HTTPException(status_code=401, detail="无效或过期的凭证")
     o, op = _get_op(db, order_id, op_id, user)
     att = db.get(Attachment, aid)
     if not att or att.order_package_id != op.id:

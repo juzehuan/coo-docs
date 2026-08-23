@@ -37,6 +37,45 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme),
     return user
 
 
+# 可选 Bearer：下载端点允许"票据"或"Bearer"二选一，缺少 Authorization 头时
+# 不能直接 401，否则带票据的原生下载会被挡在门外。
+_optional_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+
+def optional_current_user(request: Request, token: str | None = Depends(_optional_oauth2),
+                          db: Session = Depends(get_db)) -> User | None:
+    if not token:
+        return None
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        return None
+    user = db.get(User, int(payload["sub"]))
+    if not user or user.status == "disabled":
+        return None
+    request.state.log_user = f"{user.username}({user.role})"
+    return user
+
+
+def user_from_download_ticket(request: Request, aid: int, ticket: str | None,
+                              db: Session) -> User | None:
+    """下载票据换取用户；无票据返回 None（调用方回退常规 Bearer）。
+
+    票据只解决"浏览器原生下载带不了 Authorization 头"这一个问题，
+    换出用户后**仍走与常规请求完全相同的权限判定**，不是绕过权限的旁路。
+    """
+    if not ticket:
+        return None
+    from app.core import dl_ticket
+    uid = dl_ticket.verify(ticket, aid)
+    if uid is None:
+        raise HTTPException(status_code=403, detail="下载凭据无效或已过期，请重新发起下载")
+    u = db.get(User, uid)
+    if not u or u.status == "disabled":
+        raise HTTPException(status_code=403, detail="下载凭据无效或已过期，请重新发起下载")
+    request.state.log_user = f"{u.username}({u.role})"
+    return u
+
+
 def require_roles(*roles: str):
     def _dep(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:

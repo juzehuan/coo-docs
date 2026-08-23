@@ -107,7 +107,7 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
     { title: '', key: 'act', width: 160, render: (_, r: OrderAttachment) => (
       <Space size={4}>
-        <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)}>{t('download')}</Button>
+        <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name, orders.attachmentTicketUrl(orderId, op.id, r.id))}>{t('download')}</Button>
         {canEdit && <Button size="small" danger icon={<DeleteOutlined />} disabled={busy} onClick={() => run(() => orders.deleteAttachment(orderId, op.id, r.id), t('deleted'))}>{t('cancel')}</Button>}
       </Space>
     )},

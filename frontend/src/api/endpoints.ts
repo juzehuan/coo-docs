@@ -54,6 +54,9 @@ export const orders = {
     del(`/orders/${id}/packages/${opId}/attachments/${aid}`),
   attachmentUrl: (id: string, opId: string, aid: string, preview = false) =>
     `/api/orders/${id}/packages/${opId}/attachments/${aid}/file${preview ? '?preview=true' : ''}`,
+  /** 下载票据接口路径（交给 downloadFile 换票后走原生下载） */
+  attachmentTicketUrl: (id: string, opId: string, aid: string) =>
+    `/orders/${id}/packages/${opId}/attachments/${aid}/ticket`,
   // 导出通过 axios 携带 Bearer token 下载，避免 window.location.href 无法带认证头而 401
   exportCsv: (id: string, orderNo: string) =>
     downloadBlob(`/orders/${id}/export`).then((blob) => {
@@ -117,6 +120,8 @@ export const packages = {
     del(`/packages/${pkgId}/versions/${vid}/attachments/${aid}`),
   attachmentUrl: (pkgId: string, vid: string, aid: string, preview = false) =>
     `/api/packages/${pkgId}/versions/${vid}/attachments/${aid}/file${preview ? '?preview=true' : ''}`,
+  attachmentTicketUrl: (pkgId: string, vid: string, aid: string) =>
+    `/packages/${pkgId}/versions/${vid}/attachments/${aid}/ticket`,
 }
 
 // ---------- 看板 / 受控区 / 审计 / NAS ----------

@@ -127,8 +127,29 @@ export async function downloadBlob(url: string, params?: unknown): Promise<Blob>
   return r.data
 }
 
-/** 附件下载：原生 fetch 携带 token，url 需为完整 /api/... 路径（浏览器导航无法带 Bearer 头）。 */
-export async function downloadFile(url: string, filename: string): Promise<void> {
+/** 附件下载：先换一张短时效票据，再交给浏览器原生下载。
+ *
+ * 原实现用 `fetch → res.blob()`：整个文件要先在浏览器内存里缓冲完才落盘。
+ * 实测 4Mbps 下载 40MB 附件，**85 秒内界面零反馈**、浏览器下载管理器也不显示，
+ * 用户很可能以为没点上而反复点击（每次又重拉一遍）；连接一断则前功尽弃——
+ * 服务端本就支持 Range（206），但这条路径用不上；内存占用还等于文件大小。
+ *
+ * 改为普通导航后，进度、暂停续传、边下边写盘都交回浏览器原生下载管理器。
+ * ticketUrl 为空时回退旧的 blob 方式（如导出类小文件仍走 axios）。
+ */
+export async function downloadFile(url: string, filename: string, ticketUrl?: string): Promise<void> {
+  if (ticketUrl) {
+    const r = await client.post<{ ticket: string }>(ticketUrl)
+    const sep = url.includes('?') ? '&' : '?'
+    const a = document.createElement('a')
+    a.href = `${url}${sep}ticket=${encodeURIComponent(r.data.ticket)}`
+    a.download = filename          // 服务端已带 Content-Disposition，这里只作提示
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    return
+  }
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
   if (!res.ok) throw new Error(`${tOutside('download_failed')}（HTTP ${res.status}）`)
   const blob = await res.blob()
