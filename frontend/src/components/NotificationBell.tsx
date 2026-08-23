@@ -6,6 +6,7 @@ import { errMessage } from '@/api/client'
 import { notifications } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatTime } from '@/utils/format'
+import { notifyText } from '@/utils/notify'
 import type { NotificationItem } from '@/types'
 
 /** 只允许跳转站内相对路径。
@@ -22,7 +23,7 @@ function isSafeInternalPath(link: string | null | undefined): link is string {
 }
 
 export default function NotificationBell() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const nav = useNavigate()
   const { message } = App.useApp()
   const [unread, setUnread] = useState(0)
@@ -124,11 +125,12 @@ export default function NotificationBell() {
                         <span style={{
                           fontSize: 13, fontWeight: n.is_read ? 400 : 600,
                           color: n.is_read ? '#6f685a' : '#16263f',
-                        }}>{n.title}</span>
+                        }}>{notifyText(n, lang).title}</span>
                       }
                       description={
                         <span style={{ fontSize: 12, color: '#a49e8c' }}>
-                          {n.body ? `${n.body} · ` : ''}{formatTime(n.created_at)}
+                          {(() => { const b = notifyText(n, lang).body; return b ? `${b} · ` : '' })()}
+                          {formatTime(n.created_at)}
                         </span>
                       }
                     />

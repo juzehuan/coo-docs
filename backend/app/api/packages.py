@@ -23,7 +23,7 @@ from app.models import (
 from app.schemas import (
     AttachmentOut, Msg, PackageCreate, PackageOut, PackageUpdate, ReviewRequest, VersionCreate, VersionOut,
 )
-from app.services.notify import coo_reviewer_ids, dept_reviewer_ids, notify_users
+from app.services.notify import notify_params, coo_reviewer_ids, dept_reviewer_ids, notify_users
 
 router = APIRouter(prefix="/packages", tags=["packages"])
 
@@ -357,6 +357,7 @@ def submit_version(pkg_id: int, vid: int, request: Request, db: Session = Depend
               target=f"{p.code}/{v.version_no}")
     notify_users(db, dept_reviewer_ids(db, p.dept_id),
                  title=f"{p.code} {v.version_no} 待部门审核",
+                 params=notify_params(f"{p.code} {v.version_no}", p),
                  body=f"{p.name_zh} · {v.change_note or ''}".strip(" ·"),
                  ntype="submit", link=f"/packages/{p.id}", exclude=user.id)
     db.commit()
@@ -418,14 +419,17 @@ def review_version(pkg_id: int, vid: int, payload: ReviewRequest, request: Reque
     if level == ReviewLevel.DEPT and decision == ReviewDecision.APPROVE:
         notify_users(db, coo_reviewer_ids(db),
                      title=f"{p.code} {v.version_no} 待COO终审",
-                     body=p.name_zh, ntype="coo_review", link=f"/packages/{p.id}", exclude=user.id)
+                     body=p.name_zh, ntype="coo_review", link=f"/packages/{p.id}", exclude=user.id,
+                     params=notify_params(f"{p.code} {v.version_no}", p))
     elif recipient:
         if decision == ReviewDecision.APPROVE:
             notify_users(db, [recipient], title=f"{p.code} {v.version_no} 已放行归档",
-                         body=p.name_zh, ntype="released", link=f"/packages/{p.id}", exclude=user.id)
+                         body=p.name_zh, ntype="released", link=f"/packages/{p.id}", exclude=user.id,
+                         params=notify_params(f"{p.code} {v.version_no}", p))
         else:
             notify_users(db, [recipient], title=f"{p.code} {v.version_no} 被退回",
-                         body=p.name_zh, ntype="rejected", link=f"/packages/{p.id}", exclude=user.id)
+                         body=p.name_zh, ntype="rejected", link=f"/packages/{p.id}", exclude=user.id,
+                         params=notify_params(f"{p.code} {v.version_no}", p))
 
     db.commit()
     db.refresh(v)
@@ -457,6 +461,7 @@ def withdraw_version(pkg_id: int, vid: int, request: Request,
               target=f"{p.code}/{v.version_no}")
     notify_users(db, dept_reviewer_ids(db, p.dept_id),
                  title=f"{p.code} {v.version_no} 已撤回",
-                 body=p.name_zh, ntype="withdrawn", link=f"/packages/{p.id}", exclude=user.id)
+                 body=p.name_zh, ntype="withdrawn", link=f"/packages/{p.id}", exclude=user.id,
+                 params=notify_params(f"{p.code} {v.version_no}", p))
     db.commit()
     return v

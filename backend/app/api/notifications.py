@@ -31,6 +31,7 @@ def list_notifications(limit: int = Query(30, ge=1, le=200), offset: int = Query
             "body": n.body,
             "type": n.type,
             "link": n.link,
+            "params": n.params or "",
             "is_read": n.is_read,
             "created_at": n.created_at.isoformat() if n.created_at else None,
         } for n in rows],

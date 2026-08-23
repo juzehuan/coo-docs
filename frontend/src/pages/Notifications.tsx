@@ -7,6 +7,7 @@ import { notifications } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
 import { formatTime } from '@/utils/format'
+import { notifyText } from '@/utils/notify'
 import PageHeader from '@/components/PageHeader'
 import type { NotificationItem } from '@/types'
 
@@ -26,7 +27,7 @@ function isSafeInternalPath(link: string | null | undefined): link is string {
  * 完全无法触达——而通知正是跳转到待办订单的入口，看不到就等于漏办。
  */
 export default function Notifications() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const nav = useNavigate()
   const { message } = App.useApp()
   const { loading: marking, run: markRun } = useSubmit()
@@ -96,12 +97,13 @@ export default function Notifications() {
                 title={
                   <span style={{ fontWeight: n.is_read ? 400 : 600, color: n.is_read ? '#6f685a' : '#16263f' }}>
                     {!n.is_read && <Tag className="coo-tag" style={{ background: '#b97a1e', color: '#fff', border: 'none', marginRight: 8 }}>{t('unread')}</Tag>}
-                    {n.title}
+                    {notifyText(n, lang).title}
                   </span>
                 }
                 description={
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {n.body ? `${n.body} · ` : ''}{formatTime(n.created_at)}
+                    {(() => { const b = notifyText(n, lang).body; return b ? `${b} · ` : '' })()}
+                    {formatTime(n.created_at)}
                   </Typography.Text>
                 }
               />

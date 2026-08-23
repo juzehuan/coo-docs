@@ -220,6 +220,11 @@ class Notification(Base):
     body = Column(Text, default="")
     type = Column(String(32), default="")        # submit/dept_review/coo_review/released/rejected/withdrawn
     link = Column(String(255), default="")       # 前端跳转路径
+    # 结构化参数（JSON 文本）：{subject, name_zh, name_en, name_th}
+    # title/body 存的是中文成品串，泰国工厂的提交人即便把界面切到泰文，
+    # 收到的通知仍然全是中文。通知应按**收件人**的语言渲染，而不是创建者的，
+    # 所以这里存参数、由前端按当前语言拼装；旧记录无 params 时回退用 title/body。
+    params = Column(Text, default="")
     is_read = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

@@ -253,10 +253,13 @@ export interface TodoItem {
 
 export interface NotificationItem {
   id: string
+  /** 中文成品串；仅在没有 params 的历史记录上使用 */
   title: string
   body: string
   type: string
   link: string
+  /** 结构化参数 JSON：{subject, name_zh, name_en, name_th}；有它就按收件人语言渲染 */
+  params?: string
   is_read: boolean
   created_at: string | null
 }

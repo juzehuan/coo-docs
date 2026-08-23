@@ -27,7 +27,7 @@ from app.schemas import (
     OrderPackageOut, OrderUpdate, ReviewRequest,
 )
 from app.services.nas_sync import archive_name, duplicate_names
-from app.services.notify import coo_reviewer_ids, dept_reviewer_ids, notify_users
+from app.services.notify import notify_params, coo_reviewer_ids, dept_reviewer_ids, notify_users
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -296,7 +296,8 @@ def submit_order_package(order_id: int, op_id: int, request: Request,
     dept_id = op.package.dept_id if op.package else None
     notify_users(db, dept_reviewer_ids(db, dept_id, factory_id=o.factory_id),
                  title=f"{o.order_no}/{op.package.code} 待部门审核",
-                 body=op.package.name_zh, ntype="submit", link=f"/orders/{o.id}", exclude=user.id)
+                 body=op.package.name_zh, ntype="submit", link=f"/orders/{o.id}", exclude=user.id,
+                 params=notify_params(f"{o.order_no}/{op.package.code}", op.package))
     db.commit()
     return _op_out(op)
 
@@ -353,15 +354,18 @@ def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, requ
         notify_users(db, coo_reviewer_ids(db, factory_id=o.factory_id),
                      title=f"{o.order_no}/{pcode} 待COO终审",
                      body=op.package.name_zh if op.package else "", ntype="coo_review",
+                     params=notify_params(f"{o.order_no}/{pcode}", op.package),
                      link=f"/orders/{o.id}", exclude=user.id)
     elif recipient:
         if decision == ReviewDecision.APPROVE:
             notify_users(db, [recipient], title=f"{o.order_no}/{pcode} 已放行归档",
                          body=op.package.name_zh if op.package else "", ntype="released",
+                         params=notify_params(f"{o.order_no}/{pcode}", op.package),
                          link=f"/orders/{o.id}", exclude=user.id)
         else:
             notify_users(db, [recipient], title=f"{o.order_no}/{pcode} 被退回",
                          body=op.package.name_zh if op.package else "", ntype="rejected",
+                         params=notify_params(f"{o.order_no}/{pcode}", op.package),
                          link=f"/orders/{o.id}", exclude=user.id)
 
     db.commit()
@@ -395,6 +399,7 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
     notify_users(db, dept_reviewer_ids(db, dept_id, factory_id=o.factory_id),
                  title=f"{o.order_no}/{pcode} 已撤回",
                  body=op.package.name_zh if op.package else "", ntype="withdrawn",
+                 params=notify_params(f"{o.order_no}/{pcode}", op.package),
                  link=f"/orders/{o.id}", exclude=user.id)
     db.commit()
     return _op_out(op)
