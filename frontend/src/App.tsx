@@ -15,6 +15,7 @@ import Controlled from './pages/Controlled'
 import Audit from './pages/Audit'
 import Org from './pages/Org'
 import Nas from './pages/Nas'
+import Notifications from './pages/Notifications'
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { user } = useAuth()
@@ -75,6 +76,7 @@ export default function App() {
                 <Route path="/nas" element={<Nas />} />
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/org" element={<Org />} />
+                <Route path="/notifications" element={<Notifications />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               </RequireRole>

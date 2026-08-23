@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Badge, Button, Dropdown, Empty, List, Typography } from 'antd'
+import { App, Badge, Button, Dropdown, Empty, List, Typography } from 'antd'
 import { BellOutlined, CheckOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { notifications } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatTime } from '@/utils/format'
@@ -23,7 +24,10 @@ function isSafeInternalPath(link: string | null | undefined): link is string {
 export default function NotificationBell() {
   const { t } = useI18n()
   const nav = useNavigate()
+  const { message } = App.useApp()
   const [unread, setUnread] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [open, setOpen] = useState(false)
   const [items, setItems] = useState<NotificationItem[]>([])
   const timer = useRef<number | undefined>(undefined)
 
@@ -31,6 +35,7 @@ export default function NotificationBell() {
     try {
       const d = await notifications.list(20)
       setUnread(d.unread)
+      setTotal(d.total)
       setItems(d.items)
     } catch {
       /* 网络/登录态异常时静默 */
@@ -44,16 +49,28 @@ export default function NotificationBell() {
   }, [])
 
   const markAll = async () => {
-    await notifications.markAllRead()
-    setUnread(0)
-    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })))
+    try {
+      await notifications.markAllRead()
+      setUnread(0)
+      setItems((prev) => prev.map((n) => ({ ...n, is_read: true })))
+    } catch (e) {
+      // 失败必须说清楚：否则角标归零而服务端仍未读，30 秒后轮询把数字弹回来，
+      // 用户只会觉得"点了又变回去了"
+      message.error(errMessage(e))
+    }
+    setOpen(false)
   }
 
-  const openItem = (n: NotificationItem) => {
+  const openItem = async (n: NotificationItem) => {
+    setOpen(false)
     if (!n.is_read) {
-      notifications.markRead(n.id)
-      setUnread((u) => Math.max(0, u - 1))
-      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)))
+      try {
+        await notifications.markRead(n.id)
+        setUnread((u) => Math.max(0, u - 1))
+        setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)))
+      } catch (e) {
+        message.error(errMessage(e))
+      }
     }
     if (isSafeInternalPath(n.link)) nav(n.link)
   }
@@ -61,6 +78,8 @@ export default function NotificationBell() {
   return (
     <Dropdown
       trigger={['click']}
+      open={open}
+      onOpenChange={setOpen}
       placement="bottomRight"
       dropdownRender={() => (
         <div style={{
@@ -115,6 +134,14 @@ export default function NotificationBell() {
                 )}
               />
             )}
+          {/* 下拉只放得下 10 条，而实测有用户积压 140 条未读——没有这个入口，
+              其余通知在界面上完全无法触达，而通知正是跳转待办订单的入口 */}
+          <div style={{ borderTop: '1px solid #e8e1d3', textAlign: 'center' }}>
+            <Button type="link" size="small" style={{ width: '100%' }}
+              onClick={() => { setOpen(false); nav('/notifications') }}>
+              {t('view_all_notifications').replace('{total}', String(total))}
+            </Button>
+          </div>
         </div>
       )}
     >

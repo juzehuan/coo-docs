@@ -128,7 +128,8 @@ export const todo = {
 
 // ---------- 通知中心 ----------
 export const notifications = {
-  list: (limit?: number) => get<NotificationList>('/notifications', limit ? { limit } : undefined),
+  list: (limit?: number, offset?: number) =>
+    get<NotificationList>('/notifications', { limit, offset }),
   unreadCount: () => get<{ count: number }>('/notifications/unread-count'),
   markRead: (id: string) => post(`/notifications/${id}/read`),
   markAllRead: () => post('/notifications/read-all'),

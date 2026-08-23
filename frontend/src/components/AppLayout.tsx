@@ -23,6 +23,8 @@ interface MenuItem {
   icon: React.ReactNode
   label: string
   roles: string[]
+  /** 不进侧边菜单（如通知中心，入口在顶栏铃铛），但仍受路由守卫约束 */
+  hidden?: boolean
 }
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -37,7 +39,7 @@ const ICONS: Record<string, React.ReactNode> = {
 }
 
 // 角色映射来自 routes.ts，与路由守卫共用同一份定义，避免菜单与守卫各写一套而失配
-const MENU: MenuItem[] = ROUTE_ROLES.map((r) => ({ key: r.key, icon: ICONS[r.key], label: r.label, roles: r.roles }))
+const MENU: MenuItem[] = ROUTE_ROLES.map((r) => ({ key: r.key, icon: ICONS[r.key], label: r.label, roles: r.roles, hidden: r.hidden }))
 
 export default function AppLayout({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth()
@@ -67,7 +69,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   }
 
   if (!user) return null
-  const items = MENU.filter((m) => m.roles.includes(user.role)).map((m) => ({
+  const items = MENU.filter((m) => !m.hidden && m.roles.includes(user.role)).map((m) => ({
     key: m.key,
     icon: m.icon,
     label: t(m.label),
