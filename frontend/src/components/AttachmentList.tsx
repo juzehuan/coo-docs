@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { App, Button, Input, Space, Table, Tag, Typography, Upload } from 'antd'
+import { Progress, App, Button, Input, Space, Table, Tag, Typography, Upload } from 'antd'
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, InboxOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { downloadFile, errMessage } from '@/api/client'
@@ -7,6 +7,7 @@ import { packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import type { Attachment } from '@/types'
+import { useUploadLimits, oversizeNames } from '@/hooks/useUploadLimits'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
 
 const { Dragger } = Upload
@@ -25,6 +26,8 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
   const [batchNo, setBatchNo] = useState('')
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
+  const [progress, setProgress] = useState(0)
+  const limits = useUploadLimits()
 
   const atts = version.attachments
 
@@ -32,16 +35,23 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
 
   async function doUpload(files: File[]) {
     if (!files.length || uploading) return
-    setUploading(true)
+    // 客户端预检：超限文件不发请求，避免把整个文件传完才收到 400
+    const oversize = oversizeNames(files, limits)
+    if (oversize.length) {
+      message.error(t('file_too_large').replace('{names}', oversize.join('、')).replace('{mb}', String(limits!.max_file_mb)))
+      files = files.filter((f) => !oversize.includes(f.name))
+      if (!files.length) return
+    }
+    setUploading(true); setProgress(0)
     try {
-      await packages.uploadAttachments(pkgId, version.id, files, orderNo, batchNo)
+      await packages.uploadAttachments(pkgId, version.id, files, orderNo, batchNo, setProgress)
       message.success(t('uploaded_n', { n: files.length }))
       setOrderNo(''); setBatchNo('')
       onChanged()
     } catch (e) {
       message.error(errMessage(e))
     } finally {
-      setUploading(false)
+      setUploading(false); setProgress(0)
     }
   }
 
@@ -109,6 +119,10 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
             <p className="ant-upload-drag-icon"><InboxOutlined /></p>
             <p className="ant-upload-text">{t('upload')}</p>
           </Dragger>
+          {uploading && (
+            <Progress percent={progress} size="small" status="active"
+              format={(p) => `${t('uploading')} ${p}%`} style={{ marginTop: 8 }} />
+          )}
         </div>
       )}
 

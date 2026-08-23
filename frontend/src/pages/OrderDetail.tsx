@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { App, Button, Card, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Typography, Upload,
+import { Progress, App, Button, Card, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Typography, Upload,
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -9,6 +9,7 @@ import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
+import { useUploadLimits, oversizeNames } from '@/hooks/useUploadLimits'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
@@ -30,6 +31,8 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
+  const [progress, setProgress] = useState(0)
+  const limits = useUploadLimits()
 
   const atts = op.attachments || []
   // 可编辑（上传/删附件/提交）：COO/管理员任意；部门审核人仅本部门实例；提交人仅本人负责实例
@@ -74,16 +77,24 @@ function RowAttachments({ orderId, op, user, onChanged }: {
 
   async function doUpload(files: File[]) {
     if (!files.length || uploading) return
-    setUploading(true)
+    // 客户端预检：超限文件不发请求。否则要把整个文件传完才收到 400——
+    // 实测 105MB 文件在后端上限 100MB 下，客户端仍先发完了 110MB
+    const oversize = oversizeNames(files, limits)
+    if (oversize.length) {
+      message.error(t('file_too_large').replace('{names}', oversize.join('、')).replace('{mb}', String(limits!.max_file_mb)))
+      files = files.filter((f) => !oversize.includes(f.name))
+      if (!files.length) return
+    }
+    setUploading(true); setProgress(0)
     try {
-      await orders.uploadAttachments(orderId, op.id, files, batchNo)
+      await orders.uploadAttachments(orderId, op.id, files, batchNo, setProgress)
       message.success(t('uploaded_n', { n: files.length }))
       setBatchNo('')
       onChanged()
     } catch (e) {
       message.error(errMessage(e))
     } finally {
-      setUploading(false)
+      setUploading(false); setProgress(0)
     }
   }
 
@@ -130,6 +141,12 @@ function RowAttachments({ orderId, op, user, onChanged }: {
             <p className="ant-upload-drag-icon"><InboxOutlined /></p>
             <p className="ant-upload-text">{t('upload')}</p>
           </Dragger>
+          {/* 上传进度：没有它，用户无法区分"正在传"与"卡死了"，
+              很可能重复点击或刷新页面——而刷新会中断上传 */}
+          {uploading && (
+            <Progress percent={progress} size="small" status="active"
+              format={(p) => `${t('uploading')} ${p}%`} style={{ marginTop: 8 }} />
+          )}
         </div>
       )}
 

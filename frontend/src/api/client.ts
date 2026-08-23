@@ -107,8 +107,18 @@ export async function del<T>(url: string): Promise<T> {
   return r.data
 }
 
-export async function upload<T>(url: string, form: FormData): Promise<T> {
-  const r = await client.post<T>(url, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+export async function upload<T>(url: string, form: FormData,
+                                onProgress?: (percent: number) => void): Promise<T> {
+  const r = await client.post<T>(url, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    // 上传大附件时若没有任何进度反馈，用户无法区分"正在传"与"卡死了"，
+    // 很可能重复点击或刷新页面——而刷新会中断上传，前功尽弃
+    onUploadProgress: onProgress
+      ? (e) => onProgress(e.total ? Math.round((e.loaded / e.total) * 100) : 0)
+      : undefined,
+    // 大文件上传耗时远超默认 30s（工厂现场网络更慢），不能沿用全局超时
+    timeout: 0,
+  })
   return r.data
 }
 

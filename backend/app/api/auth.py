@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
+from app.constants import ALLOWED_EXTENSIONS
 from app.core.config import settings
 from app.core.rbac import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
@@ -25,6 +26,21 @@ DEMO_CREDENTIALS = {
     "submit_eng": "user123",
     "auditor": "audit123",
 }
+
+
+@router.get("/limits")
+def upload_limits():
+    """公开的上传限制，供前端做客户端预检。
+
+    上限只写在后端：前端若自己写死一个数字，两边迟早会脱节——改了后端却忘了
+    改前端，用户就会遇到"界面说可以传、传完却被拒"。而没有预检的代价很实在：
+    实测上传一个 105MB 的文件（后端上限 100MB），客户端把 110MB 全部发完才收到
+    400，工厂 2Mbps 的网络上等于白等 7 分钟。
+    """
+    return {
+        "max_file_mb": settings.MAX_FILE_MB,
+        "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
+    }
 
 
 @router.get("/demo-accounts")

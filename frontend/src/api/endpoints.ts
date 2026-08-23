@@ -17,6 +17,8 @@ export const auth = {
   logout: () => post('/auth/logout'),
   /** 当前环境真实存在的演示账号（生产部署返回空数组，登录页据此隐藏快捷登录入口） */
   demoAccounts: () => get<{ username: string; role: Role }[]>('/auth/demo-accounts'),
+  /** 上传限制（大小/扩展名），供前端预检 */
+  limits: () => get<{ max_file_mb: number; allowed_extensions: string[] }>('/auth/limits'),
 }
 
 // ---------- 工厂 ----------
@@ -41,11 +43,12 @@ export const orders = {
   withdraw: (id: string, opId: string) => post<OrderPackage>(`/orders/${id}/packages/${opId}/withdraw`),
   review: (id: string, opId: string, decision: string, level: string, reason: string) =>
     post<OrderPackage>(`/orders/${id}/packages/${opId}/review`, { decision, level, reason }),
-  uploadAttachments: (id: string, opId: string, files: File[], batch_no: string) => {
+  uploadAttachments: (id: string, opId: string, files: File[], batch_no: string,
+                      onProgress?: (p: number) => void) => {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))
     form.append('batch_no', batch_no)
-    return upload<OrderAttachment[]>(`/orders/${id}/packages/${opId}/attachments`, form)
+    return upload<OrderAttachment[]>(`/orders/${id}/packages/${opId}/attachments`, form, onProgress)
   },
   deleteAttachment: (id: string, opId: string, aid: string) =>
     del(`/orders/${id}/packages/${opId}/attachments/${aid}`),
@@ -102,12 +105,13 @@ export const packages = {
   review: (pkgId: string, vid: string, decision: string, level: string, reason: string) =>
     post<Version>(`/packages/${pkgId}/versions/${vid}/review`, { decision, level, reason }),
   deleteVersion: (pkgId: string, vid: string) => del(`/packages/${pkgId}/versions/${vid}`),
-  uploadAttachments: (pkgId: string, vid: string, files: File[], order_no: string, batch_no: string) => {
+  uploadAttachments: (pkgId: string, vid: string, files: File[], order_no: string, batch_no: string,
+                      onProgress?: (p: number) => void) => {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))
     form.append('order_no', order_no)
     form.append('batch_no', batch_no)
-    return upload<Version['attachments']>(`/packages/${pkgId}/versions/${vid}/attachments`, form)
+    return upload<Version['attachments']>(`/packages/${pkgId}/versions/${vid}/attachments`, form, onProgress)
   },
   deleteAttachment: (pkgId: string, vid: string, aid: string) =>
     del(`/packages/${pkgId}/versions/${vid}/attachments/${aid}`),
