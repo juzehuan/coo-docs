@@ -14,7 +14,7 @@ from app.core.rbac import (
     dept_review_block_reason, get_current_user, is_coo,
 )
 from app.core.snowflake import next_id
-from app.core.storage import save_upload
+from app.core.storage import save_upload, storage_guard
 from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload
 from app.db import get_db
@@ -72,18 +72,20 @@ def _purge_files(db: Session, atts: list) -> None:
         return
     names = {a.file_name for a in atts}
     ids = [a.id for a in atts]
-    for name in names:
-        q = db.query(Attachment.id).filter(Attachment.file_name == name)
-        if ids:
-            q = q.filter(Attachment.id.notin_(ids))
-        if q.first():
-            continue
-        path = os.path.join(settings.UPLOAD_DIR, name)
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+    # 与上传的去重复用互斥：否则可能删掉一个刚被复用、其附件行尚未提交的文件
+    with storage_guard():
+        for name in names:
+            q = db.query(Attachment.id).filter(Attachment.file_name == name)
+            if ids:
+                q = q.filter(Attachment.id.notin_(ids))
+            if q.first():
+                continue
+            path = os.path.join(settings.UPLOAD_DIR, name)
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
 
 @router.get("", response_model=list[dict])
@@ -264,18 +266,22 @@ async def upload_attachments(
     if v.status == VersionStatus.RELEASED or v.locked:
         raise HTTPException(status_code=400, detail="已放行版本不可修改，请创建新版本")
     created = []
-    for content, ext, md5, fname, ctype in pending:
-        att_id = next_id()
-        stored = save_upload(content, ext)
-        att = Attachment(
-            id=att_id, version_id=vid, file_name=stored, original_name=fname,
-            file_size=len(content), md5=md5, mime_type=ctype,
-            order_no=order_no, batch_no=batch_no, uploaded_by=user.id,
-        )
-        db.add(att)
-        created.append(att)
-    _reset_status_on_edit(v)
-    db.commit()
+    # 临界区必须覆盖到 commit：命中去重分支时不会重新落盘，而未提交的附件行
+    # 对别的会话不可见——若此间别处回收了该物理文件，新附件就会指向一个不存在
+    # 的文件（详见 storage.storage_guard）
+    with storage_guard():
+        for content, ext, md5, fname, ctype in pending:
+            att_id = next_id()
+            stored = save_upload(content, ext)
+            att = Attachment(
+                id=att_id, version_id=vid, file_name=stored, original_name=fname,
+                file_size=len(content), md5=md5, mime_type=ctype,
+                order_no=order_no, batch_no=batch_no, uploaded_by=user.id,
+            )
+            db.add(att)
+            created.append(att)
+        _reset_status_on_edit(v)
+        db.commit()
     for att in created:
         db.refresh(att)
     log_event(db, AuditDomain.ATTACHMENT, "upload", actor=user, ip=client_ip(request),

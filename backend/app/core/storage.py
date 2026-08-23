@@ -9,8 +9,34 @@
 import hashlib
 import os
 import tempfile
+import threading
+from contextlib import contextmanager
 
 from app.core.config import settings
+
+
+# 保护「复用已有物理文件」与「回收无引用文件」之间的临界区。
+#
+# 竞态路径：上传方调用 save_upload 命中去重分支（文件已存在，不重新落盘），
+# 此时新附件行尚未提交；另一请求删除了最后一个引用该文件的附件，_purge_files
+# 查库判定"已无引用"便删掉物理文件——新附件于是指向一个不存在的文件，
+# 正是 storage_check 定义的「悬空记录（证据丢失）」。
+#
+# 说明：该窗口由代码推断可得，但用真实接口并发 5 轮**未能复现**（需要恰好
+# 同时上传字节完全相同的文件、且并发删除最后一个其它引用）。之所以仍然修，
+# 是因为代价极小而后果是证据丢失——本系统的全部价值就在证据完整。
+#
+# 取舍：锁需由上传方从 save_upload 持有到 commit（未提交的行对别的会话不可见，
+# 只锁 save_upload 本身没用）。提交耗时在毫秒级，本系统上传并发很低，
+# 串行化这一小段对吞吐无实质影响。
+_reuse_lock = threading.Lock()
+
+
+@contextmanager
+def storage_guard():
+    """上传落盘→写库提交、以及引用检查→删除文件，两段互斥。"""
+    with _reuse_lock:
+        yield
 
 
 def save_upload(content: bytes, ext: str) -> str:

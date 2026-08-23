@@ -16,7 +16,7 @@ from app.core.rbac import (
 from app.core.http_headers import content_disposition
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.snowflake import next_id
-from app.core.storage import save_upload
+from app.core.storage import save_upload, storage_guard
 from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload
 from app.db import get_db
@@ -75,20 +75,20 @@ def _purge_files(db: Session, atts: list) -> None:
         return
     names = {a.file_name for a in atts}
     ids = [a.id for a in atts]
-    for name in names:
-        q = db.query(Attachment.id).filter(Attachment.file_name == name)
-        if ids:
-            q = q.filter(Attachment.id.notin_(ids))
-        if q.first():
-            continue
-        path = os.path.join(settings.UPLOAD_DIR, name)
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-
-
+    # 与上传的去重复用互斥：否则可能删掉一个刚被复用、其附件行尚未提交的文件
+    with storage_guard():
+        for name in names:
+            q = db.query(Attachment.id).filter(Attachment.file_name == name)
+            if ids:
+                q = q.filter(Attachment.id.notin_(ids))
+            if q.first():
+                continue
+            path = os.path.join(settings.UPLOAD_DIR, name)
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 def _order_row(db: Session, o: Order, fac_map: dict | None = None) -> dict:
     # 列表场景传入 fac_map，避免每行各查一次工厂（两年规模下等于数百条 SQL）
     if fac_map is not None:
@@ -461,18 +461,22 @@ async def upload_order_attachment(
     if op.locked or op.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行版本不可修改，请移除后重新实例化")
     created = []
-    for content, ext, md5, fname, ctype in pending:
-        att_id = next_id()
-        stored = save_upload(content, ext)
-        att = Attachment(
-            id=att_id, order_package_id=op.id, file_name=stored, original_name=fname,
-            file_size=len(content), md5=md5, mime_type=ctype,
-            order_no=o.order_no, batch_no=batch_no, uploaded_by=user.id,
-        )
-        db.add(att)
-        created.append(att)
-    _reset_status_on_edit(op)
-    db.commit()
+    # 临界区必须覆盖到 commit：命中去重分支时不会重新落盘，而未提交的附件行
+    # 对别的会话不可见——若此间别处回收了该物理文件，新附件就会指向一个不存在
+    # 的文件（详见 storage.storage_guard）
+    with storage_guard():
+        for content, ext, md5, fname, ctype in pending:
+            att_id = next_id()
+            stored = save_upload(content, ext)
+            att = Attachment(
+                id=att_id, order_package_id=op.id, file_name=stored, original_name=fname,
+                file_size=len(content), md5=md5, mime_type=ctype,
+                order_no=o.order_no, batch_no=batch_no, uploaded_by=user.id,
+            )
+            db.add(att)
+            created.append(att)
+        _reset_status_on_edit(op)
+        db.commit()
     for att in created:
         db.refresh(att)
     log_event(db, AuditDomain.ATTACHMENT, "op_upload", actor=user, ip=client_ip(request),
