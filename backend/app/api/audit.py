@@ -17,21 +17,47 @@ from app.schemas import AuditLogList, AuditLogOut
 router = APIRouter(prefix="/audit", tags=["audit"])
 
 
+def _parse_bound(value: str, field: str, end_of_day: bool = False) -> datetime:
+    """把查询串解析为时间边界；非法格式返回 400 而不是让 MySQL 去报错。
+
+    原实现把 start/end 原样塞进 SQL 比较，MySQL 遇到 `abc` 这类值抛
+    OperationalError，被全局处理器翻译成 **503「数据库暂时不可用，请稍后重试」**。
+    这是两重误导：用户的输入错误被说成服务故障，只会让他反复重试甚至找运维；
+    而日志与监控里会凭空出现"数据库不可用"，任何人打一个错日期就能伪造一次
+    基础设施告警。输入错误必须回 400 并说清楚哪里错了。
+    """
+    v = value.strip()
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            dt = datetime.strptime(v, fmt)
+        except ValueError:
+            continue
+        if fmt == "%Y-%m-%d" and end_of_day:
+            # 纯日期视为当日整天（含当天 23:59:59）
+            return dt.replace(hour=23, minute=59, second=59)
+        return dt
+    raise HTTPException(status_code=400,
+                        detail=f"{field} 格式不正确，应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS")
+
+
 def _apply_filters(q, actor_id, actor, target, domain, start, end):
     """列表与导出共用同一套过滤：两边若各写一份，迟早会出现"导出的内容和屏幕上不一样"。"""
     if actor_id:
         q = q.filter(AuditLog.actor_id == actor_id)
+    # autoescape：转义用户输入里的 % 与 _，否则它们会被当作 LIKE 通配符。
+    # 实测未转义时搜 `%` 命中全部 2445 条、搜 `_` 命中 1549 条，
+    # 而 `COO_01` 与 `COO-01` 返回同样的结果——审计检索是合规追溯的主要手段，
+    # 搜索悄悄放大结果集会让"我查过了，就这些"这句话失去意义。
     if actor:
-        q = q.filter(AuditLog.actor_name.contains(actor))
+        q = q.filter(AuditLog.actor_name.contains(actor, autoescape=True))
     if target:
-        q = q.filter(AuditLog.target.contains(target))
+        q = q.filter(AuditLog.target.contains(target, autoescape=True))
     if domain:
         q = q.filter(AuditLog.event_domain == domain)
     if start:
-        q = q.filter(AuditLog.created_at >= start)
+        q = q.filter(AuditLog.created_at >= _parse_bound(start, "start"))
     if end:
-        # 纯日期视为当日整天（含当天 23:59:59）
-        q = q.filter(AuditLog.created_at <= (end + " 23:59:59" if len(end) == 10 else end))
+        q = q.filter(AuditLog.created_at <= _parse_bound(end, "end", end_of_day=True))
     return q
 
 
