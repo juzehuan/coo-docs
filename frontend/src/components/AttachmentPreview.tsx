@@ -6,7 +6,8 @@ import { useI18n } from '@/i18n'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 
 // PDF.js worker：不依赖浏览器内置 PDF 查看器，任何环境（含 headless）都能渲染
-// ?v=2 用于破坏浏览器缓存：早期 nginx 将 .mjs 以 octet-stream 返回并被缓存 30 天，需强制重新拉取
+// ?v=2 用于破坏浏览器缓存：早期 nginx 将 .mjs 以 octet-stream 返回并被缓存 30 天，需强制重新拉取。
+// 可移除条件：距该缓存修复（commit f88fde8）上线满 30 天后，或下次 pdfjs-dist 升级（内容哈希变更）后。
 GlobalWorkerOptions.workerSrc = `${new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()}?v=2`
 
 type Kind = 'image' | 'pdf' | 'text' | 'unsupported'
@@ -110,7 +111,11 @@ export default function AttachmentPreview({ open, url, name, onClose }: Props) {
       )}
       {!loading && !error && kind === 'pdf' && (
         <div style={{ background: '#525659', borderRadius: 8, padding: 12, textAlign: 'center' }}>
-          <canvas ref={canvasRef} style={{ maxWidth: '100%', boxShadow: '0 2px 10px rgba(0,0,0,.35)' }} />
+          {/* 限高并内部滚动：A4 页面按 1.3 倍渲染约 1029px，在规格最低分辨率 1366×768 下
+              会超出屏幕约 425px，翻页按钮被挤出视口够不着。与图片/文本预览一致做限高。 */}
+          <div style={{ maxHeight: '68vh', overflow: 'auto' }}>
+            <canvas ref={canvasRef} style={{ maxWidth: '100%', boxShadow: '0 2px 10px rgba(0,0,0,.35)' }} />
+          </div>
           {totalPages > 1 && (
             <Space style={{ marginTop: 12, color: '#fff' }}>
               <Button size="small" icon={<LeftOutlined />} disabled={pageNum <= 1} onClick={() => setPageNum(pageNum - 1)} />

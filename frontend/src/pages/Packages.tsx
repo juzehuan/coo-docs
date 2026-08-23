@@ -2,12 +2,17 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App, Button, Card, Form, Input, Modal, Select, Space, Switch, Table } from 'antd'
 import { EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { org, packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { STATUS_LABELS } from '@/i18n/messages'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
-import type { Department, Package, PackageRow, User } from '@/types'
+import type { Department, Lang, Package, PackageRow, User } from '@/types'
+
+// 可筛选的资料包当前状态（与后端 current_status 取值一致）
+const STATUS_FILTERS = ['none', 'draft', 'pending_dept', 'pending_coo', 'released', 'rejected', 'withdrawn']
 
 export default function Packages() {
   const { t, lang } = useI18n()
@@ -16,6 +21,8 @@ export default function Packages() {
   const { message } = App.useApp()
   const [rows, setRows] = useState<PackageRow[]>([])
   const [kw, setKw] = useState('')
+  const [deptFilter, setDeptFilter] = useState<string | undefined>()
+  const [statusFilter, setStatusFilter] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
 
   // 配置弹窗（仅管理员）
@@ -34,18 +41,30 @@ export default function Packages() {
     } catch { setRows([]) } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
+  // 部门列表所有角色都要（用于展示「责任部门」列与按部门筛选）；用户列表仅管理员需要
+  useEffect(() => {
+    org.listDepartments().then(setDepts).catch(() => setDepts([]))
+  }, [])
   useEffect(() => {
     if (!isAdmin) return
-    org.listDepartments().then(setDepts).catch(() => setDepts([]))
     org.listUsers().then(setUsers).catch(() => setUsers([]))
   }, [isAdmin])
 
-  const data = rows.filter((r) =>
-    (lang === 'en' ? r.name_en : lang === 'th' ? r.name_th : r.name_zh).toLowerCase().includes(kw.toLowerCase()) ||
-    r.code.toLowerCase().includes(kw.toLowerCase()),
-  )
+  const kwLower = kw.trim().toLowerCase()
+  const data = rows.filter((r) => {
+    // 关键词跨三语匹配：同一团队可能用不同语言，只搜当前语言会让人搜不到自己知道的名字
+    const names = [r.name_zh, r.name_en, r.name_th, r.code].filter(Boolean).join(' ').toLowerCase()
+    if (kwLower && !names.includes(kwLower)) return false
+    if (deptFilter && r.dept_id !== deptFilter) return false
+    if (statusFilter && r.current_status !== statusFilter) return false
+    return true
+  })
 
-  const deptLabel = (id: string | null) => depts.find((d) => d.id === id)?.name_zh || '-'
+  const deptLabel = (id: string | null) => {
+    const d = depts.find((x) => x.id === id)
+    if (!d) return '-'
+    return (lang === 'en' ? d.name_en : lang === 'th' ? d.name_th : d.name_zh) || d.name_zh
+  }
   const ownerLabel = (id: string | null) => {
     const u = users.find((x) => x.id === id)
     return u ? u.display_name || u.username : '-'
@@ -76,7 +95,7 @@ export default function Packages() {
       setOpen(false)
       load()
     } catch (e: any) {
-      message.error(e?.message || '操作失败')
+      message.error(errMessage(e))
     }
   }
 
@@ -86,7 +105,11 @@ export default function Packages() {
         title={t('packages')}
         desc={t('packages_desc')}
         extra={<Space>
-          <Input prefix={<SearchOutlined />} placeholder={t('packages')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 220 }} allowClear />
+          <Input prefix={<SearchOutlined />} placeholder={t('packages')} value={kw} onChange={(e) => setKw(e.target.value)} style={{ width: 200 }} allowClear />
+          <Select allowClear placeholder={t('dept')} style={{ width: 150 }} value={deptFilter} onChange={setDeptFilter}
+            options={depts.map((d) => ({ label: lang === 'en' ? (d.name_en || d.name_zh) : lang === 'th' ? (d.name_th || d.name_zh) : d.name_zh, value: d.id }))} />
+          <Select allowClear placeholder={t('status')} style={{ width: 140 }} value={statusFilter} onChange={setStatusFilter}
+            options={STATUS_FILTERS.map((v) => ({ label: STATUS_LABELS[v]?.[lang as Lang] ?? v, value: v }))} />
           {isAdmin && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>{t('create')}</Button>}
         </Space>}
       />

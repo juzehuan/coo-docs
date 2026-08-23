@@ -4,7 +4,7 @@ import { App, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Tab
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { downloadFile } from '@/api/client'
+import { downloadFile, errMessage } from '@/api/client'
 import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -41,20 +41,46 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   const canWithdraw = (user.role === 'admin' || ownerOk) &&
     (op.status === 'pending_dept' || op.status === 'pending_coo')
 
-  async function withdraw() {
-    await orders.withdraw(orderId, op.id); message.success(t('withdraw_success')); onChanged()
-  }
-
-  async function doReview(decision: string, level: string) {
+  // 统一包裹：补齐错误提示与防重复点击。原先这些操作失败时静默无反馈，
+  // 用户只看到"点了没反应"（后端 400 如"请先上传至少一个附件"完全不可见）。
+  async function run(fn: () => Promise<unknown>, okMsg: string) {
+    if (busy) return
     setBusy(true)
     try {
-      await orders.review(orderId, op.id, decision, level, reason)
-      message.success(decision === 'approve' ? t('approve') : t('reject'))
-      setReason(''); onChanged()
-    } catch (e: any) { message.error(e?.message || t('op_failed')) } finally { setBusy(false) }
+      await fn()
+      message.success(okMsg)
+      onChanged()
+    } catch (e) {
+      message.error(errMessage(e))
+    } finally {
+      setBusy(false)
+    }
   }
-  async function submit() {
-    await orders.submit(orderId, op.id); message.success(t('submit_success')); onChanged()
+
+  const withdraw = () => run(() => orders.withdraw(orderId, op.id), t('withdraw_success'))
+  const submit = () => run(() => orders.submit(orderId, op.id), t('submit_success'))
+
+  async function doReview(decision: string, level: string) {
+    await run(
+      () => orders.review(orderId, op.id, decision, level, reason),
+      decision === 'approve' ? t('approve') : t('reject'),
+    )
+    setReason('')
+  }
+
+  async function doUpload(files: File[]) {
+    if (!files.length || uploading) return
+    setUploading(true)
+    try {
+      await orders.uploadAttachments(orderId, op.id, files, batchNo)
+      message.success(t('uploaded_n', { n: files.length }))
+      setBatchNo('')
+      onChanged()
+    } catch (e) {
+      message.error(errMessage(e))
+    } finally {
+      setUploading(false)
+    }
   }
 
   const columns: ColumnsType<OrderAttachment> = [
@@ -67,7 +93,7 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     { title: '', key: 'act', width: 160, render: (_, r: OrderAttachment) => (
       <Space size={4}>
         <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name)}>{t('download')}</Button>
-        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await orders.deleteAttachment(orderId, op.id, r.id); message.success(t('deleted')); onChanged() }}>{t('cancel')}</Button>}
+        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} disabled={busy} onClick={() => run(() => orders.deleteAttachment(orderId, op.id, r.id), t('deleted'))}>{t('cancel')}</Button>}
       </Space>
     )},
   ]
@@ -80,21 +106,21 @@ function RowAttachments({ orderId, op, user, onChanged }: {
         <div style={{ marginTop: 8, padding: 12, background: '#faf6ec', border: '1px dashed #d8cdb0', borderRadius: 8 }}>
           <Space style={{ marginBottom: 8 }}>
             <Input addonBefore={t('batch_no')} value={batchNo} onChange={(e) => setBatchNo(e.target.value)} style={{ width: 220 }} />
-            <Button type="primary" icon={<SendOutlined />} disabled={atts.length === 0} onClick={submit}>{t('submit')}</Button>
+            <Button type="primary" icon={<SendOutlined />} disabled={atts.length === 0} loading={busy} onClick={submit}>{t('submit')}</Button>
             {canWithdraw && (
-              <Button danger icon={<UndoOutlined />} onClick={withdraw}>{t('withdraw')}</Button>
+              <Button danger icon={<UndoOutlined />} loading={busy} onClick={withdraw}>{t('withdraw')}</Button>
             )}
           </Space>
           <Dragger
-            multiple showUploadList={false} beforeUpload={() => false} disabled={uploading}
-            onChange={async (info) => {
-              const files = info.fileList.map((f) => f.originFileObj as File).filter(Boolean)
-              if (!files.length) return
-              setUploading(true)
-              try {
-                await orders.uploadAttachments(orderId, op.id, files, batchNo)
-                message.success(t('uploaded_n', { n: files.length })); setBatchNo(''); onChanged()
-              } catch (e: any) { message.error(e?.message || t('upload_failed')) } finally { setUploading(false) }
+            multiple showUploadList={false} disabled={uploading}
+            // 受控为空，防止 antd 内部 fileList 跨批次累积（否则第二批会把第一批重复上传一遍）
+            fileList={[]}
+            // antd 对每个选中文件各调一次 beforeUpload，第二参数是本批全部文件。
+            // 只在最后一个文件时整批上传一次；原先用 onChange 会按累积列表重复提交，
+            // 选 N 个文件产生 N(N+1)/2 条附件记录（实测选 3 个生成 9 条）。
+            beforeUpload={(file, batch) => {
+              if (file === batch[batch.length - 1]) doUpload(batch as unknown as File[])
+              return false
             }}
           >
             <p className="ant-upload-drag-icon"><InboxOutlined /></p>
@@ -159,12 +185,26 @@ export default function OrderDetail() {
   async function addPkg() {
     if (!order) return
     const v = await form.validateFields()
-    await orders.addPackage(order.id, { package_id: v.package_id, due_date: v.due_date || '' })
-    message.success(t('add_package')); setOpen(false); form.resetFields(); load()
+    try {
+      await orders.addPackage(order.id, { package_id: v.package_id, due_date: v.due_date || '' })
+      message.success(t('add_package')); setOpen(false); form.resetFields(); load()
+    } catch (e) {
+      message.error(errMessage(e))   // 如"该资料包已在订单中"，原先失败时无任何提示
+    }
   }
   function removeOp(op: OrderPackage) {
     if (!order) return
-    modal.confirm({ title: t('cancel'), content: t('remove_package_confirm'), okText: t('confirm'), cancelText: t('cancel'), onOk: async () => { await orders.removePackage(order.id, op.id); message.success(t('removed')); load() } })
+    modal.confirm({
+      title: t('cancel'), content: t('remove_package_confirm'), okText: t('confirm'), cancelText: t('cancel'),
+      onOk: async () => {
+        try {
+          await orders.removePackage(order.id, op.id)
+          message.success(t('removed')); load()
+        } catch (e) {
+          message.error(errMessage(e))   // 如"已放行实例不可移除"
+        }
+      },
+    })
   }
 
   return (

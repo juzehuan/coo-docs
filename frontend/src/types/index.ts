@@ -158,8 +158,8 @@ export interface Dashboard {
   pending_mine: number
   released: number
   overdue: number
-  package_progress: { code: string; name: string; status: string; percent: number; attachments: number }[]
-  need_attention: { code: string; name: string; issue: string; reason: string }[]
+  package_progress: { code: string; name: string; status: string; percent: number; attachments: number; overdue?: boolean }[]
+  need_attention: { code: string; name: string; issue: string; reason: string; overdue?: boolean }[]
 }
 
 export interface AuditLog {
@@ -220,6 +220,7 @@ export interface TodoItem {
   attachments: number
   review_focus: string
   due_date: string
+  overdue?: boolean
 }
 
 export interface NotificationItem {

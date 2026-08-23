@@ -3,6 +3,24 @@ import type { Lang, Role } from '@/types'
 type Dict = Record<string, string>
 
 const zh: Dict = {
+  search: '查询',
+  no_permission: '你没有访问此页面的权限',
+  demo_login: '演示账号一键登录',
+  request_failed: '请求失败',
+  sec_settings: '安全设置',
+  sec_jwt_title: '登录签名密钥（JWT）',
+  sec_alert_msg: '密钥保存在数据库中，首次启动时自动随机生成，不出现在代码仓库或配置文件里。',
+  sec_alert_desc: '如怀疑密钥泄露或需要强制全员下线，可在此轮换。留空则由系统生成高强度随机密钥（推荐）；也可粘贴自定义密钥（至少 32 字符）。',
+  sec_custom_placeholder: '自定义密钥（可选，留空推荐）',
+  sec_rotate_btn: '轮换密钥并强制全员重新登录',
+  rotate_confirm_title: '确认轮换登录密钥？',
+  rotate_confirm_content: '轮换后所有用户（包括你自己）的登录状态立即失效，需要重新登录。',
+  rotate_action: '轮换',
+  rotate_done: '密钥已更新，请重新登录',
+  disable_user_title: '停用账号「{name}」？',
+  enable_user_title: '启用账号「{name}」？',
+  disable_user_content: '停用后该账号立即无法登录与操作；历史操作记录保留。',
+  factory_hint: '不选择则无法访问任何工厂数据（管理员不受限）',
   app_name: 'COO 资料收集平台',
   subtitle: '原产地证（COO）资料高效收集 · 审核 · 归档',
   brand_short: 'COO 平台',
@@ -150,6 +168,24 @@ const zh: Dict = {
 }
 
 const en: Dict = {
+  search: 'Search',
+  no_permission: 'You do not have permission to view this page',
+  demo_login: 'Demo quick sign-in',
+  request_failed: 'Request failed',
+  sec_settings: 'Security',
+  sec_jwt_title: 'Login signing secret (JWT)',
+  sec_alert_msg: 'The secret lives in the database, auto-generated at first startup; it never appears in the repo or config files.',
+  sec_alert_desc: 'Rotate here if you suspect a leak or need to force-logout everyone. Leave blank for a strong random key (recommended), or paste a custom key (min 32 chars).',
+  sec_custom_placeholder: 'Custom key (optional; blank recommended)',
+  sec_rotate_btn: 'Rotate & force re-login',
+  rotate_confirm_title: 'Rotate the signing secret?',
+  rotate_confirm_content: 'All active sessions (including yours) are invalidated immediately; everyone must sign in again.',
+  rotate_action: 'Rotate',
+  rotate_done: 'Secret rotated; please sign in again',
+  disable_user_title: 'Disable account "{name}"?',
+  enable_user_title: 'Enable account "{name}"?',
+  disable_user_content: 'The account can no longer sign in or act; its history is retained.',
+  factory_hint: 'Leave empty = no factory data access (admin exempt)',
   app_name: 'COO Material Collection Platform',
   subtitle: 'Efficient COO material collection · review · archive',
   brand_short: 'COO Platform',
@@ -297,6 +333,24 @@ const en: Dict = {
 }
 
 const th: Dict = {
+  search: 'ค้นหา',
+  no_permission: 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้',
+  demo_login: 'เข้าสู่ระบบด่วนด้วยบัญชีสาธิต',
+  request_failed: 'คำขอล้มเหลว',
+  sec_settings: 'การตั้งค่าความปลอดภัย',
+  sec_jwt_title: 'คีย์ลงนามการเข้าสู่ระบบ (JWT)',
+  sec_alert_msg: 'คีย์ถูกเก็บในฐานข้อมูล สร้างแบบสุ่มอัตโนมัติเมื่อเริ่มระบบครั้งแรก และไม่ปรากฏในโค้ดหรือไฟล์ตั้งค่า',
+  sec_alert_desc: 'หากสงสัยว่าคีย์รั่วไหลหรือต้องบังคับให้ทุกคนออกจากระบบ สามารถหมุนคีย์ได้ที่นี่ เว้นว่างเพื่อให้ระบบสร้างคีย์สุ่มความแข็งแรงสูง (แนะนำ) หรือวางคีย์กำหนดเอง (อย่างน้อย 32 อักขระ)',
+  sec_custom_placeholder: 'คีย์กำหนดเอง (ไม่บังคับ แนะนำให้เว้นว่าง)',
+  sec_rotate_btn: 'หมุนคีย์และบังคับเข้าสู่ระบบใหม่ทั้งหมด',
+  rotate_confirm_title: 'ยืนยันการหมุนคีย์เข้าสู่ระบบ?',
+  rotate_confirm_content: 'หลังหมุนคีย์ เซสชันของผู้ใช้ทุกคน (รวมถึงคุณ) จะหมดอายุทันทีและต้องเข้าสู่ระบบใหม่',
+  rotate_action: 'หมุนคีย์',
+  rotate_done: 'อัปเดตคีย์แล้ว กรุณาเข้าสู่ระบบใหม่',
+  disable_user_title: 'ปิดใช้งานบัญชี "{name}"?',
+  enable_user_title: 'เปิดใช้งานบัญชี "{name}"?',
+  disable_user_content: 'บัญชีนี้จะเข้าสู่ระบบหรือดำเนินการไม่ได้ทันที ประวัติการดำเนินการยังคงถูกเก็บไว้',
+  factory_hint: 'ไม่เลือก = เข้าถึงข้อมูลโรงงานไม่ได้ (ผู้ดูแลระบบไม่ถูกจำกัด)',
   app_name: 'แพลตฟอร์มรวบรวมข้อมูล COO',
   subtitle: 'รวบรวม · ตรวจสอบ · เก็บถาวรเอกสาร COO อย่างมีประสิทธิภาพ',
   brand_short: 'แพลตฟอร์ม COO',
@@ -444,6 +498,12 @@ const th: Dict = {
 }
 
 export const messages: Record<Lang, Dict> = { zh, en, th }
+
+/** React 组件外取词（如 axios 拦截器）：直接读语言偏好，与 I18nProvider 用同一个 key。 */
+export function tOutside(key: string): string {
+  const lang = (localStorage.getItem('coo_lang') as Lang) || 'zh'
+  return messages[lang]?.[key] ?? messages.zh[key] ?? key
+}
 
 export const LANG_LABELS: Record<Lang, string> = { zh: '中文', en: 'English', th: 'ไทย' }
 

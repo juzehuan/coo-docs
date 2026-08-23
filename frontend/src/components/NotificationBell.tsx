@@ -7,6 +7,19 @@ import { useI18n } from '@/i18n'
 import { formatTime } from '@/utils/format'
 import type { NotificationItem } from '@/types'
 
+/** 只允许跳转站内相对路径。
+ *
+ * 这是全站唯一以动态值为目标的导航（通知的 link 字段）。当前 link 均由后端硬编码
+ * 生成（/orders/{id}、/packages/{id}），不含用户输入；此处仍做白名单校验，
+ * 以免将来该字段变为可写时演变成开放重定向（react-router 的
+ * GHSA-wrjc-x8rr-h8h6 正是反斜杠绕过导致的同类问题）。
+ */
+function isSafeInternalPath(link: string | null | undefined): link is string {
+  if (!link) return false
+  // 必须以单个 / 开头，且不含反斜杠、协议头或协议相对写法（//evil.com）
+  return /^\/(?!\/)[\w\-/]*$/.test(link)
+}
+
 export default function NotificationBell() {
   const { t } = useI18n()
   const nav = useNavigate()
@@ -42,7 +55,7 @@ export default function NotificationBell() {
       setUnread((u) => Math.max(0, u - 1))
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)))
     }
-    if (n.link) nav(n.link)
+    if (isSafeInternalPath(n.link)) nav(n.link)
   }
 
   return (

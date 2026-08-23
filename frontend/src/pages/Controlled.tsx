@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { App, Button, Card, Space, Table, Tag, Typography } from 'antd'
 import { DownloadOutlined, FileOutlined, LockOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { controlled, packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
@@ -17,7 +18,10 @@ export default function Controlled() {
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
-    controlled.list().then(setRows).catch(() => setRows([])).finally(() => setLoading(false))
+    // 失败要提示：空表格会被误读为"没有已放行资料"，掩盖真正的加载失败
+    controlled.list().then(setRows)
+      .catch((e) => { setRows([]); message.error(errMessage(e)) })
+      .finally(() => setLoading(false))
   }, [])
 
   function downloadZip(r: ControlledItem) {

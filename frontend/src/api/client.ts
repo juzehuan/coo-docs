@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig, type AxiosError } from 'axios'
+import { tOutside } from '@/i18n/messages'
 
 const TOKEN_KEY = 'coo_token'
 
@@ -16,8 +17,14 @@ client.interceptors.request.use((config) => {
 
 client.interceptors.response.use(
   (r) => r,
-  (err: AxiosError) => {
-    if (err.response?.status === 401) {
+  (err: AxiosError<{ detail?: unknown }>) => {
+    // 401 = 凭证失效（过期 / 密钥轮换 / 账号被停用）：清除本地令牌并回登录页。
+    // 403 一般是权限不足（应停留在原页面显示错误），但后端若以 403 表达"账号已停用"，
+    // 同样属于会话失效，此处一并兜底，避免用户卡在数据全空却无提示的界面里。
+    const st = err.response?.status
+    const detail = err.response?.data?.detail
+    const sessionGone = st === 401 || (st === 403 && typeof detail === 'string' && detail.includes('停用'))
+    if (sessionGone) {
       clearToken()
       if (location.pathname !== '/login') location.href = '/login'
     }
@@ -30,7 +37,7 @@ export function errMessage(err: unknown): string {
   const detail = e?.response?.data?.detail
   if (typeof detail === 'string') return detail
   if (detail) return JSON.stringify(detail)
-  return e?.message || '请求失败'
+  return e?.message || tOutside('request_failed')
 }
 
 export async function get<T>(url: string, params?: unknown): Promise<T> {
@@ -66,7 +73,7 @@ export async function downloadBlob(url: string): Promise<Blob> {
 /** 附件下载：原生 fetch 携带 token，url 需为完整 /api/... 路径（浏览器导航无法带 Bearer 头）。 */
 export async function downloadFile(url: string, filename: string): Promise<void> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
-  if (!res.ok) throw new Error(`下载失败（HTTP ${res.status}）`)
+  if (!res.ok) throw new Error(`${tOutside('download_failed')}（HTTP ${res.status}）`)
   const blob = await res.blob()
   const u = URL.createObjectURL(blob)
   const a = document.createElement('a')

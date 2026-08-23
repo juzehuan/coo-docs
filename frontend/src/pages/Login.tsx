@@ -4,12 +4,22 @@ import { App, Button, Form, Input, Typography } from 'antd'
 import { LockOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { ROLE_LABELS } from '@/i18n/messages'
 import { SERIF } from '@/theme'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
+import type { Lang, Role } from '@/types'
+
+// 演示账号一键登录（admin 密码已轮换，不在此列）
+const DEMO_ACCOUNTS: { role: Role; username: string; password: string }[] = [
+  { role: 'coo_reviewer', username: 'coo', password: 'coo123' },
+  { role: 'dept_reviewer', username: 'dept_wai', password: 'dept123' },
+  { role: 'submitter', username: 'submit_eng', password: 'user123' },
+  { role: 'auditor', username: 'auditor', password: 'audit123' },
+]
 
 export default function Login() {
   const { login } = useAuth()
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const nav = useNavigate()
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
@@ -25,6 +35,11 @@ export default function Login() {
     } finally {
       setLoading(false)
     }
+  }
+
+  function quickLogin(username: string, password: string) {
+    form.setFieldsValue({ username, password })
+    onFinish({ username, password })
   }
 
   return (
@@ -47,7 +62,8 @@ export default function Login() {
           backgroundImage: 'linear-gradient(rgba(245,241,228,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(245,241,228,0.045) 1px, transparent 1px)',
           backgroundSize: '42px 42px',
         }} />
-        <div style={{ position: 'absolute', top: 48, right: 56, zIndex: 1 }}>
+        {/* zIndex 需高于下方品牌标题块（同为 zIndex:1 时 DOM 靠后者会盖住此按钮导致无法点击） */}
+        <div style={{ position: 'absolute', top: 48, right: 56, zIndex: 2 }}>
           <LanguageSwitcher />
         </div>
 
@@ -125,9 +141,28 @@ export default function Login() {
             <Button type="primary" htmlType="submit" size="large" block loading={loading} className="coo-btn-hero">{t('login')}</Button>
           </Form>
 
-          <Typography.Paragraph type="secondary" style={{ textAlign: 'center', marginTop: 22, marginBottom: 0, fontSize: 12, color: '#a49e8c', letterSpacing: 0.5 }}>
-            admin / admin123 · coo / coo123
-          </Typography.Paragraph>
+          {/* 演示账号一键登录 */}
+          <div style={{ marginTop: 26 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 1, height: 1, background: '#e5dfd0' }} />
+              <span style={{ fontSize: 12, color: '#a49e8c', letterSpacing: 0.5 }}>{t('demo_login')}</span>
+              <div style={{ flex: 1, height: 1, background: '#e5dfd0' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {DEMO_ACCOUNTS.map((a) => (
+                <Button
+                  key={a.username}
+                  size="small"
+                  disabled={loading}
+                  onClick={() => quickLogin(a.username, a.password)}
+                  style={{ background: '#fffef8', borderColor: '#e5dfd0', color: '#75705f', fontSize: 12 }}
+                  title={a.username}
+                >
+                  {ROLE_LABELS[a.role]?.[lang as Lang] ?? a.role}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

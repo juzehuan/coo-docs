@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { App, Button, Card, Descriptions, Divider, Space, Tabs, Tag, Typography } from 'antd'
 import { ArrowLeftOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { packages } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -48,18 +49,27 @@ export default function PackageDetail() {
   const canWithdraw = ver && !!(user!.role === 'admin' || ownerOk) &&
     (ver.status === 'pending_dept' || ver.status === 'pending_coo')
 
-  async function newVersion() {
-    await packages.createVersion(pkg!.id, '')
-    message.success(t('new_version'))
-    load()
+  // 统一补齐错误提示：原先失败时静默无反馈（如"请先上传至少一个附件""当前状态不可提交"）
+  async function run(fn: () => Promise<unknown>, okMsg: string) {
+    try {
+      await fn()
+      message.success(okMsg)
+      load()
+    } catch (e) {
+      message.error(errMessage(e))
+    }
   }
+
+  const newVersion = () => run(() => packages.createVersion(pkg!.id, ''), t('new_version'))
   function submitVersion() {
     if (!ver) return
-    modal.confirm({ title: t('submit'), content: t('submit_confirm'), onOk: async () => { await packages.submit(pkg!.id, ver.id); message.success(t('submit_success')); load() } })
+    modal.confirm({ title: t('submit'), content: t('submit_confirm'),
+      onOk: () => run(() => packages.submit(pkg!.id, ver.id), t('submit_success')) })
   }
   function withdrawVersion() {
     if (!ver) return
-    modal.confirm({ title: t('withdraw'), content: t('withdraw_confirm'), onOk: async () => { await packages.withdraw(pkg!.id, ver.id); message.success(t('withdraw_success')); load() } })
+    modal.confirm({ title: t('withdraw'), content: t('withdraw_confirm'),
+      onOk: () => run(() => packages.withdraw(pkg!.id, ver.id), t('withdraw_success')) })
   }
 
   return (

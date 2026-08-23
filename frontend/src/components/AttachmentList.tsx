@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { App, Button, Input, Space, Table, Tag, Typography, Upload } from 'antd'
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, InboxOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { downloadFile } from '@/api/client'
+import { downloadFile, errMessage } from '@/api/client'
 import { packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
@@ -30,6 +30,31 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
 
   const openPreview = (r: Attachment) => setPreview({ url: packages.attachmentUrl(pkgId, version.id, r.id, true), name: r.original_name || r.file_name })
 
+  async function doUpload(files: File[]) {
+    if (!files.length || uploading) return
+    setUploading(true)
+    try {
+      await packages.uploadAttachments(pkgId, version.id, files, orderNo, batchNo)
+      message.success(t('uploaded_n', { n: files.length }))
+      setOrderNo(''); setBatchNo('')
+      onChanged()
+    } catch (e) {
+      message.error(errMessage(e))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function removeAtt(r: Attachment) {
+    try {
+      await packages.deleteAttachment(pkgId, version.id, r.id)
+      message.success(t('deleted'))
+      onChanged()
+    } catch (e) {
+      message.error(errMessage(e))   // 如"已放行版本不可修改"，原先静默失败
+    }
+  }
+
   const columns: ColumnsType<Attachment> = [
     {
       title: t('attachment'),
@@ -51,7 +76,7 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
         <Space size={4}>
           <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)}>{t('detail')}</Button>
           <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name)}>{t('download')}</Button>
-          {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={async () => { await packages.deleteAttachment(pkgId, version.id, r.id); message.success(t('deleted')); onChanged() }}>{t('cancel')}</Button>}
+          {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeAtt(r)}>{t('cancel')}</Button>}
         </Space>
       ),
     },
@@ -70,22 +95,15 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
           <Dragger
             multiple
             showUploadList={false}
-            beforeUpload={() => false}
             disabled={uploading}
-            onChange={async (info) => {
-              const files = info.fileList.map((f) => f.originFileObj as File).filter(Boolean)
-              if (!files.length) return
-              setUploading(true)
-              try {
-                await packages.uploadAttachments(pkgId, version.id, files, orderNo, batchNo)
-                message.success(t('uploaded_n', { n: files.length }))
-                setOrderNo(''); setBatchNo('')
-                onChanged()
-              } catch (e: any) {
-                message.error(e?.message || t('upload_failed'))
-              } finally {
-                setUploading(false)
-              }
+            // 受控为空，防止 antd 内部 fileList 跨批次累积
+            fileList={[]}
+            // antd 对每个选中文件各调一次 beforeUpload，第二参数为本批全部文件；
+            // 只在最后一个文件时整批上传一次。原先用 onChange 会按累积列表重复提交，
+            // 选 N 个文件产生 N(N+1)/2 条附件记录。
+            beforeUpload={(file, batch) => {
+              if (file === batch[batch.length - 1]) doUpload(batch as unknown as File[])
+              return false
             }}
           >
             <p className="ant-upload-drag-icon"><InboxOutlined /></p>

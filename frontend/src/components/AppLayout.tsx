@@ -7,6 +7,7 @@ import {
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { ROUTE_ROLES } from '@/routes'
 import { SERIF } from '@/theme'
 import LanguageSwitcher from './LanguageSwitcher'
 import RoleTag from './RoleTag'
@@ -21,16 +22,19 @@ interface MenuItem {
   roles: string[]
 }
 
-const MENU: MenuItem[] = [
-  { key: '/', icon: <DashboardOutlined />, label: 'dashboard', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
-  { key: '/todo', icon: <BellOutlined />, label: 'todo', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'admin'] },
-  { key: '/orders', icon: <ShoppingCartOutlined />, label: 'orders', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
-  { key: '/packages', icon: <FolderOpenOutlined />, label: 'packages', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
-  { key: '/controlled', icon: <SafetyOutlined />, label: 'controlled', roles: ['dept_reviewer', 'coo_reviewer', 'admin'] },
-  { key: '/nas', icon: <DatabaseOutlined />, label: 'nas', roles: ['coo_reviewer', 'auditor', 'admin'] },
-  { key: '/audit', icon: <FileSearchOutlined />, label: 'audit', roles: ['auditor', 'admin'] },
-  { key: '/org', icon: <TeamOutlined />, label: 'users', roles: ['admin'] },
-]
+const ICONS: Record<string, React.ReactNode> = {
+  '/': <DashboardOutlined />,
+  '/todo': <BellOutlined />,
+  '/orders': <ShoppingCartOutlined />,
+  '/packages': <FolderOpenOutlined />,
+  '/controlled': <SafetyOutlined />,
+  '/nas': <DatabaseOutlined />,
+  '/audit': <FileSearchOutlined />,
+  '/org': <TeamOutlined />,
+}
+
+// 角色映射来自 routes.ts，与路由守卫共用同一份定义，避免菜单与守卫各写一套而失配
+const MENU: MenuItem[] = ROUTE_ROLES.map((r) => ({ key: r.key, icon: ICONS[r.key], label: r.label, roles: r.roles }))
 
 export default function AppLayout({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth()
@@ -80,7 +84,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
               fontFamily: SERIF, color: '#f5f1e4', fontWeight: 700, fontSize: 15,
               letterSpacing: 3, lineHeight: 1.15,
             }}>
-              COO 平台
+              {t('brand_short')}
             </span>
           )}
         </div>

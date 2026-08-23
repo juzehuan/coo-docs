@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, Empty, Space, Table, Typography } from 'antd'
+import { App, Button, Card, Empty, Space, Table, Typography } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { todo } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -14,14 +15,18 @@ import type { TodoItem } from '@/types'
 export default function Todo() {
   const { t } = useI18n()
   const { user } = useAuth()
+  const { message } = App.useApp()
   const nav = useNavigate()
   const [rows, setRows] = useState<TodoItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
     setLoading(true)
-    todo.list().then(setRows).catch(() => setRows([])).finally(() => setLoading(false))
-  }, [])
+    // 失败要提示：空列表会被误读为"没有待办",掩盖真正的加载失败
+    todo.list().then(setRows)
+      .catch((e) => { setRows([]); message.error(errMessage(e)) })
+      .finally(() => setLoading(false))
+  }, [message])
   useEffect(() => { load() }, [load])
 
   // 按钮文案：提交人→整改，部门审核→去审核，COO/管理员→去终审
@@ -57,6 +62,14 @@ export default function Todo() {
           },
           { title: t('dept'), dataIndex: 'dept_name', width: 120, render: (v: string) => v || '-' },
           { title: t('owner'), dataIndex: 'owner_name', width: 110, render: (v: string) => v || '-' },
+          {
+            title: t('due_date'), dataIndex: 'due_date', width: 120,
+            render: (v: string, r) => (v
+              ? (r.overdue
+                ? <Typography.Text type="danger" strong>{v}（{t('overdue')}）</Typography.Text>
+                : v)
+              : '-'),
+          },
           { title: t('attachment'), width: 90, render: (_, r) => r.attachments },
           { title: t('reject_reason'), dataIndex: 'reject_reason', ellipsis: true, render: (v: string) => (v ? <Typography.Text type="danger">{v}</Typography.Text> : '-') },
           { title: t('submit_time'), dataIndex: 'submitted_at', width: 170, render: (v: string) => (v ? formatTime(v) : '-') },

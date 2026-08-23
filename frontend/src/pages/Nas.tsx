@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { App, Button, Card, Col, Row, Space, Table, Tag } from 'antd'
 import { DatabaseOutlined, SyncOutlined } from '@ant-design/icons'
+import { errMessage } from '@/api/client'
 import { nas } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -17,9 +18,14 @@ export default function Nas() {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
-    const [s, r] = await Promise.all([nas.status(), nas.records(200)])
-    setSt(s); setRecs(r)
-  }, [])
+    // 捕获失败：未捕获的拒绝会中断渲染导致白屏（无权角色深链接进入时即为此情形）
+    try {
+      const [s, r] = await Promise.all([nas.status(), nas.records(200)])
+      setSt(s); setRecs(r)
+    } catch (e) {
+      setSt(null); setRecs([]); message.error(errMessage(e))
+    }
+  }, [message])
   useEffect(() => { load() }, [load])
 
   async function sync() {

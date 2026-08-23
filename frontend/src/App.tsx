@@ -1,6 +1,8 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { Spin } from 'antd'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Button, Result, Spin } from 'antd'
 import { useAuth } from './store/AuthContext'
+import { useI18n } from './i18n'
+import { canAccess } from './routes'
 import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -17,6 +19,30 @@ import Nas from './pages/Nas'
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
+  return children
+}
+
+/** 路由级角色守卫。
+ *
+ * 侧边菜单只是隐藏入口，收藏链接、手输地址或角色被调整后仍能进入无权页面；
+ * 那些页面的加载请求会拿到 403 并抛出未捕获异常，渲染中断后用户看到的是空白页
+ * （实测提交人访问 /nas 即为白屏）。此处按同一份角色映射直接给出明确的无权提示。
+ */
+function RequireRole({ children }: { children: JSX.Element }) {
+  const { user } = useAuth()
+  const { t } = useI18n()
+  const nav = useNavigate()
+  const { pathname } = useLocation()
+  if (!canAccess(user?.role, pathname)) {
+    return (
+      <Result
+        status="403"
+        title="403"
+        subTitle={t('no_permission')}
+        extra={<Button type="primary" onClick={() => nav('/')}>{t('dashboard')}</Button>}
+      />
+    )
+  }
   return children
 }
 
@@ -37,6 +63,7 @@ export default function App() {
         element={
           <RequireAuth>
             <AppLayout>
+              <RequireRole>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/todo" element={<Todo />} />
@@ -50,6 +77,7 @@ export default function App() {
                 <Route path="/org" element={<Org />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </RequireRole>
             </AppLayout>
           </RequireAuth>
         }

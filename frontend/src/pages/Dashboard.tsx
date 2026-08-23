@@ -40,7 +40,7 @@ export default function Dashboard() {
           <Card variant="borderless" className="coo-card" title={t('progress')}>
             <Progress type="dashboard" percent={d.package_completion} strokeColor={{ '0%': '#a8833c', '100%': '#c9b06a' }} strokeWidth={10} />
             <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-              {t('released')} <b style={{ color: '#3f7d5c' }}>{d.released}</b> · {t('overdue')} <b style={{ color: '#b97a1e' }}>{d.overdue}</b>
+              {t('released')} <b style={{ color: '#3f7d5c' }}>{d.released}</b> · {t('overdue')} <b style={{ color: d.overdue > 0 ? '#cf1322' : '#3f7d5c' }}>{d.overdue}</b>
             </Typography.Paragraph>
           </Card>
         </Col>
@@ -56,7 +56,7 @@ export default function Dashboard() {
                   columns={[
                     { title: 'COO', dataIndex: 'code', width: 90 },
                     { title: t('packages'), dataIndex: 'name' },
-                    { title: t('issue'), dataIndex: 'issue', width: 130, render: (v: string) => <span style={{ color: '#b97a1e' }}>{v}</span> },
+                    { title: t('issue'), dataIndex: 'issue', width: 150, render: (v: string, r) => <span style={{ color: r.overdue ? '#cf1322' : '#b97a1e', fontWeight: r.overdue ? 600 : 400 }}>{v}</span> },
                     { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
                   ]}
                 />
@@ -72,7 +72,7 @@ export default function Dashboard() {
           pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
           columns={[
             { title: 'COO', dataIndex: 'code', width: 90 },
-            { title: t('packages'), dataIndex: 'name' },
+            { title: t('packages'), dataIndex: 'name', render: (v: string, r: { overdue?: boolean }) => (r.overdue ? <Typography.Text type="danger" strong>{v}（{t('overdue')}）</Typography.Text> : v) },
             { title: t('status'), dataIndex: 'status', width: 120, render: (s: string) => <StatusTag status={s} /> },
             {
               title: t('progress'), dataIndex: 'percent', width: 180,
