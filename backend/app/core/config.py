@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "COO 资料收集平台"
     API_PREFIX: str = "/api"
     DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"      # 日志级别；DEBUG 会同时打开健康检查等噪音日志
 
     # 数据库：默认 SQLite 便于本地开发；生产改为 MySQL
     # MySQL 示例: mysql+pymysql://coo:password@mysql:3306/coo?charset=utf8mb4

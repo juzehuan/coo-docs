@@ -1,5 +1,5 @@
 """认证依赖与基于角色+部门的权限控制。"""
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import func
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -11,7 +11,8 @@ from app.models import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=True)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(request: Request, token: str = Depends(oauth2_scheme),
+                     db: Session = Depends(get_db)) -> User:
     cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无效或过期的凭证",
@@ -31,6 +32,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             detail="账号已停用，请重新登录",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # 供请求日志中间件标注操作人：否则日志里的 4xx/5xx 无法回答"是谁触发的"
+    request.state.log_user = f"{user.username}({user.role})"
     return user
 
 
