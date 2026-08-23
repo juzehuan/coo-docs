@@ -83,7 +83,9 @@ export default function NotificationBell() {
       placement="bottomRight"
       dropdownRender={() => (
         <div style={{
-          width: 380, background: '#fffdf7', borderRadius: 12,
+          // 固定 380 在 390px 的手机上会顶出右边界（实测右缘 410），内容被裁掉；
+          // 收窄到视口内并留出边距
+          width: 'min(380px, calc(100vw - 44px))', background: '#fffdf7', borderRadius: 12,
           boxShadow: '0 6px 24px rgba(34,42,51,0.14)', border: '1px solid #e8e1d3', overflow: 'hidden',
         }}>
           <div style={{

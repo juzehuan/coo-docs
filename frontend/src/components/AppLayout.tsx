@@ -48,6 +48,10 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  // 小屏（工厂现场多用手机）：侧边栏此前固定占 224px，390px 的屏幕只剩 166px
+  // 内容区、表格可见宽度仅 80px——待办表一行内容宽 1080px，要横向滚十几屏才能看完。
+  // 断点以下自动收起为 0 宽，展开时改为浮层覆盖而非挤压内容。
+  const [isMobile, setIsMobile] = useState(false)
   const contentRef = useRef<HTMLElement>(null)
   // 路由切换时内容滚动容器回到顶部，避免新页面停留在旧滚动位置
   useEffect(() => {
@@ -82,7 +86,14 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   return (
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark" width={224} trigger={null}
-        style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        breakpoint="lg"
+        collapsedWidth={isMobile ? 0 : 80}
+        onBreakpoint={(broken) => { setIsMobile(broken); setCollapsed(broken) }}
+        style={{
+          height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          // 手机上展开时浮在内容之上，避免把本就狭窄的内容区再挤掉 224px
+          ...(isMobile ? { position: 'fixed', left: 0, top: 0, zIndex: 200 } : {}),
+        }}>
         {/* 品牌区：黄铜徽标 + 宋体标题（固定顶部） */}
         <div style={{
           height: 60, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
@@ -109,7 +120,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
         </div>
         {/* 菜单区：独立滚动 */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={items} onClick={(e) => navigate(e.key)} />
+          <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={items}
+            onClick={(e) => { navigate(e.key); if (isMobile) setCollapsed(true) }} />
         </div>
         {/* 侧栏底部品牌注记（固定底部） */}
         {!collapsed && (
@@ -122,6 +134,11 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
           </div>
         )}
       </Sider>
+      {/* 浮层展开时的遮罩：点击任意处收起，符合移动端预期 */}
+      {isMobile && !collapsed && (
+        <div onClick={() => setCollapsed(true)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(16,29,49,0.45)', zIndex: 150 }} />
+      )}
       <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -154,7 +171,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             </Dropdown>
           </div>
         </Header>
-        <Content ref={contentRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 22 }}>
+        <Content ref={contentRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: isMobile ? 12 : 22 }}>
           {children ?? <Outlet />}
         </Content>
       </Layout>
