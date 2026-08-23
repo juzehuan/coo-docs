@@ -17,8 +17,8 @@ from app.core.http_headers import content_disposition
 from app.services.nas_sync import archive_name, duplicate_names
 from app.core.rbac import require_roles
 from app.db import get_db
-from app.models import Package, PackageVersion, User
-from app.schemas import VersionOut
+from app.models import Order, OrderPackage, Package, PackageVersion, User
+from app.schemas import AttachmentOut, VersionOut
 
 router = APIRouter(prefix="/controlled", tags=["controlled"])
 
@@ -37,10 +37,32 @@ def _visible_pkg_ids(db: Session, user: User) -> set:
     return {p.id for p in q.all()}
 
 
+def _visible_factory_ids(db: Session, user: User) -> set:
+    """受控区订单线的工厂可见范围。
+
+    工厂是本系统的数据隔离边界（规格 2.4）：受控区若不做同样的过滤，
+    就会从这条旁路泄露未授权工厂的订单号与资料包内容（第 13 轮通知泄漏同源）。
+    """
+    from app.models import Factory
+    if user.role == "admin":
+        return {f.id for f in db.query(Factory).all()}
+    return {f.id for f in user.factories}
+
+
 @router.get("", response_model=list[dict])
 def controlled_area(db: Session = Depends(get_db), user: User = Depends(controlled_access)):
-    # 仅展示当前账号可见范围内已放行的版本
+    """受控区清单：COO 已终审放行的全部受控单元。
+
+    此前只查 PackageVersion，**遗漏了订单资料包实例这条线**——而订单线才是
+    日常主要工作流（客户订单 → 资料包实例 → 双级审核 → 放行锁定）。实测库中
+    32 条已放行版本全部可见，而 31 条已放行且锁定的订单实例在受控区完全看不到。
+    受控区是审计员与外部核查方调阅已放行资料的主要工作面，缺一半等于查不全。
+    NAS 归档、ZIP 交付、工作台统计本就覆盖两条线，受控区是唯一的例外。
+    """
     visible = _visible_pkg_ids(db, user)
+    out = []
+
+    # ---- 资料包版本线 ----
     released = (
         db.query(PackageVersion)
         .filter(PackageVersion.status == VersionStatus.RELEASED,
@@ -49,19 +71,93 @@ def controlled_area(db: Session = Depends(get_db), user: User = Depends(controll
         .all()
     )
     pkgs = {p.id: p for p in db.query(Package).all()}
-    out = []
     for v in released:
         p = pkgs.get(v.package_id)
         if not p:
             continue
         out.append({
+            "kind": "version",
+            "key": f"v-{v.id}",
             "package_code": p.code,
             "package_name": local_name(p),
-            "version": VersionOut.model_validate(v).model_dump(),
+            "subject": v.version_no,
             "attachment_count": len(v.attachments),
             "locked": v.locked,
+            "released_at": v.coo_reviewed_at.isoformat() if v.coo_reviewed_at else None,
+            "ids": {"pkg_id": str(p.id), "version_id": str(v.id)},
+            "attachments": [AttachmentOut.model_validate(a).model_dump() for a in v.attachments],
+            # 兼容旧字段：前端历史实现读 version.version_no
+            "version": VersionOut.model_validate(v).model_dump(),
         })
+
+    # ---- 订单资料包实例线 ----
+    fids = _visible_factory_ids(db, user)
+    ops = (
+        db.query(OrderPackage)
+        .join(Order, OrderPackage.order_id == Order.id)
+        .filter(OrderPackage.status == VersionStatus.RELEASED,
+                OrderPackage.locked.is_(True),
+                OrderPackage.package_id.in_(visible),
+                Order.factory_id.in_(fids) if fids else False)
+        .all()
+    )
+    orders = {o.id: o for o in db.query(Order).all()}
+    for op in ops:
+        p = pkgs.get(op.package_id)
+        o = orders.get(op.order_id)
+        if not p or not o:
+            continue
+        out.append({
+            "kind": "order",
+            "key": f"o-{op.id}",
+            "package_code": p.code,
+            "package_name": local_name(p),
+            "subject": o.order_no,
+            "attachment_count": len(op.attachments),
+            "locked": op.locked,
+            "released_at": op.coo_reviewed_at.isoformat() if op.coo_reviewed_at else None,
+            "ids": {"order_id": str(o.id), "op_id": str(op.id)},
+            "attachments": [AttachmentOut.model_validate(a).model_dump() for a in op.attachments],
+        })
+
+    out.sort(key=lambda r: (r["package_code"], r["subject"]))
     return out
+
+
+@router.get("/orders/{order_id}/packages/{op_id}/export/zip")
+def download_released_order_zip(order_id: int, op_id: int, request: Request,
+                                db: Session = Depends(get_db),
+                                user: User = Depends(controlled_access)):
+    """受控区归档下载（订单线）：打包某已放行订单实例的附件为 ZIP。"""
+    op = db.get(OrderPackage, op_id)
+    o = db.get(Order, order_id)
+    if not op or not o or op.order_id != o.id or op.status != VersionStatus.RELEASED or not op.locked:
+        raise HTTPException(status_code=404, detail="受控内容不存在")
+    if op.package_id not in _visible_pkg_ids(db, user) or o.factory_id not in _visible_factory_ids(db, user):
+        raise HTTPException(status_code=404, detail="受控内容不存在")
+    p = db.get(Package, op.package_id)
+
+    buf = io.BytesIO()
+    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", (p.code if p else "pkg") or "pkg")
+    safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = [["资料包", "订单号", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
+        dup = duplicate_names(op.attachments)
+        for att in op.attachments:
+            src = os.path.join(settings.UPLOAD_DIR, att.file_name)
+            if not os.path.exists(src):
+                continue
+            safe_name = archive_name(att, dup)
+            zf.write(src, f"{safe_code}/{safe_order}/{safe_name}")
+            manifest.append([p.code if p else "", o.order_no, safe_name, att.original_name,
+                             att.file_name, str(att.file_size), att.md5 or ""])
+        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
+    buf.seek(0)
+    log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
+              ip=client_ip(request), target=f"{p.code if p else ''}/{o.order_no}")
+    return StreamingResponse(
+        buf, media_type="application/zip",
+        headers={"Content-Disposition": content_disposition(f"controlled_{safe_code}_{safe_order}.zip")})
 
 
 @router.get("/{pkg_id}/versions/{vid}/export/zip")

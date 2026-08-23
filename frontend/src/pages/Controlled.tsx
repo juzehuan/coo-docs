@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { App, Button, Card, Space, Table, Tag, Typography } from 'antd'
 import { DownloadOutlined, FileOutlined, LockOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
-import { controlled, packages } from '@/api/endpoints'
+import { controlled, orders, packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import AttachmentPreview from '@/components/AttachmentPreview'
@@ -25,10 +25,19 @@ export default function Controlled() {
   }, [])
 
   function downloadZip(r: ControlledItem) {
-    const v = r.version
-    controlled.exportZip(v.package_id, v.id, `controlled_${r.package_code}_${v.version_no}.zip`)
-      .then(() => message.success(t('export_zip')))
-      .catch((e: any) => message.error(e?.message || t('download_failed')))
+    const name = `controlled_${r.package_code}_${r.subject}.zip`
+    const p = r.kind === 'order'
+      ? controlled.exportOrderZip(r.ids.order_id!, r.ids.op_id!, name)
+      : controlled.exportZip(r.ids.pkg_id!, r.ids.version_id!, name)
+    p.then(() => message.success(t('export_zip')))
+      .catch((e) => message.error(errMessage(e)))
+  }
+
+  /** 附件预览地址按所属线选择：两条线的附件端点不同。 */
+  function attUrl(r: ControlledItem, aid: string) {
+    return r.kind === 'order'
+      ? orders.attachmentUrl(r.ids.order_id!, r.ids.op_id!, aid, true)
+      : packages.attachmentUrl(r.ids.pkg_id!, r.ids.version_id!, aid, true)
   }
 
   return (
@@ -36,14 +45,13 @@ export default function Controlled() {
       <PageHeader title={t('controlled')} desc={t('controlled_desc')} />
       <Card variant="borderless" className="coo-card">
       <Table
-        rowKey={(r) => r.version.id}
+        rowKey={(r) => r.key}
         loading={loading}
         dataSource={rows}
         pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         expandable={{
           expandedRowRender: (r) => {
-            const v = r.version
-            const atts = v.attachments || []
+            const atts = r.attachments || []
             if (!atts.length) return <Typography.Text type="secondary">{t('no_data')}</Typography.Text>
             return (
               <Table
@@ -53,7 +61,7 @@ export default function Controlled() {
                 dataSource={atts}
                 columns={[
                   { title: t('attachment'), render: (_, a) => (
-                    <a onClick={() => setPreview({ url: packages.attachmentUrl(v.package_id, v.id, a.id, true), name: a.original_name || a.file_name })}>
+                    <a onClick={() => setPreview({ url: attUrl(r, a.id), name: a.original_name || a.file_name })}>
                       <FileOutlined /> {a.original_name || a.file_name}
                     </a>
                   ) },
@@ -68,7 +76,9 @@ export default function Controlled() {
         columns={[
           { title: 'COO', dataIndex: 'package_code', width: 90 },
           { title: t('packages'), dataIndex: 'package_name' },
-          { title: t('version'), dataIndex: ['version', 'version_no'], width: 90 },
+          { title: t('kind'), dataIndex: 'kind', width: 100,
+            render: (k: string) => <Tag className="coo-tag" style={{ background: k === 'order' ? '#eef2f8' : '#f6f1e6', color: k === 'order' ? '#2f4a6b' : '#8a6a1e', border: 'none' }}>{k === 'order' ? t('kind_order') : t('kind_version')}</Tag> },
+          { title: t('version'), dataIndex: 'subject', width: 150 },
           { title: t('status'), width: 110, render: () => <StatusTag status="released" /> },
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
           { title: '', key: 'lock', width: 60, render: () => <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}><LockOutlined /></Tag> },

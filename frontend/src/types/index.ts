@@ -224,11 +224,20 @@ export interface NasStatus {
 }
 
 export interface ControlledItem {
+  /** version=资料包版本线；order=订单资料包实例线（两条线都属受控内容） */
+  kind: 'version' | 'order'
+  key: string
   package_code: string
   package_name: string
-  version: Version
+  /** 版本号或订单号 */
+  subject: string
   attachment_count: number
   locked: boolean
+  released_at: string | null
+  ids: { pkg_id?: string; version_id?: string; order_id?: string; op_id?: string }
+  attachments: Attachment[]
+  /** 仅版本线保留，供历史字段兼容 */
+  version?: Version
 }
 
 export interface TodoItem {

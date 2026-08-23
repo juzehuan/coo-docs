@@ -149,16 +149,33 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
 @router.get("/export")
 def export_archive_list(request: Request, db: Session = Depends(get_db),
                         user: User = Depends(export_viewer)):
-    """归档清单导出（Excel）。审计查看人/COO/管理员可用。"""
-    versions = db.query(PackageVersion).all()
+    """归档清单导出（Excel）。审计查看人/COO/管理员可用。
+
+    覆盖**两条线**：资料包版本与订单资料包实例。此前只导出版本线，
+    而订单线才是日常主要工作流——实测清单 32 行、遗漏 31 条已放行订单实例，
+    交给核查方的"归档清单"少了一半内容却看不出任何缺失迹象。
+    """
     pkgs = {p.id: p for p in db.query(Package).all()}
-    header = ["资料包编号", "资料包名称", "版本", "状态", "责任人", "附件数", "已同步NAS"]
+    header = ["类型", "资料包编号", "资料包名称", "版本/订单号", "状态", "责任人", "附件数", "已同步NAS"]
     data = []
-    for v in versions:
+    for v in db.query(PackageVersion).all():
         p = pkgs.get(v.package_id)
         synced = sum(1 for a in v.attachments if a.nas_synced)
-        data.append([p.code if p else "", local_name(p), v.version_no, v.status,
+        data.append(["资料包版本", p.code if p else "", local_name(p), v.version_no, v.status,
                      str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"])
+    # 订单线按可见工厂过滤，避免受控内容跨工厂泄漏
+    fids = _factory_ids(user, db)
+    ops = (db.query(OrderPackage).join(Order, OrderPackage.order_id == Order.id)
+           .filter(Order.factory_id.in_(fids)).all()) if fids else []
+    orders = {o.id: o for o in db.query(Order).all()}
+    for op in ops:
+        p = pkgs.get(op.package_id)
+        o = orders.get(op.order_id)
+        synced = sum(1 for a in op.attachments if a.nas_synced)
+        data.append(["订单实例", p.code if p else "", local_name(p),
+                     o.order_no if o else "", op.status,
+                     str(op.owner_user_id or ""), str(len(op.attachments)),
+                     f"{synced}/{len(op.attachments)}"])
     content = build_xlsx(header, data, sheet_title="归档清单")
     log_event(db, AuditDomain.EXPORT, "archive_xlsx", actor=user, ip=client_ip(request))
     return Response(content=content, media_type=XLSX_MEDIA_TYPE,
