@@ -1,0 +1,9 @@
+# 防止本地开发产物 / 敏感文件被 COPY . . 打入镜像层
+.env
+*.db
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/

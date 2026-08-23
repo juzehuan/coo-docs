@@ -1,7 +1,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+# 用 lockfile + npm ci 保证依赖树可复现（npm install 会解析浮动 semver，每次构建结果不同且不可审计）
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 RUN npm run build
 
