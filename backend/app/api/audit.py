@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
 from app.core.csv_safe import csv_row
+from app.core.timefmt import fmt as time_fmt
 from app.core.rbac import audit_viewer
 from app.db import get_db
 from app.models import AuditDomain, AuditLog, User
@@ -54,11 +55,11 @@ def export_logs(
     if domain:
         q = q.filter(AuditLog.event_domain == domain)
     rows = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
-    header = ["时间", "域", "动作", "操作人", "角色", "IP", "目标", "说明"]
+    header = ["时间（站点时区）", "域", "动作", "操作人", "角色", "IP", "目标", "说明"]
     lines = [",".join(header)]
     for r in rows:
         lines.append(csv_row([
-            r.created_at.isoformat() if r.created_at else "",
+            time_fmt(r.created_at),   # 站点时区 + 显式偏移，导出的证据必须自解释
             r.event_domain, r.action, r.actor_name, r.actor_role, r.ip, r.target, r.detail,
         ]))
     csv = "\n".join(lines)

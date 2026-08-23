@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.constants import NAS_BASE_DIRNAME
 from app.core.config import settings
 from app.core import nas_config
+from app.core.timefmt import now_str as time_now
 from app.models import Attachment, Order, OrderPackage, Package, PackageVersion, SyncRecord
 from app.services import s3
 
@@ -360,7 +361,7 @@ def _blank_manifest(backend, base: str, header: str) -> None:
         return
     backend.write_manifest(base, [
         header,
-        f"# generated {datetime.utcnow().isoformat()}",
+        f"# generated {time_now()}",
         "# 本目录当前无已归档文件（原始记录已删除或尚未同步）",
     ])
 
@@ -387,7 +388,7 @@ def _write_manifests(db: Session, backend):
         # 重名判定仍基于全部附件：区分后缀必须与 sync 时算出的一致
         dup = duplicate_names(ver.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {ver.version_no}",
-                 f"# generated {datetime.utcnow().isoformat()}",
+                 f"# generated {time_now()}",
                  "# 归档文件名\t字节数\tMD5\t上传原名"]
         for att in archived:
             an = archive_name(att, dup)
@@ -408,7 +409,7 @@ def _write_manifests(db: Session, backend):
             continue
         dup = duplicate_names(op.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {o.order_no}",
-                 f"# generated {datetime.utcnow().isoformat()}",
+                 f"# generated {time_now()}",
                  "# 归档文件名\t字节数\tMD5\t上传原名"]
         for att in archived:
             an = archive_name(att, dup)
