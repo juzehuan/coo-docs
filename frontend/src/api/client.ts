@@ -1,7 +1,9 @@
 import axios, { type AxiosRequestConfig, type AxiosError } from 'axios'
 import { tOutside } from '@/i18n/messages'
 
-const TOKEN_KEY = 'coo_token'
+/** 令牌在 localStorage 中的键名。导出供跨标签页的 storage 事件比对，
+ *  两处各写一份字面量迟早会改一处漏一处。 */
+export const TOKEN_KEY = 'coo_token'
 
 export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY)
 export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t)

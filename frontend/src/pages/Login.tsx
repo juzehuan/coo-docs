@@ -154,7 +154,9 @@ export default function Login() {
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message={sessionReason === 'disabled' ? t('session_disabled') : t('session_expired')}
+              message={sessionReason === 'disabled' ? t('session_disabled')
+                : sessionReason === 'logged_out' ? t('session_logged_out')
+                : t('session_expired')}
             />
           )}
 
