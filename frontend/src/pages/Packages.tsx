@@ -8,6 +8,7 @@ import { useAuth } from '@/store/AuthContext'
 import { localName, useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
 import { STATUS_LABELS } from '@/i18n/messages'
+import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import type { Department, Lang, Package, PackageRow, User } from '@/types'
@@ -140,7 +141,7 @@ export default function Packages() {
         okText={t('save')}
         cancelText={t('cancel')}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFinish={save}>
           <Space size="large" style={{ display: 'flex' }}>
             <Form.Item label="COO" name="code" rules={[{ required: true }]} style={{ width: 140 }}>
               <Input maxLength={32} placeholder="COO-01" disabled={!!editing} />
@@ -170,7 +171,7 @@ export default function Packages() {
           </Form.Item>
           <Form.Item label={t('review_focus')} name="review_focus"><Input.TextArea rows={3} /></Form.Item>
           <Form.Item label={t('due_date')} name="due_date"><Input placeholder="2026-10-15" /></Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
       </Card>
     </>

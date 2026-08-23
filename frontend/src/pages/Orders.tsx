@@ -7,6 +7,7 @@ import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { localName, useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
+import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import type { Factory, Order } from '@/types'
@@ -112,7 +113,7 @@ export default function Orders() {
 
       <Modal title={t('create_order')} open={open} onOk={submit} confirmLoading={submitting}
         onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={form} layout="vertical" initialValues={{ status: 'active', quantity: 0, required: true }}>
+        <Form form={form} layout="vertical" initialValues={{ status: 'active', quantity: 0, required: true }} onFinish={submit}>
           <Form.Item name="factory_id" label={t('factory')} rules={[{ required: true }]}>
             {/* 已停用工厂不再出现在新建订单可选项（后端同样拒绝，见 orders.create_order）；
                 factList 本身保留全量，订单列表仍需按 id 显示历史工厂名 */}
@@ -123,7 +124,7 @@ export default function Orders() {
           <Form.Item name="product" label={t('product')}><Input /></Form.Item>
           <Form.Item name="quantity" label={t('quantity')}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="export_date" label={t('export_date')}><Input placeholder="2026-10-15" /></Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
     </>
   )

@@ -7,6 +7,7 @@ import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
 import { formatTime } from '@/utils/format'
+import SubmitOnEnter from '@/components/SubmitOnEnter'
 import PageHeader from '@/components/PageHeader'
 import type { NasConfig, NasStatus, SyncRecord } from '@/types'
 
@@ -136,7 +137,7 @@ export default function Nas() {
             <CancelBtn /><OkBtn />
           </Space>
         )}>
-        <Form form={cfgForm} layout="vertical" onValuesChange={(c) => c.mode && setMode(c.mode)}>
+        <Form form={cfgForm} layout="vertical" onValuesChange={(c) => c.mode && setMode(c.mode)} onFinish={saveConfig}>
           <Form.Item name="mode" label={t('nas_mode')}>
             <Radio.Group optionType="button" buttonStyle="solid" options={[
               { label: t('nas_mode_s3'), value: 's3' },
@@ -173,7 +174,7 @@ export default function Nas() {
             </Col>
             <Col span={12}><Form.Item name="auto_sync" label={t('nas_auto_sync')} valuePropName="checked"><Switch /></Form.Item></Col>
           </Row>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
     </>
   )

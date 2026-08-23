@@ -5,6 +5,7 @@ import { factories, org } from '@/api/endpoints'
 import { clearToken, errMessage } from '@/api/client'
 import { localName, useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
+import SubmitOnEnter from '@/components/SubmitOnEnter'
 import RoleTag from '@/components/RoleTag'
 import PageHeader from '@/components/PageHeader'
 import { ROLES } from '@/types'
@@ -271,25 +272,25 @@ export default function Org() {
       />
 
       <Modal title={t('create_dept')} open={deptOpen} onOk={submitDept} confirmLoading={submitting} onCancel={() => setDeptOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={deptForm} layout="vertical">
+        <Form form={deptForm} layout="vertical" onFinish={submitDept}>
           <Form.Item name="code" label={t('dept_code')} rules={[{ required: true }]}><Input maxLength={32} /></Form.Item>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>
           <Form.Item name="name_th" label={t('name_th')}><Input /></Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
 
       <Modal title={t('create_factory')} open={factOpen} onOk={submitFactory} confirmLoading={submitting} onCancel={() => setFactOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={factForm} layout="vertical">
+        <Form form={factForm} layout="vertical" onFinish={submitFactory}>
           <Form.Item name="code" label={t('factory_code')} rules={[{ required: true }]}><Input maxLength={32} placeholder="RMA / WEV" /></Form.Item>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>
           <Form.Item name="name_th" label={t('name_th')}><Input /></Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
 
       <Modal title={t('create_user')} open={userOpen} onOk={submitUser} confirmLoading={submitting} onCancel={() => setUserOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter', password: 'user123' }}>
+        <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter', password: 'user123' }} onFinish={submitUser}>
           <Form.Item name="username" label={t('username')} rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
           <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
           <Form.Item name="password" label={t('password')} rules={[{ required: true }, { min: 6, message: t('v_too_short').replace('{n}', '6') }]}><Input /></Form.Item>
@@ -298,25 +299,25 @@ export default function Org() {
           <Form.Item name="factory_ids" label={t('factory')} extra={t('factory_hint')}>
             <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${localName(f, lang)}`, value: f.id }))} />
           </Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
       <Modal title={`${t('edit')} · ${editUser?.display_name || editUser?.username || ''}`} open={!!editUser} onOk={submitEditUser} confirmLoading={submitting} onCancel={() => setEditUser(null)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={editForm} layout="vertical">
+        <Form form={editForm} layout="vertical" onFinish={submitEditUser}>
           <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
           <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
           <Form.Item name="dept_id" label={t('dept')}><Select allowClear options={depts.map((d) => ({ label: d.name_zh, value: d.id }))} /></Form.Item>
           <Form.Item name="factory_ids" label={t('factory')} extra={t('factory_hint')}>
             <Select mode="multiple" allowClear options={factList.filter((f) => f.status === 'active').map((f) => ({ label: `${f.code} · ${localName(f, lang)}`, value: f.id }))} />
           </Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
 
       <Modal title={`${t('edit')} · ${editDept?.code || ''}`} open={!!editDept} onOk={submitEditDept} confirmLoading={submitting} onCancel={() => setEditDept(null)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={editDeptForm} layout="vertical">
+        <Form form={editDeptForm} layout="vertical" onFinish={submitEditDept}>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>
           <Form.Item name="name_th" label={t('name_th')}><Input /></Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
 
       <Modal title={t('reset_pwd')} open={!!pwdReset} onOk={() => setPwdReset(null)} onCancel={() => setPwdReset(null)} okText={t('confirm')} cancelText={t('cancel')}>

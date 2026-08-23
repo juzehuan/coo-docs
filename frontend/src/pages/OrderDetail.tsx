@@ -9,6 +9,7 @@ import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
+import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
@@ -272,12 +273,12 @@ export default function OrderDetail() {
 
       <Modal title={t('add_package')} open={open} onOk={addPkg} confirmLoading={submitting}
         onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFinish={addPkg}>
           <Form.Item name="package_id" label={t('packages')} rules={[{ required: true }]}>
             <Select options={templates.map((p) => ({ label: `${p.code} · ${typeName(p)}`, value: p.id }))} />
           </Form.Item>
           <Form.Item name="due_date" label={t('due_date')}><Input placeholder="2026-10-15" /></Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
     </div>
   )

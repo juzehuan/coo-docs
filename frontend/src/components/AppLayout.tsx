@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { App, Layout, Menu, Avatar, Dropdown, Button, Form, Input, Modal, theme as antdTheme } from 'antd'
+import SubmitOnEnter from '@/components/SubmitOnEnter'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
   AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined, MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
@@ -179,7 +180,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       <Modal title={t('change_password')} open={pwdOpen} onOk={submitPwd} confirmLoading={submitting}
              onCancel={() => { setPwdOpen(false); pwdForm.resetFields() }}
              okText={t('save')} cancelText={t('cancel')} destroyOnHidden>
-        <Form form={pwdForm} layout="vertical">
+        <Form form={pwdForm} layout="vertical" onFinish={submitPwd}>
           <Form.Item name="old_password" label={t('old_password')} rules={[{ required: true }]}>
             <Input.Password />
           </Form.Item>
@@ -194,7 +195,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             })]}>
             <Input.Password />
           </Form.Item>
-        </Form>
+        <SubmitOnEnter /></Form>
       </Modal>
     </Layout>
   )
