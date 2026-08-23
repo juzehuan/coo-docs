@@ -241,7 +241,7 @@ export default function Org() {
 
       <Modal title={t('create_dept')} open={deptOpen} onOk={submitDept} onCancel={() => setDeptOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={deptForm} layout="vertical">
-          <Form.Item name="code" label={t('dept_code')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="code" label={t('dept_code')} rules={[{ required: true }]}><Input maxLength={32} /></Form.Item>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>
           <Form.Item name="name_th" label={t('name_th')}><Input /></Form.Item>
@@ -250,7 +250,7 @@ export default function Org() {
 
       <Modal title={t('create_factory')} open={factOpen} onOk={submitFactory} onCancel={() => setFactOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={factForm} layout="vertical">
-          <Form.Item name="code" label={t('factory_code')} rules={[{ required: true }]}><Input placeholder="RMA / WEV" /></Form.Item>
+          <Form.Item name="code" label={t('factory_code')} rules={[{ required: true }]}><Input maxLength={32} placeholder="RMA / WEV" /></Form.Item>
           <Form.Item name="name_zh" label={t('name_zh')} rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name_en" label={t('name_en')}><Input /></Form.Item>
           <Form.Item name="name_th" label={t('name_th')}><Input /></Form.Item>
@@ -259,9 +259,9 @@ export default function Org() {
 
       <Modal title={t('create_user')} open={userOpen} onOk={submitUser} onCancel={() => setUserOpen(false)} okText={t('save')} cancelText={t('cancel')}>
         <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter', password: 'user123' }}>
-          <Form.Item name="username" label={t('username')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="username" label={t('username')} rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
           <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
-          <Form.Item name="password" label={t('password')} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="password" label={t('password')} rules={[{ required: true }, { min: 6, message: t('v_too_short').replace('{n}', '6') }]}><Input /></Form.Item>
           <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
           <Form.Item name="dept_id" label={t('dept')}><Select allowClear options={depts.map((d) => ({ label: d.name_zh, value: d.id }))} /></Form.Item>
           <Form.Item name="factory_ids" label={t('factory')} extra={t('factory_hint')}>

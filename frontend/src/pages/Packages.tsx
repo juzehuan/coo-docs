@@ -148,7 +148,7 @@ export default function Packages() {
         <Form form={form} layout="vertical">
           <Space size="large" style={{ display: 'flex' }}>
             <Form.Item label="COO" name="code" rules={[{ required: true }]} style={{ width: 140 }}>
-              <Input placeholder="COO-01" disabled={!!editing} />
+              <Input maxLength={32} placeholder="COO-01" disabled={!!editing} />
             </Form.Item>
             <Form.Item label={t('sort_order')} name="sort_order"><Input type="number" /></Form.Item>
           </Space>

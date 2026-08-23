@@ -39,11 +39,41 @@ client.interceptors.response.use(
   },
 )
 
+/** FastAPI 422 的结构化校验错误（数组形式）。 */
+interface ValidationItem {
+  type?: string
+  loc?: (string | number)[]
+  msg?: string
+  ctx?: Record<string, unknown>
+}
+
+/** 把 Pydantic 校验错误转成可读中文。
+ *
+ * 直接 JSON.stringify 会把整条结构（含 type/loc/ctx）糊到用户脸上，
+ * 中文用户根本看不懂；更糟的是其中的 `input` 字段会**回显用户的原始输入**，
+ * 密码这类敏感值会直接显示在错误提示里。
+ */
+function formatValidation(items: ValidationItem[]): string {
+  const first = items[0]
+  if (!first) return tOutside('request_failed')
+  const field = (first.loc || []).filter((x) => x !== 'body' && x !== 'query' && x !== 'path').join('.')
+  const ctx = first.ctx || {}
+  const t = first.type || ''
+  let what: string
+  if (t.includes('too_short') || t.includes('greater_than')) what = tOutside('v_too_short').replace('{n}', String(ctx.min_length ?? ctx.ge ?? ''))
+  else if (t.includes('too_long') || t.includes('less_than')) what = tOutside('v_too_long').replace('{n}', String(ctx.max_length ?? ctx.le ?? ''))
+  else if (t.includes('missing')) what = tOutside('v_required')
+  else if (t.includes('parsing') || t.includes('type')) what = tOutside('v_invalid')
+  else what = first.msg || tOutside('v_invalid')
+  return field ? `${field}: ${what}` : what
+}
+
 export function errMessage(err: unknown): string {
   const e = err as AxiosError<{ detail?: unknown }>
   const detail = e?.response?.data?.detail
   if (typeof detail === 'string') return detail
-  if (detail) return JSON.stringify(detail)
+  if (Array.isArray(detail)) return formatValidation(detail as ValidationItem[])
+  if (detail) return tOutside('request_failed')   // 不回显未知结构，避免泄露原始输入
   return e?.message || tOutside('request_failed')
 }
 

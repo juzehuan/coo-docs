@@ -96,7 +96,7 @@ export default function Orders() {
           <Form.Item name="factory_id" label={t('factory')} rules={[{ required: true }]}>
             <Select options={factList.filter((f) => isAdmin || user!.factory_ids.includes(f.id)).map((f) => ({ label: `${f.code} · ${f.name_zh}`, value: f.id }))} placeholder={t('factory')} />
           </Form.Item>
-          <Form.Item name="order_no" label={t('order_no')} rules={[{ required: true }]}><Input placeholder="ORD-XXX-001" /></Form.Item>
+          <Form.Item name="order_no" label={t('order_no')} rules={[{ required: true }]}><Input maxLength={64} placeholder="ORD-XXX-001" /></Form.Item>
           <Form.Item name="customer" label={t('customer')}><Input /></Form.Item>
           <Form.Item name="product" label={t('product')}><Input /></Form.Item>
           <Form.Item name="quantity" label={t('quantity')}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
