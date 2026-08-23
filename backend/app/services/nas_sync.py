@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 import threading
 from datetime import datetime
 
@@ -99,6 +100,39 @@ def _order_parts(op: OrderPackage, pkg: Package, order_no: str) -> list[str]:
     ]
 
 
+def _atomic_copy(src: str, target: str) -> str | None:
+    """拷贝到同目录临时文件后原子替换；失败则清理临时文件并返回 None。"""
+    d = os.path.dirname(target)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    os.close(fd)
+    try:
+        shutil.copy2(src, tmp)
+        os.replace(tmp, target)
+        return target
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return None
+
+
+def _atomic_write_text(path: str, text: str) -> None:
+    """写文本文件：同目录临时文件 + 原子替换。"""
+    d = os.path.dirname(path)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _local_root() -> str:
     """本地挂载点：以数据库中的运行时配置为准（管理员可在界面修改）。"""
     return nas_config.get_config()["local_root"] or settings.NAS_ROOT
@@ -134,14 +168,24 @@ class _LocalBackend:
         return os.path.join(self.order_base(op, pkg, order_no), name)
 
     def sync_one(self, target: str, src: str, att: Attachment) -> bool:
+        """归档一个附件（本地挂载点模式）。
+
+        先写同目录临时文件再原子替换：直接写目标路径时，拷贝过程中归档目录里
+        会出现一个**长度不足的文件**——核查方就在这个目录里调阅资料，网络挂载
+        上拷一个大附件的窗口可达数十秒；进程若在此期间被杀，残缺文件还会留在
+        原地。os.replace 保证阅读者要么看不到该文件、要么看到完整文件。
+        （S3 模式的 put_object 由服务端保证原子性，无需处理。）
+        """
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        shutil.copy2(src, target)
+        tmp = _atomic_copy(src, target)
+        if tmp is None:
+            return False
         return os.path.getsize(target) == att.file_size and file_md5(target) == att.md5
 
     def write_manifest(self, base: str, lines: list[str]) -> None:
         os.makedirs(base, exist_ok=True)
-        with open(os.path.join(base, "manifest.txt"), "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+        # 清单同样原子替换：否则改写期间核查方可能读到被截断的半截清单
+        _atomic_write_text(os.path.join(base, "manifest.txt"), "\n".join(lines) + "\n")
 
     def manifest_exists(self, base: str) -> bool:
         return os.path.exists(os.path.join(base, "manifest.txt"))
