@@ -7,7 +7,7 @@ import { packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import type { Attachment } from '@/types'
-import AttachmentPreview from '@/components/AttachmentPreview'
+import AttachmentPreview from '@/components/LazyAttachmentPreview'
 
 const { Dragger } = Upload
 

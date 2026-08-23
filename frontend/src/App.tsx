@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Button, Result, Spin } from 'antd'
 import { useAuth } from './store/AuthContext'
@@ -5,17 +6,19 @@ import { useI18n } from './i18n'
 import { canAccess } from './routes'
 import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Todo from './pages/Todo'
-import Orders from './pages/Orders'
-import OrderDetail from './pages/OrderDetail'
-import Packages from './pages/Packages'
-import PackageDetail from './pages/PackageDetail'
-import Controlled from './pages/Controlled'
-import Audit from './pages/Audit'
-import Org from './pages/Org'
-import Nas from './pages/Nas'
-import Notifications from './pages/Notifications'
+// 业务页面按路由懒加载：此前全部静态引入，主包 1.86MB（gzip 594KB）一次下发，
+// 4G 网络下首屏 4.9 秒才出现登录框。登录页不在此列——它是首屏必需的。
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Todo = lazy(() => import('./pages/Todo'))
+const Orders = lazy(() => import('./pages/Orders'))
+const OrderDetail = lazy(() => import('./pages/OrderDetail'))
+const Packages = lazy(() => import('./pages/Packages'))
+const PackageDetail = lazy(() => import('./pages/PackageDetail'))
+const Controlled = lazy(() => import('./pages/Controlled'))
+const Audit = lazy(() => import('./pages/Audit'))
+const Org = lazy(() => import('./pages/Org'))
+const Nas = lazy(() => import('./pages/Nas'))
+const Notifications = lazy(() => import('./pages/Notifications'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { user } = useAuth()
@@ -65,6 +68,8 @@ export default function App() {
           <RequireAuth>
             <AppLayout>
               <RequireRole>
+              {/* 切页时分块尚未到达的短暂等待态，避免白屏 */}
+              <Suspense fallback={<div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/todo" element={<Todo />} />
@@ -79,6 +84,7 @@ export default function App() {
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </Suspense>
               </RequireRole>
             </AppLayout>
           </RequireAuth>
