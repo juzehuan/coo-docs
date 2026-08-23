@@ -76,6 +76,14 @@ services:
       minio:
         condition: service_started
     restart: unless-stopped
+    # 健康检查探测 /health（该端点会真正查一次数据库），让编排与监控能感知
+    # "进程还活着但依赖已挂"的状态；start_period 覆盖建表与种子数据的启动耗时
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     ports:
       # 仅绑定本机回环：外部流量必须经 nginx（frontend:80）代理，防止绕过认证头与体积限制；
       # 本机保留 8000 供 vite dev 代理与本地调试使用

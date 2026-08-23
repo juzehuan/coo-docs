@@ -4,13 +4,13 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import DataError
+from sqlalchemy.exc import DataError, OperationalError
 
 from app.core.config import settings
 from app.core.json import SafeIntJSONResponse
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
-from app.db import SessionLocal, init_db
+from app.db import SessionLocal, engine, init_db
 from app.api import audit, auth, controlled, dashboard, factories, nas, notifications, orders, org, packages, todo
 
 
@@ -36,6 +36,17 @@ def create_app() -> FastAPI:
         logging.getLogger("app").warning("数据校验失败 %s: %s", request.url.path, exc)
         return SafeIntJSONResponse(status_code=400, content={"detail": "字段内容过长或格式不正确，请检查后重试"})
 
+    # 数据库暂时不可用（重启、网络抖动）应回 503 而非 500：
+    # 503 表示"暂时性、可重试"，500 会把运维引向"代码有 bug"的排查方向；
+    # 且裸 500 返回的是无结构文本，前端取不到 detail，用户只看到笼统报错。
+    @app.exception_handler(OperationalError)
+    def _db_unavailable(request, exc: OperationalError):
+        logging.getLogger("app").error("数据库不可用 %s: %s", request.url.path, exc)
+        return SafeIntJSONResponse(
+            status_code=503,
+            content={"detail": "数据库暂时不可用，请稍后重试"},
+        )
+
     # 确保存储目录存在
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.NAS_ROOT, exist_ok=True)
@@ -45,7 +56,23 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "app": settings.APP_NAME}
+        """健康检查：必须真正探测数据库。
+
+        只返回静态字符串的健康检查是无效的 —— 数据库宕机时全部业务接口 500，
+        它却仍报告 200，监控不告警、编排不重启、负载均衡继续打流量进来。
+        用最轻量的 SELECT 1 探活，不可用时返回 503 让外部能据此判断。
+        """
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger("app").warning("健康检查失败：数据库不可达 %s", e)
+            return SafeIntJSONResponse(
+                status_code=503,
+                content={"status": "unavailable", "app": settings.APP_NAME, "db": "down"},
+            )
+        return {"status": "ok", "app": settings.APP_NAME, "db": "up"}
 
     @app.on_event("startup")
     def _startup():
