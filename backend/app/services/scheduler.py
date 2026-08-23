@@ -64,9 +64,15 @@ def _loop() -> None:
             from app.services.nas_sync import run_sync
             db = SessionLocal()
             try:
-                rec = run_sync(db, run_type="auto")
-                logger.info("NAS 自动同步完成：status=%s total=%s success=%s failed=%s",
-                            rec.status, rec.total, rec.success, rec.failed)
+                from app.services.nas_sync import SyncBusy
+                try:
+                    rec = run_sync(db, run_type="auto")
+                    logger.info("NAS 自动同步完成：status=%s total=%s success=%s failed=%s",
+                                rec.status, rec.total, rec.success, rec.failed)
+                except SyncBusy:
+                    # 手动同步正在跑：本次自动同步跳过即可，待同步内容不会丢，
+                    # 那次手动同步会一并处理
+                    logger.info("NAS 自动同步跳过：已有同步任务在进行中")
             finally:
                 db.close()
         except Exception:

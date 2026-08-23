@@ -1,5 +1,5 @@
 """NAS 归档同步接口（F-06）。"""
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,11 @@ def nas_status(db: Session = Depends(get_db), _: User = Depends(nas_viewer)):
 
 @router.post("/sync", response_model=SyncRecordOut)
 def trigger_sync(request: Request, db: Session = Depends(get_db), user: User = Depends(coo_or_admin)):
-    rec = nas_sync.run_sync(db, run_type="manual", triggered_by=user.id)
+    try:
+        rec = nas_sync.run_sync(db, run_type="manual", triggered_by=user.id)
+    except nas_sync.SyncBusy as e:
+        # 409 而非 500：这是"当前不可执行"而非故障，前端据此提示用户稍后再试
+        raise HTTPException(status_code=409, detail=str(e))
     log_event(db, AuditDomain.NAS, "manual_sync", actor=user, ip=client_ip(request),
               detail=f"success={rec.success},failed={rec.failed}")
     return rec

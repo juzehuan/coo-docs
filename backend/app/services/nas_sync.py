@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import threading
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -260,7 +261,34 @@ def probe_config(cfg: dict) -> dict:
         return {"ok": False, "detail": f"目录不可写：{e}"}
 
 
+class SyncBusy(RuntimeError):
+    """已有同步在进行中。"""
+
+
+# 同步互斥：每日调度与管理员手动同步可能撞车。实测并发触发两次，**两次都跑完
+# 并各自上传同一批附件、各留一条「成功」记录**——重复上传白白占用工厂隧道带宽
+# （NAS 多在客户内网、经隧道访问），运维看到的数字也失真（明明只有 4 个待同步，
+# 却显示两次各 4 个）。第二个请求应当被明确拒绝，而不是默默做一遍重复工作。
+#
+# 注：当前部署为单进程 uvicorn，进程内锁即可；若将来横向扩成多进程/多实例，
+# 需换成数据库层的互斥（如对 sync_records 取咨询锁）。
+_sync_lock = threading.Lock()
+
+
+def sync_in_progress() -> bool:
+    return _sync_lock.locked()
+
+
 def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = None) -> SyncRecord:
+    if not _sync_lock.acquire(blocking=False):
+        raise SyncBusy("已有同步任务正在进行，请稍后再试")
+    try:
+        return _run_sync_locked(db, run_type, triggered_by)
+    finally:
+        _sync_lock.release()
+
+
+def _run_sync_locked(db: Session, run_type: str, triggered_by: int | None) -> SyncRecord:
     rec = SyncRecord(run_type=run_type, triggered_by=triggered_by, status="running")
     db.add(rec)
     db.commit()
