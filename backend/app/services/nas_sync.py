@@ -8,6 +8,7 @@
 同步为单向（云端 -> NAS），只新增不删除；每次同步后为已放行版本写 manifest.txt。
 """
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -19,6 +20,11 @@ from app.constants import NAS_BASE_DIRNAME
 from app.core.config import settings
 from app.models import Attachment, Order, OrderPackage, Package, PackageVersion, SyncRecord
 from app.services import s3
+
+logger = logging.getLogger("app.nas_sync")
+
+# 单条同步记录里最多保存多少条失败明细（超出只记数量，完整内容进日志）
+MAX_DETAIL_FAILURES = 50
 
 CHUNK = 1024 * 1024
 
@@ -48,6 +54,37 @@ def _common_parts(ver: PackageVersion, pkg: Package) -> list[str]:
         _safe_segment(f"{pkg.code}_{pkg.name_zh}", pkg.code or "pkg"),
         _safe_segment(ver.version_no, "V"),
     ]
+
+
+def _group_key(att: Attachment):
+    """附件在归档目录中的归属组（同组即同一个 NAS 目录）。"""
+    return ("v", att.version_id) if att.version_id is not None else ("o", att.order_package_id)
+
+
+def archive_name(att: Attachment, dup_names: set[str]) -> str:
+    """附件在 NAS 上的文件名。
+
+    规格要求目录末级使用 {原文件名}，但同一资料包内同名文件（如多个供应商各自的
+    "发票.pdf"，COO-05/06/07 明确要求逐份上传）会互相覆盖：NAS 只剩最后一份，
+    而数据库与 manifest 仍显示多条 —— 静默丢件且审计核验必然对不上。
+    因此仅在该目录内存在重名时，追加内容哈希前 8 位加以区分；不重名者保持原样。
+    """
+    base = _safe_segment(att.original_name or att.file_name)
+    if base not in dup_names:
+        return base
+    stem, ext = os.path.splitext(base)
+    return f"{stem}__{(att.md5 or '')[:8]}{ext}"
+
+
+def duplicate_names(atts) -> set[str]:
+    """返回同组内出现一次以上的安全文件名集合。"""
+    seen, dup = set(), set()
+    for a in atts:
+        n = _safe_segment(a.original_name or a.file_name)
+        if n in seen:
+            dup.add(n)
+        seen.add(n)
+    return dup
 
 
 def _order_parts(op: OrderPackage, pkg: Package, order_no: str) -> list[str]:
@@ -82,11 +119,11 @@ class _LocalBackend:
     def order_base(self, op: OrderPackage, pkg: Package, order_no: str) -> str:
         return os.path.join(settings.NAS_ROOT, *_order_parts(op, pkg, order_no))
 
-    def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
-        return os.path.join(self.version_base(ver, pkg), _safe_segment(att.original_name or att.file_name))
+    def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion, name: str) -> str:
+        return os.path.join(self.version_base(ver, pkg), name)
 
-    def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str) -> str:
-        return os.path.join(self.order_base(op, pkg, order_no), _safe_segment(att.original_name or att.file_name))
+    def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str, name: str) -> str:
+        return os.path.join(self.order_base(op, pkg, order_no), name)
 
     def sync_one(self, target: str, src: str, att: Attachment) -> bool:
         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -119,12 +156,10 @@ class _S3Backend:
     def order_base(self, op: OrderPackage, pkg: Package, order_no: str) -> str:
         return "/".join(_order_parts(op, pkg, order_no))
 
-    def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion) -> str:
-        name = _safe_segment(att.original_name or att.file_name)
+    def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion, name: str) -> str:
         return f"{self.version_base(ver, pkg)}/{name}"
 
-    def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str) -> str:
-        name = _safe_segment(att.original_name or att.file_name)
+    def order_target(self, att: Attachment, op: OrderPackage, pkg: Package, order_no: str, name: str) -> str:
         return f"{self.order_base(op, pkg, order_no)}/{name}"
 
     def sync_one(self, key: str, src: str, att: Attachment) -> bool:
@@ -178,6 +213,17 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
     pending = db.query(Attachment).filter(Attachment.nas_synced.is_(False)).all()
     rec.total = len(pending)
     success = 0
+    # 重名判定必须基于目录内的全部附件（含此前已同步的），否则新上传的同名文件
+    # 会以"看起来不重名"的方式覆盖掉早先归档的那一份
+    dup_cache: dict = {}
+
+    def dups_for(att: Attachment) -> set[str]:
+        key = _group_key(att)
+        if key not in dup_cache:
+            col = Attachment.version_id if key[0] == "v" else Attachment.order_package_id
+            dup_cache[key] = duplicate_names(db.query(Attachment).filter(col == key[1]).all())
+        return dup_cache[key]
+
     for att in pending:
         try:
             src = os.path.join(settings.UPLOAD_DIR, att.file_name)
@@ -190,7 +236,7 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
                 if not ver or not pkg:
                     failures.append({"attachment_id": att.id, "reason": "版本/资料包不存在"})
                     continue
-                target = backend.version_target(att, pkg, ver)
+                target = backend.version_target(att, pkg, ver, archive_name(att, dups_for(att)))
             elif att.order_package_id is not None:
                 op = db.get(OrderPackage, att.order_package_id)
                 o = db.get(Order, op.order_id) if op else None
@@ -198,7 +244,7 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
                 if not op or not o or not pkg:
                     failures.append({"attachment_id": att.id, "reason": "订单/资料包不存在"})
                     continue
-                target = backend.order_target(att, op, pkg, o.order_no)
+                target = backend.order_target(att, op, pkg, o.order_no, archive_name(att, dups_for(att)))
             else:
                 failures.append({"attachment_id": att.id, "reason": "无归属版本/订单"})
                 continue
@@ -219,7 +265,16 @@ def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = Non
         _write_manifests(db, backend)
     except Exception:  # noqa: BLE001
         pass
-    rec.details = {"backend": backend.name, "tunnel_ok": True, "failures": failures}
+    # 失败明细只留前 MAX_DETAIL_FAILURES 条：一次大规模失败会产生上万条记录，
+    # 整表写入近 1MB JSON 后，sync_records 的 ORDER BY 排序会因行宽过大直接报
+    # 1038 Out of sort memory —— 让运维恰好在同步失败时打不开 NAS 状态页。完整明细见日志。
+    kept = failures[:MAX_DETAIL_FAILURES]
+    details = {"backend": backend.name, "tunnel_ok": True, "failures": kept}
+    if len(failures) > MAX_DETAIL_FAILURES:
+        details["failures_truncated"] = len(failures) - MAX_DETAIL_FAILURES
+        logger.warning("NAS 同步失败 %s 条，详情仅保留前 %s 条：%s",
+                       len(failures), MAX_DETAIL_FAILURES, failures[MAX_DETAIL_FAILURES:])
+    rec.details = details
     rec.finished_at = datetime.utcnow()
     db.commit()
     db.refresh(rec)
@@ -234,10 +289,14 @@ def _write_manifests(db: Session, backend):
         if not pkg:
             continue
         base = backend.version_base(ver, pkg)
+        # 列出的必须是 NAS 上的实际文件名，否则重名被区分后清单与目录对不上，审计核验会失败
+        dup = duplicate_names(ver.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {ver.version_no}",
-                 f"# generated {datetime.utcnow().isoformat()}"]
+                 f"# generated {datetime.utcnow().isoformat()}",
+                 "# 归档文件名\t字节数\tMD5\t上传原名"]
         for att in ver.attachments:
-            lines.append(f"{att.original_name}\t{att.file_size}\t{att.md5}")
+            an = archive_name(att, dup)
+            lines.append(f"{an}\t{att.file_size}\t{att.md5}\t{att.original_name}")
         backend.write_manifest(base, lines)
 
     released_ops = db.query(OrderPackage).filter(
@@ -248,8 +307,11 @@ def _write_manifests(db: Session, backend):
         if not o or not pkg:
             continue
         base = backend.order_base(op, pkg, o.order_no)
+        dup = duplicate_names(op.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {o.order_no}",
-                 f"# generated {datetime.utcnow().isoformat()}"]
+                 f"# generated {datetime.utcnow().isoformat()}",
+                 "# 归档文件名\t字节数\tMD5\t上传原名"]
         for att in op.attachments:
-            lines.append(f"{att.original_name}\t{att.file_size}\t{att.md5}")
+            an = archive_name(att, dup)
+            lines.append(f"{an}\t{att.file_size}\t{att.md5}\t{att.original_name}")
         backend.write_manifest(base, lines)

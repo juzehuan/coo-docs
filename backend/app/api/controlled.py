@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from app.constants import AuditDomain, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
+from app.core.csv_safe import csv_row
+from app.core.http_headers import content_disposition
+from app.services.nas_sync import archive_name, duplicate_names
 from app.core.rbac import require_roles
 from app.db import get_db
 from app.models import Package, PackageVersion, User
@@ -18,12 +21,15 @@ from app.schemas import VersionOut
 
 router = APIRouter(prefix="/controlled", tags=["controlled"])
 
-# 受控区（F-09）仅审核/管理员可访问：部门审核人、COO 终审人、管理员
-controlled_access = require_roles("dept_reviewer", "coo_reviewer", "admin")
+# 受控区（F-09）为只读调阅区：部门审核人、COO 终审人、管理员，以及审计查看人。
+# 规格书角色表明确「审计查看人：只读调阅已放行资料，导出清单」——受控区正是内审/
+# 外部核查配合人员的主要工作面，此处若排除 auditor 会让该角色无法履行本职。
+# 本模块只提供查看与归档下载，不含任何写入口，故对 auditor 开放不违反其只读约束。
+controlled_access = require_roles("dept_reviewer", "coo_reviewer", "auditor", "admin")
 
 
 def _visible_pkg_ids(db: Session, user: User) -> set:
-    """受控区可见范围：部门审核人仅本部门包；COO/管理员可见全部。"""
+    """受控区可见范围：部门审核人仅本部门包；COO/审计查看人/管理员可见全部。"""
     q = db.query(Package)
     if user.role == "dept_reviewer":
         q = q.filter(Package.dept_id == user.dept_id)
@@ -72,22 +78,25 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
     buf = io.BytesIO()
     safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code or "pkg")
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        manifest = [["资料包", "版本", "附件原名", "存储文件名", "大小(字节)"]]
+        manifest = [["资料包", "版本", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
+        # 同名附件若都用原文件名会在 ZIP 内生成同路径条目、解压时互相覆盖，
+        # 导致交付给核查方的材料静默缺件；复用 NAS 归档命名规则保持三处一致。
+        dup = duplicate_names(v.attachments)
         for att in v.attachments:
             src = os.path.join(settings.UPLOAD_DIR, att.file_name)
             if not os.path.exists(src):
                 continue
-            safe_name = re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff]", "_", att.original_name or att.file_name)
+            safe_name = archive_name(att, dup)
             arc = f"{safe_code}/{v.version_no}/{safe_name}"
             zf.write(src, arc)
-            manifest.append([p.code, v.version_no, att.original_name, att.file_name, str(att.file_size)])
-        _q = lambda c: c.replace(chr(34), chr(34) * 2)
-        zf.writestr("_manifest.csv", "\ufeff" + "\n".join(",".join(f'"{_q(c)}"' for c in row) for row in manifest))
+            manifest.append([p.code, v.version_no, safe_name, att.original_name, att.file_name,
+                             str(att.file_size), att.md5 or ""])
+        zf.writestr("_manifest.csv", "\ufeff" + "\n".join(csv_row(row) for row in manifest))
     buf.seek(0)
 
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code}/{v.version_no}")
     return StreamingResponse(
         buf, media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=controlled_{safe_code}_{v.version_no}.zip"},
+        headers={"Content-Disposition": content_disposition(f"controlled_{p.code}_{v.version_no}.zip")},
     )

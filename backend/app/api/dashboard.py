@@ -1,9 +1,12 @@
 """工作概览看板（F-03）。"""
 from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
+from app.core.csv_safe import csv_row
+from app.core.overdue import is_overdue
 from app.core.rbac import can_view_package, export_viewer, get_current_user
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
@@ -27,7 +30,8 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     # 构建 资料包 -> 最新版本状态
     latest = {}
     for v in versions:
-        if v.package_id not in latest or v.created_at > latest[v.package_id].created_at:
+        # 用 id 比较：created_at 秒级精度，同秒创建的版本比不出先后
+        if v.package_id not in latest or v.id > latest[v.package_id].id:
             latest[v.package_id] = v
 
     # 仅统计可见资料包的完成度，避免向提交人泄露非本人资料包信息
@@ -36,14 +40,16 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     completion = round(released_count / len(visible_pkgs) * 100, 1) if visible_pkgs else 0.0
 
     # 附件总数：订单附件按工厂隔离；版本附件属共享资料包模板，全部统计
+    # func.count 聚合，避免 Query.count() 的全字段子查询在万级附件下撑爆排序缓冲
     order_att = (
-        db.query(Attachment)
+        db.query(func.count(Attachment.id))
         .join(OrderPackage, Attachment.order_package_id == OrderPackage.id)
         .join(Order, OrderPackage.order_id == Order.id)
         .filter(Order.factory_id.in_(fids))
-        .count()
+        .scalar() or 0
     )
-    ver_att = db.query(Attachment).filter(Attachment.order_package_id.is_(None)).count()
+    ver_att = db.query(func.count(Attachment.id)).filter(
+        Attachment.order_package_id.is_(None)).scalar() or 0
     total_attachments = order_att + ver_att
 
     # 待我处理：提交人看自己被退回/撤回；部门审核人看待部门审核；COO 看待终审
@@ -89,19 +95,29 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         v = latest.get(p.id)
         st = v.status if v else "none"
         att_n = len(v.attachments) if v else 0
+        # 超期 = 截止日期已过且未放行（F-03）
+        od = is_overdue(p.due_date, st)
+        if od:
+            overdue += 1
         # 进度：已放行=100，待终审=80，待部门=50，退回/撤回=30，草稿=10，无=0
         pct = {"released": 100, "pending_coo": 80, "pending_dept": 50,
                "rejected": 30, "withdrawn": 30, "draft": 10, "none": 0}.get(st, 0)
         progress.append({"code": p.code, "name": p.name_zh, "status": st, "percent": pct,
-                         "attachments": att_n})
+                         "attachments": att_n, "overdue": od})
+        if od:
+            need_attention.append({"code": p.code, "name": p.name_zh,
+                                   "issue": f"已超期（截止 {p.due_date}）", "reason": "", "overdue": True})
         if st == "rejected":
-            overdue += 1
             need_attention.append({"code": p.code, "name": p.name_zh, "issue": "已退回，待整改",
                                    "reason": v.dept_reject_reason or v.coo_reject_reason})
         elif st == "pending_coo":
             need_attention.append({"code": p.code, "name": p.name_zh, "issue": "待 COO 终审", "reason": ""})
         elif st == "pending_dept":
             need_attention.append({"code": p.code, "name": p.name_zh, "issue": "待部门审核", "reason": ""})
+    # 订单资料包实例的超期（按可见工厂范围）
+    for op in ops:
+        if is_overdue(op.due_date, op.status):
+            overdue += 1
 
     return DashboardOut(
         package_completion=completion,
@@ -115,20 +131,19 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
 
 
 @router.get("/export")
-def export_archive_list(db: Session = Depends(get_db), user: User = Depends(export_viewer)):
+def export_archive_list(request: Request, db: Session = Depends(get_db),
+                        user: User = Depends(export_viewer)):
     """归档清单导出（CSV）。审计查看人/COO/管理员可用。"""
     versions = db.query(PackageVersion).all()
     pkgs = {p.id: p for p in db.query(Package).all()}
     header = ["资料包编号", "资料包名称", "版本", "状态", "责任人", "附件数", "已同步NAS"]
     lines = [",".join(header)]
-    _q = lambda c: str(c).replace(chr(34), chr(34) * 2)
     for v in versions:
         p = pkgs.get(v.package_id)
         synced = sum(1 for a in v.attachments if a.nas_synced)
-        line = [p.code if p else "", p.name_zh if p else "", v.version_no, v.status,
-                str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"]
-        lines.append(",".join(f'"{_q(c)}"' for c in line))
+        lines.append(csv_row([p.code if p else "", p.name_zh if p else "", v.version_no, v.status,
+                              str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"]))
     csv = "\n".join(lines)
-    log_event(db, AuditDomain.EXPORT, "archive_csv", actor=user, ip=client_ip(None))
+    log_event(db, AuditDomain.EXPORT, "archive_csv", actor=user, ip=client_ip(request))
     return Response(content="\ufeff" + csv, media_type="text/csv",
                     headers={"Content-Disposition": "attachment; filename=archive_list.csv"})
