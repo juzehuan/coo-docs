@@ -9,8 +9,11 @@ services:
       MYSQL_PASSWORD: coo123456
     volumes:
       - mysql_data:/var/lib/mysql
+    restart: unless-stopped
     ports:
-      - "3306:3306"
+      # 仅绑定本机回环：数据库不对外网/局域网暴露（容器间走 compose 内部网络）。
+      # 宿主侧映射 3307，避免与本机已有的 3306 服务冲突（backend 走容器网络不受影响）
+      - "127.0.0.1:3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
       interval: 10s
@@ -26,8 +29,9 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # 管理控制台
+      # 仅绑定本机回环：对象存储与控制台不对外暴露（backend 走容器网络访问）
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # 管理控制台
     restart: unless-stopped
 
   # 严格 S3 语义交叉验证：Zenko CloudServer（模拟群晖/威联通独立 S3 服务端）
@@ -40,14 +44,19 @@ services:
       ENDPOINT: zenko
       REMOTE_MANAGEMENT_DISABLE: 1
     ports:
-      - "8001:8000"   # 主机映射 8001 避免与后端冲突
+      # 仅绑定本机回环：测试用 S3 服务使用公开已知的默认密钥，绝不可对外暴露
+      - "127.0.0.1:8001:8000"   # 主机映射 8001 避免与后端冲突
     restart: unless-stopped
 
   backend:
     build: ./backend
     environment:
       DATABASE_URL: mysql+pymysql://coo:coo123456@mysql:3306/coo?charset=utf8mb4
-      SECRET_KEY: change-me-in-production
+      # JWT 密钥不再走环境变量：首次启动自动生成并存库，超管可在「组织管理 → 安全设置」轮换
+      # 生产模式：不创建演示账号；首次启动仅建 admin，随机密码打印在启动日志（仅一次）
+      SEED_DEMO_DATA: "false"
+      # 站点时区：NAS 定时同步与超期判断按此计算
+      TIMEZONE: Asia/Bangkok
       CORS_ORIGINS: http://localhost,http://localhost:5173
       NAS_ROOT: /app/data/nas
       UPLOAD_DIR: /app/data/uploads
@@ -66,13 +75,19 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      # 仅绑定本机回环：外部流量必须经 nginx（frontend:80）代理，防止绕过认证头与体积限制；
+      # 本机保留 8000 供 vite dev 代理与本地调试使用
+      - "127.0.0.1:8000:8000"
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
-      - "80:80"
+      # 仅绑定本机回环：对外访问一律经 Cloudflare Tunnel（coo.chongzhu.ai → localhost:80），
+      # HTTPS 由 Cloudflare 边缘终结；源站不在局域网/公网暴露
+      - "127.0.0.1:80:80"
 
 volumes:
   mysql_data:

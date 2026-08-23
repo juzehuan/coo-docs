@@ -12,6 +12,10 @@ backend/coo.db
 data/
 nas_mount/
 
+# 数据库备份转储：含用户密码哈希与 JWT 签名密钥，绝不可入库
+backups/
+certs/
+
 # Node / 前端
 node_modules/
 dist/

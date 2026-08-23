@@ -224,6 +224,15 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class SystemSetting(Base):
+    """系统级键值设置：如运行时 JWT 密钥（jwt_secret_key），由超管在界面维护。"""
+    __tablename__ = "system_settings"
+
+    key = Column(String(64), primary_key=True)
+    value = Column(Text, nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class SyncRecord(Base):
     """NAS 同步批次记录。"""
     __tablename__ = "sync_records"
@@ -236,5 +245,6 @@ class SyncRecord(Base):
     failed = Column(Integer, default=0)
     status = Column(String(16), default="running")      # running/success/partial/failed
     details = Column(JSON, default=dict)                # {failures:[...], tunnel_ok:bool}
-    started_at = Column(DateTime, default=datetime.utcnow)
+    # 索引供「最近一次同步」按时间倒序取用：无索引时 MySQL 需对含 JSON 大字段的宽行 filesort
+    started_at = Column(DateTime, default=datetime.utcnow, index=True)
     finished_at = Column(DateTime, nullable=True)

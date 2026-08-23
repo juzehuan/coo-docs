@@ -73,10 +73,16 @@ export const org = {
   listDepartments: () => get<Department[]>('/org/departments'),
   createDepartment: (data: { code: string; name_zh: string; name_en?: string; name_th?: string }) =>
     post<Department>('/org/departments', data),
+  updateDepartment: (id: string, data: { name_zh?: string; name_en?: string; name_th?: string }) =>
+    patch<Department>(`/org/departments/${id}`, data),
   listUsers: (dept_id?: string) => get<User[]>('/org/users', dept_id ? { dept_id } : undefined),
   createUser: (data: { username: string; password: string; display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string; factory_ids?: number[] }) =>
     post<User>('/org/users', data),
+  updateUser: (id: string, data: { display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string; status?: string; factory_ids?: number[] }) =>
+    patch<User>(`/org/users/${id}`, data),
   resetPassword: (id: string) => post<PasswordResetOut>(`/org/users/${id}/reset-password`),
+  rotateJwtSecret: (custom_key?: string) =>
+    post<{ msg: string }>('/org/security/rotate-jwt-secret', { custom_key: custom_key || '' }),
 }
 
 // ---------- 资料包 / 版本 / 附件 ----------
@@ -137,7 +143,8 @@ export const controlled = {
 }
 
 export const audit = {
-  list: (params?: { domain?: string; actor_id?: string; limit?: number }) => get<AuditLog[]>('/audit/logs', params),
+  list: (params?: { domain?: string; actor_id?: string; actor?: string; target?: string; start?: string; end?: string; limit?: number }) =>
+    get<AuditLog[]>('/audit/logs', params),
   exportCsv: () => downloadBlob('/audit/export'),
 }
 

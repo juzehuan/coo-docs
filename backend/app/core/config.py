@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./coo.db"
 
     # 安全
-    SECRET_KEY: str = "change-me-in-production-please-use-a-long-random-string"
+    # 注意：JWT 密钥不在配置中——存于数据库（system_settings 表），首次启动自动随机生成，
+    # 超管可在「组织管理 → 安全设置」界面轮换。见 core/runtime_secret.py。设置 SECRET_KEY 环境变量无任何效果。
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 会话超时 8h
     PASSWORD_SALT_ROUNDS: int = 12
@@ -39,8 +40,15 @@ class Settings(BaseSettings):
     S3_USE_SSL: bool = False
 
     # NAS 同步
-    NAS_SYNC_TIME: str = "01:00"
+    NAS_SYNC_TIME: str = "01:00"       # 站点本地时间（TIMEZONE），非容器 UTC 时钟
     PROJECT_CODE: str = "Bintelli-US"
+
+    # 站点时区：NAS 定时同步与超期判断按此时区计算（部署于曼谷/工厂在泰国）
+    TIMEZONE: str = "Asia/Bangkok"
+
+    # 种子数据：默认含演示账号（admin/admin123 等公开已知密码）与示例订单，便于开发验收。
+    # 生产环境务必设为 false —— 首次启动将只创建 admin，密码随机生成并打印到启动日志（仅一次）。
+    SEED_DEMO_DATA: bool = True
 
     @property
     def S3_ENABLED(self) -> bool:
@@ -52,14 +60,6 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
-
-    def model_post_init(self, __context) -> None:
-        # 安全加固：SECRET_KEY 仍为默认占位值时给出告警，生产务必用环境变量覆盖
-        if self.SECRET_KEY and self.SECRET_KEY.startswith("change-me"):
-            import logging
-            logging.getLogger("app.config").warning(
-                "SECRET_KEY 仍为默认占位值，生产环境请务必通过环境变量 SECRET_KEY 覆盖")
-
 
 @lru_cache
 def get_settings() -> Settings:

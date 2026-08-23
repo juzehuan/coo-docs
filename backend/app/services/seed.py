@@ -1,10 +1,19 @@
-"""初始化种子数据：工厂、部门、18 个资料包、角色账号与示例订单。"""
+"""初始化种子数据：工厂、部门、18 个资料包、角色账号与示例订单。
+
+SEED_DEMO_DATA=false（生产）时：不创建演示账号与示例订单，仅确保 admin 存在，
+且 admin 初始密码随机生成、只在启动日志打印一次。
+"""
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.constants import Role
-from app.core.security import hash_password
+from app.core.config import settings
+from app.core.security import generate_temp_password, hash_password
 from app.models import Department, Factory, Order, Package, User, PackageVersion
 from app.core.snowflake import next_id
+
+logger = logging.getLogger("app.seed")
 
 # 工厂（数据隔离边界）
 FACTORIES = [
@@ -121,9 +130,16 @@ def seed(db: Session):
 
     # 账号（admin/coo/auditor 授权全部工厂；业务账号授权 RMA）
     # 幂等：已存在账号也同步工厂授权，避免历史库/重建时授权缺失。
-    for username, name, role, dept_code, pwd in ACCOUNTS:
+    demo = settings.SEED_DEMO_DATA
+    accounts = ACCOUNTS if demo else [a for a in ACCOUNTS if a[0] == "admin"]
+    if demo:
+        logger.warning("SEED_DEMO_DATA 已启用：将创建公开已知密码的演示账号（admin/admin123 等），生产环境请设置 SEED_DEMO_DATA=false")
+    for username, name, role, dept_code, pwd in accounts:
         u = db.query(User).filter(User.username == username).first()
         if not u:
+            if username == "admin" and not demo:
+                pwd = generate_temp_password()
+                logger.warning("首次初始化：已创建 admin 账号，初始密码仅此一次打印，请立即登录修改 —— admin / %s", pwd)
             u = User(
                 id=next_id(),
                 username=username,
@@ -154,11 +170,11 @@ def seed(db: Session):
         if p and p.owner_user_id is None and dept_code in owner_by_dept:
             p.owner_user_id = owner_by_dept[dept_code]
 
-    # 示例订单（每厂 1 单，供快速验收）
+    # 示例订单（每厂 1 单，供快速验收；生产不创建）
     sample = [
         ("RMA", "ORD-RMA-001", "Bintelli Motors", "高尔夫球车 RMA-X1", 120, "2026-10-15"),
         ("WEV", "ORD-WEV-001", "Toyha East", "城市电动小车 WEV-C2", 40, "2026-11-01"),
-    ]
+    ] if demo else []
     for fac_code, order_no, customer, product, qty, export_date in sample:
         if db.query(Order).filter(Order.order_no == order_no).first():
             continue
