@@ -90,6 +90,11 @@ export async function post<T>(url: string, data?: unknown, params?: unknown): Pr
   return r.data
 }
 
+export async function put<T>(url: string, data?: unknown): Promise<T> {
+  const r = await client.put<T>(url, data)
+  return r.data
+}
+
 export async function patch<T>(url: string, data?: unknown): Promise<T> {
   const r = await client.patch<T>(url, data)
   return r.data

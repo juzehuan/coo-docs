@@ -344,6 +344,41 @@ class NasStatusOut(BaseModel):
     pending_count: int = 0
 
 
+class NasConfigOut(BaseModel):
+    """NAS 归档配置（secret_key 以掩码返回，不回显明文）。"""
+    mode: str = "local"
+    endpoint_url: str = ""
+    access_key: str = ""
+    secret_key: str = ""
+    bucket: str = ""
+    region: str = ""
+    use_ssl: bool = False
+    local_root: str = ""
+    sync_time: str = "01:00"
+    auto_sync: bool = True
+
+
+class NasConfigIn(BaseModel):
+    # 长度上限与 system_settings.value 及常见 S3 实现的限制对齐，避免超长内容写库失败
+    mode: str = Field("local", pattern="^(s3|local)$")
+    endpoint_url: str = Field("", max_length=255)
+    access_key: str = Field("", max_length=128)
+    # 留空表示"保持不变"：接口从不回显密钥明文，前端也就无从原样回传
+    secret_key: str = Field("", max_length=256)
+    bucket: str = Field("", max_length=128)
+    region: str = Field("", max_length=64)
+    use_ssl: bool = False
+    local_root: str = Field("", max_length=255)
+    # HH:MM，两位小时 + 两位分钟
+    sync_time: str = Field("01:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    auto_sync: bool = True
+
+
+class NasTestResult(BaseModel):
+    ok: bool
+    detail: str = ""
+
+
 # ---------- 看板 ----------
 class DashboardOut(BaseModel):
     package_completion: float = 0.0      # 资料包完成度 %

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import NAS_BASE_DIRNAME
 from app.core.config import settings
+from app.core import nas_config
 from app.models import Attachment, Order, OrderPackage, Package, PackageVersion, SyncRecord
 from app.services import s3
 
@@ -96,13 +97,18 @@ def _order_parts(op: OrderPackage, pkg: Package, order_no: str) -> list[str]:
     ]
 
 
+def _local_root() -> str:
+    """本地挂载点：以数据库中的运行时配置为准（管理员可在界面修改）。"""
+    return nas_config.get_config()["local_root"] or settings.NAS_ROOT
+
+
 class _LocalBackend:
-    """本地目录回退：NAS_ROOT 模拟挂载点（开发环境 / 未配置 S3 时）。"""
+    """本地目录回退：挂载点模拟（开发环境 / 未配置 S3 时）。"""
 
     name = "local"
 
     def reachable(self) -> bool:
-        root = settings.NAS_ROOT
+        root = _local_root()
         try:
             os.makedirs(root, exist_ok=True)
             probe = os.path.join(root, ".probe")
@@ -114,10 +120,10 @@ class _LocalBackend:
             return False
 
     def version_base(self, ver: PackageVersion, pkg: Package) -> str:
-        return os.path.join(settings.NAS_ROOT, *_common_parts(ver, pkg))
+        return os.path.join(_local_root(), *_common_parts(ver, pkg))
 
     def order_base(self, op: OrderPackage, pkg: Package, order_no: str) -> str:
-        return os.path.join(settings.NAS_ROOT, *_order_parts(op, pkg, order_no))
+        return os.path.join(_local_root(), *_order_parts(op, pkg, order_no))
 
     def version_target(self, att: Attachment, pkg: Package, ver: PackageVersion, name: str) -> str:
         return os.path.join(self.version_base(ver, pkg), name)
@@ -136,7 +142,7 @@ class _LocalBackend:
             f.write("\n".join(lines) + "\n")
 
     def display(self) -> str:
-        return settings.NAS_ROOT
+        return _local_root()
 
 
 class _S3Backend:
@@ -175,7 +181,8 @@ class _S3Backend:
         s3.put_bytes(self.cli, f"{base}/manifest.txt", ("\n".join(lines) + "\n").encode("utf-8"))
 
     def display(self) -> str:
-        return f"s3://{settings.S3_BUCKET}@{settings.S3_ENDPOINT_URL}"
+        cfg = nas_config.get_config()
+        return f"s3://{cfg['bucket']}@{cfg['endpoint_url']}"
 
 
 def _backend():
@@ -189,6 +196,61 @@ def nas_reachable() -> bool:
 def nas_target_display() -> str:
     """NAS 目标展示（NAS 状态卡片）。"""
     return _backend().display()
+
+
+def probe_config(cfg: dict) -> dict:
+    """用给定参数试连一次，返回 {ok, detail}；**不修改运行中的配置**。
+
+    保存前先试连，是为了避免"改错了地址却毫无察觉、当晚自动同步静默失败"——
+    归档失败意味着该留存的核查证据没有留存，而这类问题往往几周后才被发现。
+    错误信息原样带回给管理员：区分"地址不通""密钥不对""桶不存在"全靠它。
+    """
+    import boto3
+    from botocore.config import Config as BotoConfig
+
+    if cfg.get("mode") == "s3":
+        if not (cfg.get("endpoint_url") and cfg.get("access_key") and cfg.get("secret_key")):
+            return {"ok": False, "detail": "S3 模式需填写端点地址、Access Key 与 Secret Key"}
+        try:
+            cli = boto3.client(
+                "s3",
+                endpoint_url=cfg["endpoint_url"],
+                aws_access_key_id=cfg["access_key"],
+                aws_secret_access_key=cfg["secret_key"],
+                region_name=cfg.get("region") or None,
+                use_ssl=bool(cfg.get("use_ssl")),
+                config=BotoConfig(
+                    s3={"addressing_style": "path"},
+                    # 试连不重试：管理员在等结果，连不通就该立刻回答，而不是卡十几秒
+                    retries={"max_attempts": 1, "mode": "standard"},
+                    connect_timeout=5, read_timeout=8,
+                ),
+            )
+            cli.list_buckets()
+            bucket = (cfg.get("bucket") or "").strip()
+            if not bucket:
+                return {"ok": False, "detail": "连接成功，但未填写存储桶名称"}
+            try:
+                cli.head_bucket(Bucket=bucket)
+                return {"ok": True, "detail": f"连接成功，存储桶 {bucket} 可用"}
+            except Exception:  # noqa: BLE001
+                # 桶不存在不算失败：首次同步时 ensure_bucket 会创建
+                return {"ok": True, "detail": f"连接成功；存储桶 {bucket} 尚不存在，首次同步时将自动创建"}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "detail": f"连接失败：{e}"}
+
+    root = (cfg.get("local_root") or "").strip()
+    if not root:
+        return {"ok": False, "detail": "本地模式需填写挂载目录"}
+    try:
+        os.makedirs(root, exist_ok=True)
+        probe = os.path.join(root, ".probe")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        return {"ok": True, "detail": f"目录可读写：{root}"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "detail": f"目录不可写：{e}"}
 
 
 def run_sync(db: Session, run_type: str = "auto", triggered_by: int | None = None) -> SyncRecord:

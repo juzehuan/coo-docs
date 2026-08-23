@@ -12,7 +12,8 @@ from boto3.s3.transfer import TransferConfig
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: F401  （保留：其它常量仍用）
+from app.core import nas_config
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +23,26 @@ ETAG_IS_MD5 = True
 
 
 def enabled() -> bool:
-    return settings.S3_ENABLED
+    """是否启用 S3 后端：以数据库中的运行时配置为准（管理员可在界面修改）。"""
+    return nas_config.s3_enabled()
+
+
+def bucket() -> str:
+    return nas_config.get_config()["bucket"]
 
 
 def client():
     """构建 S3 客户端；未启用时返回 None（每次新建，客户端无连接池副作用）。"""
     if not enabled():
         return None
+    cfg = nas_config.get_config()
     return boto3.client(
         "s3",
-        endpoint_url=settings.S3_ENDPOINT_URL,
-        aws_access_key_id=settings.S3_ACCESS_KEY,
-        aws_secret_access_key=settings.S3_SECRET_KEY,
-        region_name=settings.S3_REGION or None,
-        use_ssl=settings.S3_USE_SSL,
+        endpoint_url=cfg["endpoint_url"],
+        aws_access_key_id=cfg["access_key"],
+        aws_secret_access_key=cfg["secret_key"],
+        region_name=cfg["region"] or None,
+        use_ssl=cfg["use_ssl"],
         config=BotoConfig(
             s3={"addressing_style": "path"},
             retries={"max_attempts": 3, "mode": "standard"},
@@ -51,12 +58,12 @@ def ensure_bucket(cli=None, retries: int = 3) -> bool:
     for i in range(retries):
         try:
             try:
-                cli.head_bucket(Bucket=settings.S3_BUCKET)
+                cli.head_bucket(Bucket=bucket())
                 return True
             except ClientError as e:
                 code = e.response.get("Error", {}).get("Code", "")
                 if code in ("404", "NoSuchBucket", "NotFound"):
-                    cli.create_bucket(Bucket=settings.S3_BUCKET)
+                    cli.create_bucket(Bucket=bucket())
                     return True
                 raise
         except (BotoCoreError, ClientError) as e:  # noqa: BLE001
@@ -83,7 +90,7 @@ def put_file(cli, key: str, local_path: str) -> bool:
     """
     try:
         cfg = TransferConfig(multipart_threshold=settings.MAX_FILE_MB * 1024 * 1024 + 1)
-        cli.upload_file(local_path, settings.S3_BUCKET, key, Config=cfg)
+        cli.upload_file(local_path, bucket(), key, Config=cfg)
         return True
     except Exception as e:  # noqa: BLE001
         logger.warning("S3 put_file %s failed: %s", key, e)
@@ -92,7 +99,7 @@ def put_file(cli, key: str, local_path: str) -> bool:
 
 def put_bytes(cli, key: str, data: bytes, content_type: str = "text/plain") -> bool:
     try:
-        cli.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType=content_type)
+        cli.put_object(Bucket=bucket(), Key=key, Body=data, ContentType=content_type)
         return True
     except Exception as e:  # noqa: BLE001
         logger.warning("S3 put_bytes %s failed: %s", key, e)
@@ -102,7 +109,7 @@ def put_bytes(cli, key: str, data: bytes, content_type: str = "text/plain") -> b
 def head(cli, key: str) -> dict | None:
     """返回对象元数据（ContentLength/ETag），不存在返回 None。"""
     try:
-        return cli.head_object(Bucket=settings.S3_BUCKET, Key=key)
+        return cli.head_object(Bucket=bucket(), Key=key)
     except ClientError as e:
         if e.response.get("Error", {}).get("Code", "") in ("404", "NoSuchKey"):
             return None
@@ -113,7 +120,7 @@ def head(cli, key: str) -> dict | None:
 
 def delete(cli, key: str) -> None:
     try:
-        cli.delete_object(Bucket=settings.S3_BUCKET, Key=key)
+        cli.delete_object(Bucket=bucket(), Key=key)
     except Exception:  # noqa: BLE001
         logger.warning("S3 delete %s failed", key)
 
@@ -123,7 +130,7 @@ def list_keys(cli, prefix: str = "") -> list[str]:
     try:
         paginator = cli.get_paginator("list_objects_v2")
         keys = []
-        for page in paginator.paginate(Bucket=settings.S3_BUCKET, Prefix=prefix):
+        for page in paginator.paginate(Bucket=bucket(), Prefix=prefix):
             for obj in page.get("Contents", []):
                 keys.append(obj["Key"])
         return keys

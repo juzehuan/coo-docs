@@ -1,8 +1,8 @@
 import {
-  del, downloadBlob, get, patch, post, upload,
+  del, downloadBlob, get, patch, post, put, upload,
 } from './client'
 import type {
-  Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasStatus, NotificationItem,
+  Attachment, AuditLog, ControlledItem, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
   OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, Role, SyncRecord, TodoItem, User, Version,
 } from '@/types'
@@ -157,4 +157,8 @@ export const nas = {
   status: () => get<NasStatus>('/nas/status'),
   sync: () => post<SyncRecord>('/nas/sync'),
   records: (limit?: number) => get<SyncRecord[]>('/nas/records', limit ? { limit } : undefined),
+  // NAS 归档配置（管理员）：此前只能改环境变量并重启整套服务
+  config: () => get<NasConfig>('/nas/config'),
+  saveConfig: (data: NasConfig) => put<NasConfig>('/nas/config', data),
+  testConfig: (data: NasConfig) => post<{ ok: boolean; detail: string }>('/nas/config/test', data),
 }

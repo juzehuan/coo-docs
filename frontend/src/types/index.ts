@@ -17,6 +17,20 @@ export interface PasswordResetOut {
   password: string
 }
 
+export interface NasConfig {
+  mode: 's3' | 'local'
+  endpoint_url: string
+  access_key: string
+  /** 读取时为掩码；提交时留空表示保持不变 */
+  secret_key: string
+  bucket: string
+  region: string
+  use_ssl: boolean
+  local_root: string
+  sync_time: string
+  auto_sync: boolean
+}
+
 export interface Factory {
   id: string
   code: string

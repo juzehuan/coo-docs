@@ -11,6 +11,7 @@ import time
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+from app.core import nas_config
 
 logger = logging.getLogger("app.scheduler")
 
@@ -30,7 +31,7 @@ def _seconds_until(hhmm: str) -> float:
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             raise ValueError
     except ValueError:
-        logger.warning("NAS_SYNC_TIME=%r 格式非法（应为 HH:MM），回退为 01:00", hhmm)
+        logger.warning("同步时间 %r 格式非法（应为 HH:MM），回退为 01:00", hhmm)
         hour, minute = 1, 0
     now = datetime.datetime.now(_tz())
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -42,8 +43,19 @@ def _seconds_until(hhmm: str) -> float:
 def _loop() -> None:
     last_run: datetime.date | None = None
     while True:
-        time.sleep(_seconds_until(settings.NAS_SYNC_TIME))
-        today = datetime.datetime.now(_tz()).date()
+        # 每轮重新读取配置：管理员在界面改同步时间或关闭自动同步后，
+        # 下一次等待即按新值计算，不需要重启服务
+        cfg = nas_config.get_config()
+        # 单次等待不超过一小时：否则改小同步时间后，本进程仍会睡到原来的时刻才醒
+        wait = min(_seconds_until(cfg["sync_time"]), 3600.0)
+        time.sleep(wait)
+        cfg = nas_config.get_config()
+        if not cfg["auto_sync"]:
+            continue
+        now = datetime.datetime.now(_tz())
+        if _seconds_until(cfg["sync_time"]) > 60:
+            continue  # 未到计划时刻（本轮只是分段等待中的一次醒来）
+        today = now.date()
         if last_run == today:
             continue  # sleep 偶发提前唤醒时防止同日双跑
         last_run = today
@@ -63,4 +75,4 @@ def _loop() -> None:
 
 def start_nas_sync_scheduler() -> None:
     threading.Thread(target=_loop, name="nas-sync-scheduler", daemon=True).start()
-    logger.info("NAS 自动同步调度已启动：每日 %s", settings.NAS_SYNC_TIME)
+    logger.info("NAS 自动同步调度已启动：每日 %s", nas_config.get_config()["sync_time"])

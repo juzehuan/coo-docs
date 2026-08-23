@@ -4,13 +4,20 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
-from app.core.rbac import coo_or_admin, nas_viewer
+from app.core import nas_config
+from app.core.rbac import admin_only, coo_or_admin, nas_viewer
 from app.db import get_db
 from app.models import AuditDomain, SyncRecord, User
-from app.schemas import NasStatusOut, SyncRecordOut
+from app.schemas import NasConfigIn, NasConfigOut, NasStatusOut, NasTestResult, SyncRecordOut
 from app.services import nas_sync
 
 router = APIRouter(prefix="/nas", tags=["nas"])
+
+
+def _target_of(cfg: dict) -> str:
+    """审计用的归档目标描述（不含密钥）。"""
+    return (f"s3://{cfg['bucket']}@{cfg['endpoint_url']}"
+            if cfg["mode"] == "s3" else cfg["local_root"])
 
 
 @router.get("/status", response_model=NasStatusOut)
@@ -39,6 +46,42 @@ def trigger_sync(request: Request, db: Session = Depends(get_db), user: User = D
     log_event(db, AuditDomain.NAS, "manual_sync", actor=user, ip=client_ip(request),
               detail=f"success={rec.success},failed={rec.failed}")
     return rec
+
+
+@router.get("/config", response_model=NasConfigOut)
+def get_nas_config(_: User = Depends(admin_only)):
+    """当前 NAS 归档配置。密钥以掩码返回——只告知是否已设置，不回显明文。"""
+    return NasConfigOut(**nas_config.masked(nas_config.get_config()))
+
+
+@router.put("/config", response_model=NasConfigOut)
+def update_nas_config(payload: NasConfigIn, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(admin_only)):
+    """保存 NAS 归档配置。
+
+    这些信息（NAS 地址、访问密钥、桶名、挂载点、同步时间）此前只能改环境变量
+    并重启整套服务，而它们恰恰是交付现场才确定、且会随换机/轮换密钥而变的内容。
+    """
+    cfg = nas_config.save_config(db, payload.model_dump())
+    # 审计留痕不记密钥本身，只记改了哪些关键项，便于事后追溯"归档目标何时被改动"
+    log_event(db, AuditDomain.NAS, "config_update", actor=user, ip=client_ip(request),
+              detail=f"mode={cfg['mode']},target={_target_of(cfg)},sync_time={cfg['sync_time']},"
+                     f"auto_sync={cfg['auto_sync']}")
+    return NasConfigOut(**nas_config.masked(cfg))
+
+
+@router.post("/config/test", response_model=NasTestResult)
+def test_nas_config(payload: NasConfigIn, _: User = Depends(admin_only)):
+    """用表单里的参数试连一次，**不写库**。
+
+    让管理员在保存前就知道地址密钥对不对，而不是保存之后等到当晚自动同步
+    失败才发现——那时证据已经该归档而未归档。
+    """
+    cfg = nas_config._normalize({**nas_config.get_config(), **payload.model_dump()})
+    incoming = (payload.secret_key or "").strip()
+    if not incoming or incoming == nas_config.MASK:
+        cfg["secret_key"] = nas_config.get_config()["secret_key"]   # 未改密钥则沿用已存的
+    return NasTestResult(**nas_sync.probe_config(cfg))
 
 
 @router.get("/records", response_model=list[SyncRecordOut])
