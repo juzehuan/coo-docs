@@ -39,7 +39,10 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     released_count = sum(1 for p in visible_pkgs if p.id in latest and latest[p.id].status == VersionStatus.RELEASED)
     completion = round(released_count / len(visible_pkgs) * 100, 1) if visible_pkgs else 0.0
 
-    # 附件总数：订单附件按工厂隔离；版本附件属共享资料包模板，全部统计
+    # 附件总数：订单附件按工厂隔离，版本附件按资料包可见性过滤。
+    # 二者都必须过滤 —— 看板的完成度/已放行/进度列表都按 can_view_package 收敛，
+    # 若附件计数不收敛，看不到任何资料包的提交人仍会看到全部版本附件计入总数：
+    # 既能借此推断无权查看的资料包上有多少活动，这个数字对他也毫无意义。
     # func.count 聚合，避免 Query.count() 的全字段子查询在万级附件下撑爆排序缓冲
     order_att = (
         db.query(func.count(Attachment.id))
@@ -48,8 +51,13 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         .filter(Order.factory_id.in_(fids))
         .scalar() or 0
     )
-    ver_att = db.query(func.count(Attachment.id)).filter(
-        Attachment.order_package_id.is_(None)).scalar() or 0
+    visible_pkg_ids = [p.id for p in visible_pkgs]
+    ver_att = (
+        db.query(func.count(Attachment.id))
+        .join(PackageVersion, Attachment.version_id == PackageVersion.id)
+        .filter(PackageVersion.package_id.in_(visible_pkg_ids))
+        .scalar() or 0
+    ) if visible_pkg_ids else 0
     total_attachments = order_att + ver_att
 
     # 待我处理：提交人看自己被退回/撤回；部门审核人看待部门审核；COO 看待终审
