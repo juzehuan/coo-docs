@@ -11,10 +11,11 @@ import { SERIF } from '@/theme'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import type { Lang, Role } from '@/types'
 
-// 演示账号的公开口令（admin 密码已轮换，不在此列）。
-// 按钮渲染与否由后端 /auth/demo-accounts 据实回答——生产部署没有这些账号，
-// 无条件渲染只会让用户点出 401，看起来像系统坏了。
+// 演示账号的公开口令。按钮渲染与否由后端 /auth/demo-accounts 据实回答：
+// 它逐个校验口令是否仍为演示值，生产部署返回空数组、入口自然消失，
+// 不会出现点下去必然 401 的假按钮。
 const DEMO_PASSWORDS: Record<string, string> = {
+  admin: 'admin123',
   coo: 'coo123',
   dept_wai: 'dept123',
   submit_eng: 'user123',
@@ -175,7 +176,7 @@ export default function Login() {
               <span style={{ fontSize: 12, color: '#a49e8c', letterSpacing: 0.5 }}>{t('demo_login')}</span>
               <div style={{ flex: 1, height: 1, background: '#e5dfd0' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {demoAccounts.map((a) => (
                 <Button
                   key={a.username}

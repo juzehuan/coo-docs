@@ -16,30 +16,39 @@ from app.schemas import LoginRequest, Msg, PasswordChange, TokenResponse, UserOu
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-# 登录页「演示账号一键登录」的候选账号（口令固定且公开，仅用于演示环境）。
-# 该列表与 services/seed.py 的 ACCOUNTS 对应，前端据此渲染按钮。
-DEMO_USERNAMES = ["coo", "dept_wai", "submit_eng", "auditor"]
+# 登录页「演示账号一键登录」的候选账号及其公开演示口令。
+# 与 services/seed.py 的 ACCOUNTS 对应；前端 Login.tsx 持有同一份口令用于点击登录。
+DEMO_CREDENTIALS = {
+    "admin": "admin123",
+    "coo": "coo123",
+    "dept_wai": "dept123",
+    "submit_eng": "user123",
+    "auditor": "audit123",
+}
 
 
 @router.get("/demo-accounts")
 def demo_accounts(db: Session = Depends(get_db)):
-    """返回当前环境中真实存在且可用的演示账号（无需认证）。
+    """返回当前环境中演示快捷登录**确实可用**的账号（无需认证）。
 
-    登录页此前无条件渲染演示快捷登录按钮，而生产部署（SEED_DEMO_DATA=false）
-    根本不会创建这些账号：用户点下去只会拿到 401，页面看起来像是坏了。
-    由后端据实回答"这些账号在不在"，前端按结果决定是否显示入口——
-    生产环境返回空数组，入口自然消失；演示环境不受影响。
-    只暴露用户名与角色，不返回口令（口令本就是公开的演示值，写在前端）。
+    登录页此前无条件渲染演示按钮，而生产部署（SEED_DEMO_DATA=false）根本
+    不会创建这些账号：用户点下去只会拿到 401，页面看起来像是坏了。
+
+    判据是"口令是否仍为演示值"而非"账号是否存在"——因为 admin 在任何部署
+    里都存在（生产实例的 admin 用的是随机初始口令），只按存在与否判断会让
+    生产登录页重新冒出一个点了必然失败的管理员按钮。逐个校验口令之后，
+    生产环境返回空数组、入口自然消失；口令被轮换过的演示账号也会自动摘掉。
+    只返回用户名与角色，不返回口令。
     """
-    if not DEMO_USERNAMES:
-        return []
-    rows = (db.query(User.username, User.role)
-            .filter(User.username.in_(DEMO_USERNAMES), User.status == "active").all())
-    order = {u: i for i, u in enumerate(DEMO_USERNAMES)}
-    return sorted(
-        [{"username": r.username, "role": r.role} for r in rows],
-        key=lambda x: order.get(x["username"], 99),
-    )
+    rows = (db.query(User)
+            .filter(User.username.in_(list(DEMO_CREDENTIALS)), User.status == "active").all())
+    order = {u: i for i, u in enumerate(DEMO_CREDENTIALS)}
+    out = [
+        {"username": u.username, "role": u.role}
+        for u in rows
+        if verify_password(DEMO_CREDENTIALS[u.username], u.password_hash)
+    ]
+    return sorted(out, key=lambda x: order.get(x["username"], 99))
 
 
 @router.post("/login", response_model=TokenResponse)
