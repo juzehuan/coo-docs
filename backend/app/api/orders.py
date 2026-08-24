@@ -17,6 +17,7 @@ from app.core.rbac import (
 )
 from app.core.http_headers import content_disposition
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
+from app.core.zipout import compression_for, zip_builder, zip_response
 from app.core.snowflake import next_id
 from app.core.storage import save_upload, storage_guard
 from app.core.filetype import guess_mime
@@ -574,10 +575,7 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
 def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_db),
                      user: User = Depends(export_viewer)):
     """按订单打包全部真实附件（ZIP），供核查调阅/Form 28 回函使用。"""
-    import io
     import re
-    import zipfile
-    from fastapi.responses import StreamingResponse
 
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
@@ -586,8 +584,7 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
     fac_code = re.sub(r"[^A-Za-z0-9_\-]", "_", fac.code) if fac else "NA"
     safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zip_builder() as (zf, zpath):
         manifest = [["工厂", "订单号", "资料包编号", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
         for op in sorted(o.packages, key=lambda x: (x.package.code if x.package else "", x.id)):
             pkg_code = op.package.code if op.package else "NA"
@@ -603,18 +600,14 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
                 safe_code = re.sub(r"[^A-Za-z0-9_\-\u4e00-\u9fff]", "_", pkg_code)
                 safe_name = archive_name(att, dup)
                 arc = f"{fac_code}/{safe_order}/{safe_code}/{safe_name}"
-                zf.write(src, arc)
+                zf.write(src, arc, compress_type=compression_for(safe_name))
                 manifest.append([fac_code, o.order_no, pkg_code, safe_name, att.original_name,
                                  att.file_name, str(att.file_size), att.md5 or ""])
         # 交付给核查方的清单同样用 Excel：MD5 与订单号是纯数字/长串时，
         # CSV 会被 Excel 改写成科学计数法，清单便与实际文件对不上
         zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
-    buf.seek(0)
     log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request), target=o.order_no)
-    return StreamingResponse(
-        buf, media_type="application/zip",
-        headers={"Content-Disposition": content_disposition(f"order_{o.order_no}_archive.zip")},
-    )
+    return zip_response(zpath, content_disposition(f"order_{o.order_no}_archive.zip"))
 
 
 # ---------- 工具 ----------

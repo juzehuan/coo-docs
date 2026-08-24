@@ -13,6 +13,7 @@ from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core.i18n import local_name
 from app.core.xlsx import build_xlsx
+from app.core.zipout import compression_for, zip_builder, zip_response
 from app.core.http_headers import content_disposition
 from app.services.nas_sync import archive_name, duplicate_names
 from app.core.rbac import require_roles
@@ -155,10 +156,9 @@ def download_released_order_zip(order_id: int, op_id: int, request: Request,
         raise HTTPException(status_code=404, detail="受控内容不存在")
     p = db.get(Package, op.package_id)
 
-    buf = io.BytesIO()
     safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", (p.code if p else "pkg") or "pkg")
     safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zip_builder() as (zf, zpath):
         manifest = [["资料包", "订单号", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
         dup = duplicate_names(op.attachments)
         for att in op.attachments:
@@ -166,16 +166,13 @@ def download_released_order_zip(order_id: int, op_id: int, request: Request,
             if not os.path.exists(src):
                 continue
             safe_name = archive_name(att, dup)
-            zf.write(src, f"{safe_code}/{safe_order}/{safe_name}")
+            zf.write(src, f"{safe_code}/{safe_order}/{safe_name}", compress_type=compression_for(safe_name))
             manifest.append([p.code if p else "", o.order_no, safe_name, att.original_name,
                              att.file_name, str(att.file_size), att.md5 or ""])
         zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
-    buf.seek(0)
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code if p else ''}/{o.order_no}")
-    return StreamingResponse(
-        buf, media_type="application/zip",
-        headers={"Content-Disposition": content_disposition(f"controlled_{safe_code}_{safe_order}.zip")})
+    return zip_response(zpath, content_disposition(f"controlled_{safe_code}_{safe_order}.zip"))
 
 
 @router.get("/{pkg_id}/versions/{vid}/export/zip")
@@ -190,9 +187,8 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
     if not p or p.id not in _visible_pkg_ids(db, user):
         raise HTTPException(status_code=404, detail="受控版本不存在")
 
-    buf = io.BytesIO()
     safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code or "pkg")
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zip_builder() as (zf, zpath):
         manifest = [["资料包", "版本", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
         # 同名附件若都用原文件名会在 ZIP 内生成同路径条目、解压时互相覆盖，
         # 导致交付给核查方的材料静默缺件；复用 NAS 归档命名规则保持三处一致。
@@ -203,15 +199,11 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
                 continue
             safe_name = archive_name(att, dup)
             arc = f"{safe_code}/{v.version_no}/{safe_name}"
-            zf.write(src, arc)
+            zf.write(src, arc, compress_type=compression_for(safe_name))
             manifest.append([p.code, v.version_no, safe_name, att.original_name, att.file_name,
                              str(att.file_size), att.md5 or ""])
         zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
-    buf.seek(0)
-
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code}/{v.version_no}")
-    return StreamingResponse(
-        buf, media_type="application/zip",
-        headers={"Content-Disposition": content_disposition(f"controlled_{p.code}_{v.version_no}.zip")},
+    return zip_response(zpath, content_disposition(f"controlled_{p.code}_{v.version_no}.zip")
     )
