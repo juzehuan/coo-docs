@@ -222,7 +222,11 @@ class OrderInstanceCreate(BaseModel):
 
 # ---------- 资料包 ----------
 class PackageCreate(BaseModel):
-    code: str = Field(max_length=32)
+    # 资料包编号会成为 NAS 归档目录名的一段（`{code}_{名称}`）。
+    # 编号是标识符，路径分隔符在其中没有任何含义，却会让两个不同资料包
+    # 归档到同一目录并互相覆盖（同 order_no 的问题，见 nas_sync._unique_segment）。
+    # 现有 18 个编号均已符合本约束，加此限制不影响任何存量数据。
+    code: str = Field(max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
     name_zh: str = Field(max_length=255)
     name_en: str = Field("", max_length=255)
     name_th: str = Field("", max_length=255)
@@ -305,7 +309,8 @@ class VersionOut(BaseModel):
 
 class VersionCreate(BaseModel):
     change_note: str = ""
-    project_code: str = Field("", max_length=64)
+    # 同样参与 NAS 归档路径（项目代号段），限定为标识符字符；留空则取默认值
+    project_code: str = Field("", max_length=64, pattern=r"^[A-Za-z0-9._-]*$")
 
 
 # ---------- 审核 ----------

@@ -43,6 +43,31 @@ def _safe_segment(s: str, fallback: str = "_") -> str:
     return s or fallback
 
 
+def _unique_segment(s: str, fallback: str = "_") -> str:
+    """标识归档单元的路径段（订单号 / 版本号）——必须与原值一一对应。
+
+    `_safe_segment` 是**多对一**的：`A/B` 与 `A_B` 都会变成 `A_B`。而订单号只受
+    `max_length=64` 约束、并不限制字符，`PO-2026/001` 这类写法在外贸里很常见——
+    于是两张不同的订单会归档进同一个 NAS 目录，同名文件互相覆盖。
+
+    第 61 轮实测：两张只差一个 `/` 的订单各上传一份内容不同的 `证据.txt`，
+    同步报告 **success 3 / failed 0**、数据库两条都标记 `nas_synced=1`，
+    而 NAS 上只剩一个对象——先归档的那份**永久丢失，且全程没有任何提示**。
+    `archive_name` 的同名保护挡不住它：那里的分组键是 `order_package_id`，
+    与「真实落在哪个目录」并不是一回事，跨订单的碰撞它看不见。
+    这正是 F-06「NAS 上保留一份完整的资料副本」要守住的东西。
+
+    做法：清洗**没有改动内容**时保持原样——现有 127 个订单号与 33 个版本号
+    全部属于此列，因此本改动**不会重命名任何已有归档目录**；一旦清洗改动了内容，
+    追加原值的短哈希，使映射恢复单射。目录名与真实订单号的对应关系，
+    可在该目录 manifest.txt 的首行查到。
+    """
+    safe = _safe_segment(s, fallback)
+    if s and safe != s:
+        safe = f"{safe}__{hashlib.sha1(s.encode('utf-8')).hexdigest()[:6]}"
+    return safe
+
+
 def file_md5(path: str) -> str:
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -56,7 +81,8 @@ def _common_parts(ver: PackageVersion, pkg: Package) -> list[str]:
         NAS_BASE_DIRNAME,
         _safe_segment(ver.project_code or settings.PROJECT_CODE),
         _safe_segment(f"{pkg.code}_{pkg.name_zh}", pkg.code or "pkg"),
-        _safe_segment(ver.version_no, "V"),
+        # 版本号是归档单元的标识段，必须单射（见 _unique_segment）
+        _unique_segment(ver.version_no, "V"),
     ]
 
 
@@ -96,7 +122,8 @@ def _order_parts(op: OrderPackage, pkg: Package, order_no: str) -> list[str]:
         NAS_BASE_DIRNAME,
         _safe_segment(op.project_code or settings.PROJECT_CODE),
         _safe_segment(f"{pkg.code}_{pkg.name_zh}", pkg.code or "pkg"),
-        _safe_segment(order_no, "order"),
+        # 订单号是归档单元的标识段，必须单射（见 _unique_segment）
+        _unique_segment(order_no, "order"),
     ]
 
 
