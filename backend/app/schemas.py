@@ -1,8 +1,43 @@
 """Pydantic 请求/响应模型。"""
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+from app.core.overdue import parse_due
+
+
+def _normalize_due(v):
+    """校验并规范化截止日期。
+
+    此前 due_date 只受 `max_length=32` 约束，任何文本都能存进去，而超期判断用的
+    `parse_due` 只认**年在前**的写法（`YYYY-MM-DD` / `YYYY/M/D`）。两者一对不上，
+    后果是**静默的**：解析不了就当作"没有期限"，界面还照原样把用户输入显示回来，
+    于是用户以为期限已设好，而超期永远不会标红。
+
+    第 62 轮实测（同一个日历日 2020-01-15，只是写法不同）：
+      `2020-01-15` → 计入超期；`01/15/2020` → **不计**；`2026-13-45` → **不计**。
+    工作台 overdue 计数因此从 2 变成 1。**本系统正是做美国出口合规的**，
+    录入者写出 `01/15/2020` 这种美式日期毫不意外，而它会悄悄把期限取消掉。
+
+    做法是**拒绝而不是猜**：`01/02/2020` 究竟是 1 月 2 日还是 2 月 1 日无法判定，
+    猜错得到一个错误的期限，比没有期限更糟——错误的期限看起来是可信的。
+    因此不可解析一律 422 并说清期望格式；可解析的一律规范化为 ISO，
+    使入库、导出与 manifest 中的写法保持一致。
+    """
+    if v is None:
+        return v
+    s = str(v).strip()
+    if not s:
+        return ""
+    d = parse_due(s)
+    if d is None:
+        raise ValueError("截止日期格式不正确，请用 YYYY-MM-DD（如 2026-10-15）")
+    return d.isoformat()
+
+
+# 输入用的截止日期类型：留空表示无期限，其余必须可解析
+DueDate = Annotated[str, AfterValidator(_normalize_due)]
 
 
 # ---------- 通用 ----------
@@ -217,7 +252,7 @@ class OrderInstanceCreate(BaseModel):
     package_id: int
     owner_user_id: Optional[int] = None
     required: bool = True
-    due_date: str = Field("", max_length=32)
+    due_date: DueDate = Field("", max_length=32)
 
 
 # ---------- 资料包 ----------
@@ -233,7 +268,7 @@ class PackageCreate(BaseModel):
     dept_id: Optional[int] = None
     owner_user_id: Optional[int] = None
     review_focus: str = ""
-    due_date: str = Field("", max_length=32)
+    due_date: DueDate = Field("", max_length=32)
     required: bool = True
 
 
@@ -244,7 +279,7 @@ class PackageUpdate(BaseModel):
     dept_id: Optional[int] = None
     owner_user_id: Optional[int] = None
     review_focus: Optional[str] = None
-    due_date: Optional[str] = Field(None, max_length=32)
+    due_date: Optional[DueDate] = Field(None, max_length=32)
     required: Optional[bool] = None
     status: Optional[str] = Field(None, max_length=16)
     sort_order: Optional[int] = None

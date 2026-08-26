@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, Form, Input, Modal, Select, Space, Switch, Table } from 'antd'
+import { App, Button, Card, DatePicker, Form, Input, Modal, Select, Space, Switch, Table } from 'antd'
+import dayjs from 'dayjs'
+import type { Dayjs } from 'dayjs'
 import { EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { org, packages } from '@/api/endpoints'
@@ -170,7 +172,20 @@ export default function Packages() {
             />
           </Form.Item>
           <Form.Item label={t('review_focus')} name="review_focus"><Input.TextArea rows={3} /></Form.Item>
-          <Form.Item label={t('due_date')} name="due_date"><Input placeholder="2026-10-15" /></Form.Item>
+          <Form.Item label={t('due_date')} name="due_date"
+            /* 用日期选择器而不是自由文本：截止日期此前是纯 Input，任何文本都能存进去，
+               而超期判断只认年在前的写法——`01/15/2020` 这类美式日期会被静默当成
+               "没有期限"，界面还照原样显示回来，用户以为设好了而超期永远不标红。
+               getValueProps/normalize 让表单值仍是字符串，周边代码无需改动。 */
+            getValueProps={(v) => ({ value: v && dayjs(v).isValid() ? dayjs(v) : null })}
+            normalize={(v) => (v ? (v as Dayjs).format('YYYY-MM-DD') : '')}>
+            {/* inputReadOnly：只允许从日历选，不允许手输。
+                antd 的 DatePicker 对**无法解析的手输文本会静默丢弃**——实测键入
+                `01/15/2020` 后输入框到提交那一刻仍显示着它，而表单实际提交的是
+                空串，等于把"静默取消期限"这个缺陷从后端搬到了前端，后端的 422
+                根本不会被触发。禁掉手输后，取值只能来自日历，必然是合法日期。 */}
+            <DatePicker style={{ width: '100%' }} placeholder="2026-10-15" inputReadOnly />
+          </Form.Item>
         <SubmitOnEnter /></Form>
       </Modal>
       </Card>
