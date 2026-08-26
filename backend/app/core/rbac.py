@@ -4,6 +4,7 @@ from sqlalchemy import func
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.constants import VersionStatus
 from app.core.security import decode_access_token
 from app.db import get_db
 from app.models import User
@@ -150,6 +151,32 @@ def can_review_dept(u: User, package_dept_id, submitted_by=None, db=None) -> boo
                 return False
         return True
     return False
+
+
+def staffed_dept_ids(db: Session) -> set:
+    """有至少一名在岗部门审核人的部门。"""
+    rows = (db.query(User.dept_id)
+            .filter(User.role == "dept_reviewer", User.status == "active",
+                    User.dept_id.isnot(None))
+            .distinct().all())
+    return {r[0] for r in rows}
+
+
+def no_reviewer_for(status: str, dept_id, staffed: set) -> bool:
+    """待部门审核，但责任部门没有任何在岗审核人（或压根没有责任部门）。
+
+    这类条目会**落进所有人的待办之外**：部门审核人按 `dept_id` 匹配（匹配不上），
+    而 COO/管理员的待办只筛 `pending_coo`。第 63 轮实测——把某部门唯一的审核人
+    调岗后，一条已提交的 `pending_dept` 在 QAL 审核人、其他部门审核人、COO、
+    管理员的待办中**全部为 0 条**。它没被删也没报错，只是谁都看不见了，
+    提交人却在等一个永远不会被提示的审核。
+
+    唯一审核人离职被停用、或调岗，都是再常规不过的人事变动。
+    注意 `can_review_dept` 本来就允许 admin/coo_reviewer 审核任何部门——
+    **能力一直在，缺的只是可见性**。因此这里把这类条目补进他们的待办，
+    而不是放宽任何权限。只补"无人可审"的那些，避免把全部 pending_dept 灌给管理员。
+    """
+    return status == VersionStatus.PENDING_DEPT and (dept_id is None or dept_id not in staffed)
 
 
 def can_view_package(u: User, package) -> bool:

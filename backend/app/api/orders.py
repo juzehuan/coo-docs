@@ -283,6 +283,17 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
     db.refresh(op)
     log_event(db, AuditDomain.PACKAGE, "order_package_add", actor=user, ip=client_ip(request),
               target=f"{o.order_no}/{pkg.code}")
+    # 通知被指派的责任人：指派资料包就是给人派活，而此前**没有任何信号**——
+    # 第 64 轮实测把 3 个资料包指派给某提交人后，他的通知 +0、待办 +0，
+    # 只能靠自己翻订单列表才发现有活。收集资料正是提交人的本职工作，
+    # 而他的工作队列此前只显示"被退回的返工"，从不显示"新指派的活"。
+    if op.owner_user_id:
+        notify_users(db, [op.owner_user_id],
+                     title=f"{o.order_no}/{pkg.code} 指派给你",
+                     ntype="assigned", link=f"/orders/{o.id}",
+                     exclude=user.id,          # 自己指派给自己不必通知
+                     params=notify_params(f"{o.order_no}/{pkg.code}", pkg))
+        db.commit()
     return _op_out(op)
 
 

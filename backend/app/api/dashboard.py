@@ -9,7 +9,8 @@ from app.core.overdue import is_overdue
 from app.core.http_headers import content_disposition
 from app.core.i18n import local_name
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
-from app.core.rbac import can_view_package, export_viewer, get_current_user
+from app.core.rbac import (can_view_package, export_viewer, get_current_user,
+                           no_reviewer_for, staffed_dept_ids)
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
 from app.schemas import DashboardOut
@@ -67,19 +68,25 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     ) if visible_pkg_ids else 0
     total_attachments = order_att + ver_att
 
-    # 待我处理：提交人看自己被退回/撤回；部门审核人看待部门审核；COO 看待终审
-    # （同时统计订单资料包实例流程线上的待办）
+    # 待我处理：提交人看**已指派未提交**与被退回/撤回；部门审核人看待部门审核；
+    # COO/管理员看待终审，外加「责任部门无在岗审核人」的兜底项。
+    # 这里的判定必须与 /todo 列表逐条一致——两边各写一份，用户就会看到
+    # "计数说有 3 条、列表只有 1 条"，而无从判断哪个是对的。
+    staffed = staffed_dept_ids(db)
     pending_mine = 0
     for p in pkgs:
         v = latest.get(p.id)
         if not v:
             continue
         if user.role == "submitter" and p.owner_user_id == user.id \
-                and v.status in (VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
+                and v.status in (VersionStatus.DRAFT, VersionStatus.REJECTED,
+                                 VersionStatus.WITHDRAWN):
             pending_mine += 1
         elif user.role == "dept_reviewer" and p.dept_id == user.dept_id and v.status == VersionStatus.PENDING_DEPT:
             pending_mine += 1
-        elif user.role in ("coo_reviewer", "admin") and v.status == VersionStatus.PENDING_COO:
+        elif user.role in ("coo_reviewer", "admin") and (
+                v.status == VersionStatus.PENDING_COO
+                or no_reviewer_for(v.status, p.dept_id, staffed)):
             pending_mine += 1
     ops = (
         db.query(OrderPackage)
@@ -93,13 +100,16 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
             continue
         if user.role == "submitter":
             if (op.owner_user_id == user.id or op.submitted_by == user.id) \
-                    and op.status in (VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
+                    and op.status in (VersionStatus.DRAFT, VersionStatus.REJECTED,
+                                      VersionStatus.WITHDRAWN):
                 pending_mine += 1
         elif user.role == "dept_reviewer":
             if pkg.dept_id == user.dept_id and op.status == VersionStatus.PENDING_DEPT:
                 pending_mine += 1
         elif user.role in ("coo_reviewer", "admin"):
-            if op.status == VersionStatus.PENDING_COO:
+            # 与待办列表保持同一套判定（第 63 轮只改了列表，计数漏改会两边对不上）
+            if (op.status == VersionStatus.PENDING_COO
+                    or no_reviewer_for(op.status, pkg.dept_id, staffed)):
                 pending_mine += 1
 
     overdue = 0
