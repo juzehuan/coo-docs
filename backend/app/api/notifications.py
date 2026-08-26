@@ -19,7 +19,10 @@ def list_notifications(limit: int = Query(30, ge=1, le=200), offset: int = Query
     total = cnt.scalar() or 0
     unread = cnt.filter(Notification.is_read.is_(False)).scalar() or 0
     rows = (
-        q.order_by(Notification.is_read.asc(), Notification.created_at.desc())
+        # 同 orders：offset 分页要求全序。通知是**成批写入**的（一次审核会给多人
+        # 各写一条），同秒并列比订单更密集，不带唯一兜底列必然出现翻页重复/漏行。
+        q.order_by(Notification.is_read.asc(), Notification.created_at.desc(),
+                   Notification.id.desc())
         .offset(offset).limit(limit).all()
     )
     return {

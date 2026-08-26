@@ -160,7 +160,13 @@ def list_orders(q: str | None = Query(None, max_length=128),
     fac_map = {f.id: f for f in db.query(Factory).all()}
     rows = (
         base.options(selectinload(Order.packages))
-        .order_by(Order.created_at.desc())
+        # 必须带唯一兜底列：created_at 是**秒级精度**（datetime 无小数秒），同秒创建的
+        # 订单之间顺序不确定，而 offset 分页要求全序。第 66 轮实测（127 张订单、
+        # 只有 71 个不同时间戳）：每页 10 条翻完全部时，**3 张订单重复出现、另 3 张
+        # 一次都没出现**；每页 25 条各 1 个；每页 20 条恰好干净——取决于页边界落在
+        # 并列的哪一侧。用户翻完 127 行、数目对得上，却始终没看见那 3 张订单。
+        # packages.py 早已因同一原因改用雪花 ID 排序，这里是同一个坑的另一处。
+        .order_by(Order.created_at.desc(), Order.id.desc())
         .offset(offset).limit(limit)
         .all()
     )

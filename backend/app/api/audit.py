@@ -80,7 +80,10 @@ def list_logs(
     """
     q = _apply_filters(db.query(AuditLog), actor_id, actor, target, domain, start, end)
     total = q.with_entities(func.count(AuditLog.id)).scalar() or 0
-    items = q.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    # 加唯一兜底列：这里虽无 offset，但 limit 截断处若有同秒并列，
+    # **同一条查询重复执行可能返回不同的一批记录**——审计检索是合规追溯的主要手段，
+    # "我查过了，就这些"必须可复现。
+    items = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit).all()
     return {"total": total, "items": [AuditLogOut.model_validate(r) for r in items]}
 
 
@@ -115,7 +118,7 @@ def export_logs(
             status_code=400,
             detail=f"符合条件的记录有 {total} 条，超过单次导出上限 {MAX_EXPORT_ROWS} 条，请缩小时间范围后重试",
         )
-    rows = q.order_by(AuditLog.created_at.desc()).all()
+    rows = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).all()
     header = ["时间（站点时区）", "域", "动作", "操作人", "角色", "IP", "目标", "说明"]
     data = [[
         time_fmt(r.created_at),   # 站点时区 + 显式偏移，导出的证据必须自解释

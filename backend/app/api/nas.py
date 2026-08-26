@@ -26,7 +26,10 @@ def nas_status(db: Session = Depends(get_db), _: User = Depends(nas_viewer)):
     # 先按窄列 (id, started_at) 排序取 ID 再按主键取行：
     # SyncRecord.details 是可达数百 KB 的 JSON，直接 ORDER BY 会让 MySQL 对宽行做
     # filesort 并撑爆 sort_buffer（行数少时优化器还会弃用索引），报 1038 Out of sort memory
-    last_id = db.query(SyncRecord.id).order_by(SyncRecord.started_at.desc()).limit(1).scalar()
+    # 同秒并列时"最近一次同步"会取到哪条不确定，补唯一兜底列
+    last_id = (db.query(SyncRecord.id)
+               .order_by(SyncRecord.started_at.desc(), SyncRecord.id.desc())
+               .limit(1).scalar())
     last = db.get(SyncRecord, last_id) if last_id else None
     # 用 func.count 聚合：Query.count() 会包一层子查询把匹配行全字段物化，
     # 附件量达万级时 MySQL 排序缓冲不足直接报 1038 Out of sort memory
@@ -95,7 +98,7 @@ def sync_records(limit: int = Query(20, ge=1, le=200), db: Session = Depends(get
                  _: User = Depends(nas_viewer)):
     # 同上：只对窄列排序取 ID，再按主键批量取行，避免对含大 JSON 的宽行做 filesort
     ids = [r[0] for r in db.query(SyncRecord.id)
-           .order_by(SyncRecord.started_at.desc()).limit(limit).all()]
+           .order_by(SyncRecord.started_at.desc(), SyncRecord.id.desc()).limit(limit).all()]
     if not ids:
         return []
     rows = db.query(SyncRecord).filter(SyncRecord.id.in_(ids)).all()

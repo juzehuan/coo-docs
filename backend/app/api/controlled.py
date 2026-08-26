@@ -93,7 +93,10 @@ def controlled_area(limit: int = Query(50, ge=1, le=200), offset: int = Query(0,
             if p:
                 keys.append((p.code, ono or "", "order", opid))
 
-    keys.sort(key=lambda k: (k[0], k[1]))
+    # 带上类型与唯一 ID：Python 的 sort 虽然稳定，但输入顺序来自上面两条**没有
+    # ORDER BY** 的查询，数据库返回顺序一变，并列项的相对位置就跟着变——
+    # 而下面是 offset 切片分页，同样要求全序（同 orders 的问题）。
+    keys.sort(key=lambda k: (k[0], k[1], k[2], k[3]))
     total = len(keys)
     page = keys[offset:offset + limit]
 
