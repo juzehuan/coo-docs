@@ -1,4 +1,4 @@
-fastapi==0.115.14
+fastapi==0.141.1
 uvicorn[standard]==0.30.6
 SQLAlchemy==2.0.35
 pydantic==2.9.2
@@ -9,8 +9,10 @@ python-multipart==0.0.31
 pymysql==1.1.1
 boto3==1.35.99
 tzdata==2024.2
-# 显式钉住 starlette 以修复其已知 CVE（fastapi 0.115.14 允许 >=0.40.0）
-starlette==0.46.2
+# 显式钉住 starlette 以修复其已知 CVE。
+# fastapi 0.115.14 限制 starlette<0.47.0，而 8 个 CVE 的修复都在 0.47.2 以上，
+# 因此必须连同 fastapi 一起升（0.141.1 放开为 starlette>=0.46.0）。
+starlette==1.6.0
 # 注：pyasn1 无法升级 —— python-jose 3.4.0 硬性要求 pyasn1<0.5.0；
 # 其 CVE 位于 RSA/ECDSA 解析路径，本系统 JWT 使用 HS256(HMAC)，不经过该路径。
 # 同理 ecdsa 的 Minerva 计时攻击(PYSEC-2026-1325，上游无修复)对 HS256 亦不适用。
