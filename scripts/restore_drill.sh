@@ -49,6 +49,39 @@ check "密码哈希保真" "SELECT password_hash FROM $PROD_DB.users WHERE usern
 check "已放行锁定态保留" "SELECT COUNT(*) FROM $PROD_DB.order_packages WHERE locked=1" "SELECT COUNT(*) FROM $DRILL_DB.order_packages WHERE locked=1"
 check "索引随备份恢复" "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='$PROD_DB'" "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='$DRILL_DB'"
 
+# ---- 附件文件在位校验 ----
+# 数据库恢复得再完美，附件文件缺失一样是「证据丢失」：附件表里每条记录都指向
+# UPLOAD_DIR 下一个按内容哈希命名的物理文件。此前演练只比对数据库，因此完全
+# 看不出「备份不含附件目录」这个缺口——恢复到新机会得到一堆悬空记录。
+echo
+# 附件备份与数据库备份由同一次 backup_mysql.sh 产出、同目录同时间戳，
+# 优先取同一时间戳的那一份，避免拿数据库与附件对不上号的两次备份来演练
+BK_DIR="$(dirname "$SRC")"
+BK_STAMP="$(basename "$SRC" .sql.gz | sed 's/^coo_//')"
+FILES_BK="$BK_DIR/coo_files_${BK_STAMP}.tar.gz"
+# `|| true`：无匹配时 ls 返回非零，在 set -e + pipefail 下会直接杀掉脚本——
+# 而那恰恰是本检查要报告的场景（备份里没有附件），哑着退出等于检查失效
+[ -f "$FILES_BK" ] || FILES_BK="$(ls -t "$BK_DIR"/coo_files_*.tar.gz 2>/dev/null | head -1 || true)"
+if [ -z "$FILES_BK" ]; then
+  echo "  [ERROR] 未找到附件备份 coo_files_*.tar.gz —— 仅有数据库备份无法恢复证据" >&2
+  fail=1
+else
+  # 取演练库中全部被引用的存储文件名，逐个确认在附件备份里
+  NEED="$(my -N -e "SELECT DISTINCT file_name FROM $DRILL_DB.attachments;")"
+  HAVE="$(tar -tzf "$FILES_BK" | sed 's#.*/##')"
+  miss=0; total=0
+  for f in $NEED; do
+    total=$((total+1))
+    case "$HAVE" in *"$f"*) ;; *) miss=$((miss+1)) ;; esac
+  done
+  if [ "$miss" -eq 0 ]; then
+    printf "  %-28s OK（%s 个被引用文件全部在备份中）\n" "附件文件在位" "$total"
+  else
+    printf "  %-28s FAIL（%s/%s 个文件缺失）\n" "附件文件在位" "$miss" "$total"
+    fail=1
+  fi
+fi
+
 my -e "DROP DATABASE IF EXISTS $DRILL_DB;"
 echo
 if [ "$fail" = "0" ]; then

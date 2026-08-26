@@ -51,5 +51,34 @@ for tbl in users orders attachments audit_logs system_settings; do
   esac
 done
 
+# ---- 附件文件 ----
+# 只备份数据库是不够的：附件表里的记录指向 UPLOAD_DIR 下按内容哈希命名的物理
+# 文件，仅凭数据库在新机恢复出来的是一堆指向不存在文件的记录——storage_check
+# 会逐条报「证据丢失，需人工恢复」。而本系统的全部价值就在证据完整。
+# NAS 上虽有第二副本，但归档路径用的是「原文件名」而非内容哈希，重建 uploads/
+# 需要逐个重算 sha256 并改名，没有现成脚本，不能当作恢复手段。
+#
+# 文件按内容哈希命名、内容不可变（只增不改），因此这里用 tar 全量打包即可；
+# 数据量大到全量不划算时，可改为对同一目录做增量 rsync——不可变意味着增量安全。
+UPLOAD_DIR="${UPLOAD_DIR:-./data/uploads}"
+FILES_OUT="$BACKUP_DIR/coo_files_${STAMP}.tar.gz"
+if [ -d "$UPLOAD_DIR" ]; then
+  if ! tar -czf "$FILES_OUT" -C "$(dirname "$UPLOAD_DIR")" "$(basename "$UPLOAD_DIR")"; then
+    echo "[ERROR] 附件目录打包失败：$UPLOAD_DIR" >&2
+    rm -f "$FILES_OUT"; exit 1
+  fi
+  if ! tar -tzf "$FILES_OUT" >/dev/null 2>&1; then
+    echo "[ERROR] 附件备份损坏（tar 校验失败）：$FILES_OUT" >&2
+    rm -f "$FILES_OUT"; exit 1
+  fi
+  FILE_CNT="$(tar -tzf "$FILES_OUT" | grep -vc '/$' || true)"
+  echo "[OK] 附件备份完成：$FILES_OUT（$FILE_CNT 个文件，$(du -h "$FILES_OUT" | cut -f1)）"
+else
+  # 目录不存在通常意味着路径配错或挂载没起来——静默跳过会让人以为备份是完整的
+  echo "[ERROR] 附件目录不存在：$UPLOAD_DIR（如路径不同请设 UPLOAD_DIR 环境变量）" >&2
+  exit 1
+fi
+
 find "$BACKUP_DIR" -name 'coo_*.sql.gz' -mtime "+$KEEP_DAYS" -delete
-echo "[OK] $(date '+%F %T') 备份完成：$OUT（保留 ${KEEP_DAYS} 天）"
+find "$BACKUP_DIR" -name 'coo_files_*.tar.gz' -mtime "+$KEEP_DAYS" -delete
+echo "[OK] $(date '+%F %T') 备份完成：$OUT + $FILES_OUT（保留 ${KEEP_DAYS} 天）"
