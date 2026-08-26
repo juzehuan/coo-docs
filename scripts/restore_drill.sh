@@ -9,13 +9,35 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC="${1:-$(ls -t backups/*.sql.gz 2>/dev/null | head -1)}"
+SRC="${1:-$(ls -t backups/*.sql.gz backups/*.sql.gz.enc 2>/dev/null | head -1)}"
 DRILL_DB="coo_restore_drill"
 PROD_DB="${MYSQL_DATABASE:-coo}"
 ROOT_PASS="${MYSQL_ROOT_PASSWORD:-rootpass}"
 
 [ -n "$SRC" ] && [ -f "$SRC" ] || { echo "[ERROR] 找不到备份文件（先执行 scripts/backup_mysql.sh）" >&2; exit 1; }
 echo "演练备份：$SRC"
+
+# 加密备份先解到临时目录再演练——离机留存的备份必须能在演练里走通解密这一步，
+# 否则"能解密"这个假设永远没被验证过，真出事时才发现口令不对就来不及了。
+DECDIR=""
+# 末尾必须 `return 0`：EXIT trap 的返回值会覆盖脚本退出码，而明文备份场景下
+# DECDIR 为空、`[ -n "" ]` 返回 1，会让一次通过的演练以退出码 1 结束——
+# 监控只看退出码的话，就变成天天报假故障。
+cleanup_dec() { [ -n "$DECDIR" ] && rm -rf "$DECDIR"; return 0; }
+trap cleanup_dec EXIT
+case "$SRC" in
+  *.enc)
+    [ -n "${BACKUP_ENCRYPT_PASS:-}" ] || { echo "[ERROR] 备份已加密，请设置 BACKUP_ENCRYPT_PASS" >&2; exit 1; }
+    DECDIR="$(mktemp -d)"
+    PLAIN="$DECDIR/$(basename "${SRC%.enc}")"
+    if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+         -pass env:BACKUP_ENCRYPT_PASS -in "$SRC" -out "$PLAIN" 2>/dev/null; then
+      echo "[ERROR] 备份解密失败（口令不符或文件损坏）：$SRC" >&2; exit 1
+    fi
+    echo "  已解密到临时目录用于演练"
+    SRC_ENC="$SRC"; SRC="$PLAIN"
+    ;;
+esac
 
 my() { docker compose exec -T -e MYSQL_PWD="$ROOT_PASS" mysql mysql -uroot "$@"; }
 
@@ -56,9 +78,13 @@ check "索引随备份恢复" "SELECT COUNT(*) FROM information_schema.statistic
 echo
 # 附件备份与数据库备份由同一次 backup_mysql.sh 产出、同目录同时间戳，
 # 优先取同一时间戳的那一份，避免拿数据库与附件对不上号的两次备份来演练
-BK_DIR="$(dirname "$SRC")"
-BK_STAMP="$(basename "$SRC" .sql.gz | sed 's/^coo_//')"
+# 基于**原始**备份路径推导：加密场景下 $SRC 已被换成解密后的临时文件，
+# 用它推导会指向临时目录。同时要剥掉 .enc 后缀，否则时间戳里会混进后缀。
+SRC_ORIG="${SRC_ENC:-$SRC}"
+BK_DIR="$(dirname "$SRC_ORIG")"
+BK_STAMP="$(basename "$SRC_ORIG" | sed -e 's/\.enc$//' -e 's/\.sql\.gz$//' -e 's/^coo_//')"
 FILES_BK="$BK_DIR/coo_files_${BK_STAMP}.tar.gz"
+[ -f "$FILES_BK" ] || { [ -f "$FILES_BK.enc" ] && FILES_BK="$FILES_BK.enc"; } || true
 # `|| true`：无匹配时 ls 返回非零，在 set -e + pipefail 下会直接杀掉脚本——
 # 而那恰恰是本检查要报告的场景（备份里没有附件），哑着退出等于检查失效
 [ -f "$FILES_BK" ] || FILES_BK="$(ls -t "$BK_DIR"/coo_files_*.tar.gz 2>/dev/null | head -1 || true)"
@@ -68,7 +94,13 @@ if [ -z "$FILES_BK" ]; then
 else
   # 取演练库中全部被引用的存储文件名，逐个确认在附件备份里
   NEED="$(my -N -e "SELECT DISTINCT file_name FROM $DRILL_DB.attachments;")"
-  HAVE="$(tar -tzf "$FILES_BK" | sed 's#.*/##')"
+  # 加密的附件包先解密再列目录
+  case "$FILES_BK" in
+    *.enc) HAVE="$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+                     -pass env:BACKUP_ENCRYPT_PASS -in "$FILES_BK" 2>/dev/null \
+                   | tar -tz 2>/dev/null | sed 's#.*/##')" ;;
+    *)     HAVE="$(tar -tzf "$FILES_BK" | sed 's#.*/##')" ;;
+  esac
   miss=0; total=0
   for f in $NEED; do
     total=$((total+1))

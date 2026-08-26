@@ -79,6 +79,44 @@ else
   exit 1
 fi
 
+# ---- 离机留存前的加密 ----
+# 备份内容远不止业务数据:数据库转储里含 **JWT 签名密钥明文**(system_settings
+# 的 jwt_secret_key)、**NAS 的 S3 访问密钥**(nas_config.secret_key),以及全部
+# 密码哈希。谁能读到这个文件,谁就能伪造管理员令牌、直接访问整个归档。
+#
+# 因此**不要**把未加密的备份放到 NAS 或任何共享位置——NAS 是工厂共享设施,
+# 把备份丢进去看似顺手,实际是把整个系统的钥匙一并交出去。
+# 设了 BACKUP_ENCRYPT_PASS 才做离机拷贝;口令必须与备份分开保管(否则等于没加密)。
+if [ -n "${BACKUP_ENCRYPT_PASS:-}" ]; then
+  for f in "$OUT" "$FILES_OUT"; do
+    [ -f "$f" ] || continue
+    if ! openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
+         -pass env:BACKUP_ENCRYPT_PASS -in "$f" -out "$f.enc"; then
+      echo "[ERROR] 加密失败:$f" >&2; rm -f "$f.enc"; exit 1
+    fi
+    # 立刻验证能解开:加密后才发现解不开等于备份已经作废。
+    # 注意必须整体解到 /dev/null,不能写成 `| head -c 1`——head 读够即退出会让
+    # openssl 收到 SIGPIPE,在 set -e 下把正常的加密产物误判为损坏并删掉。
+    # (这与本脚本上方 gunzip|grep -q 的注释是同一个坑,我第一版就又踩了一次。)
+    if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+         -pass env:BACKUP_ENCRYPT_PASS -in "$f.enc" -out /dev/null 2>/dev/null; then
+      echo "[ERROR] 加密产物无法解密,已丢弃:$f.enc" >&2; rm -f "$f.enc"; exit 1
+    fi
+    rm -f "$f"
+  done
+  echo "[OK] 备份已加密(AES-256-CBC/PBKDF2),可离机留存:$OUT.enc + $FILES_OUT.enc"
+  echo "     解密:openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:BACKUP_ENCRYPT_PASS -in 文件.enc -out 文件"
+else
+  echo "[WARN] 备份未加密。其中含 JWT 签名密钥明文、NAS 访问密钥与全部密码哈希——" >&2
+  echo "       仅可留在本机受限目录,**不要**拷贝到 NAS/网盘/共享盘。" >&2
+  echo "       如需离机留存,请设置 BACKUP_ENCRYPT_PASS 后重新执行。" >&2
+fi
+
 find "$BACKUP_DIR" -name 'coo_*.sql.gz' -mtime "+$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -name 'coo_*.enc' -mtime "+$KEEP_DAYS" -delete
 find "$BACKUP_DIR" -name 'coo_files_*.tar.gz' -mtime "+$KEEP_DAYS" -delete
-echo "[OK] $(date '+%F %T') 备份完成：$OUT + $FILES_OUT（保留 ${KEEP_DAYS} 天）"
+if [ -n "${BACKUP_ENCRYPT_PASS:-}" ]; then
+  echo "[OK] $(date '+%F %T') 备份完成：$OUT.enc + $FILES_OUT.enc（保留 ${KEEP_DAYS} 天）"
+else
+  echo "[OK] $(date '+%F %T') 备份完成：$OUT + $FILES_OUT（保留 ${KEEP_DAYS} 天）"
+fi
