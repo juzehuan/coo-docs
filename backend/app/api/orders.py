@@ -536,9 +536,19 @@ def download_order_attachment(order_id: int, op_id: int, aid: int, request: Requ
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="文件不存在")
-    # 记录 IP：规格 F-10 要求下载留痕含 IP，这是追溯核查资料外泄去向的关键线索
+    # 记录 IP：规格 F-10 要求下载留痕含 IP，这是追溯核查资料外泄去向的关键线索。
+    #
+    # target 必须带上订单与实例，只写文件名定位不了对象：F-10 要求"支持按人员、
+    # 时间、**资料包**查询"，而工厂场景里「装箱单.pdf」「检验报告.pdf」这类名字
+    # 天然跨订单重复——本库里 `coo_test_doc.pdf` 就有 65 条附件记录，散落在
+    # 32 个订单实例、33 个版本上，一条只写文件名的下载留痕对应 65 个候选附件。
+    # 上传与删除本来就记了 `订单号/实例ID[/文件名]`，唯独下载没记，
+    # 而下载恰恰是**唯一把证据带出系统**的动作，最需要追溯。（第 60 轮）
     log_event(db, AuditDomain.ATTACHMENT, "op_download", actor=user, ip=client_ip(request),
-              target=f"{att.original_name}")
+              target=f"{o.order_no}/{op.id}/{att.original_name}",
+              # 同一端点既服务预览也服务下载，此前一律记成"下载"——
+              # 合规日志把没发生的事记成发生了，本身就是缺陷
+              detail="预览" if preview else "下载")
     # 按扩展名判定而非库里存的 mime_type：历史附件的 mime_type 来自客户端声明，
     # 一份真 PDF 若当初被声明成 text/plain，至今仍无法预览
     mime = guess_mime(os.path.splitext(att.original_name or att.file_name or "")[1])

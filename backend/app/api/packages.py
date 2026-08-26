@@ -351,9 +351,12 @@ def download_attachment(pkg_id: int, vid: int, aid: int, request: Request, previ
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="文件不存在")
-    # 记录 IP：规格 F-10 要求下载留痕含 IP
+    # 记录 IP：规格 F-10 要求下载留痕含 IP。
+    # target 带上资料包与版本，理由同订单线（见 orders.py 的 op_download）：
+    # 只写文件名无法满足 F-10「按资料包查询」，而下载是唯一把证据带出系统的动作。
     log_event(db, AuditDomain.ATTACHMENT, "download", actor=user, ip=client_ip(request),
-              target=f"{att.original_name}")
+              target=f"{p.code}/{v.version_no}/{att.original_name}",
+              detail="预览" if preview else "下载")
     # 按扩展名判定而非库里存的 mime_type：历史附件的 mime_type 来自客户端声明，
     # 一份真 PDF 若当初被声明成 text/plain，至今仍无法预览
     mime = guess_mime(os.path.splitext(att.original_name or att.file_name or "")[1])
