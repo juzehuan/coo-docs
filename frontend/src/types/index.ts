@@ -268,6 +268,8 @@ export interface TodoItem {
   review_focus: string
   due_date: string
   overdue?: boolean
+  /** 责任部门无在岗审核人：该条已落入部门审核人视野之外，由 COO/管理员兜底 */
+  no_reviewer?: boolean
 }
 
 export interface NotificationItem {

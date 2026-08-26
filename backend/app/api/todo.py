@@ -39,12 +39,40 @@ def _latest_version(db: Session, pkg_id: int) -> PackageVersion | None:
     )
 
 
+def _staffed_dept_ids(db: Session) -> set:
+    """有至少一名在岗部门审核人的部门。"""
+    rows = (db.query(User.dept_id)
+            .filter(User.role == "dept_reviewer", User.status == "active",
+                    User.dept_id.isnot(None))
+            .distinct().all())
+    return {r[0] for r in rows}
+
+
+def _no_reviewer(status: str, dept_id, staffed: set) -> bool:
+    """待部门审核，但责任部门没有任何在岗审核人（或压根没有责任部门）。
+
+    这类条目会**落进所有人的待办之外**：部门审核人按 `dept_id` 匹配（匹配不上），
+    而 COO/管理员的待办只筛 `pending_coo`。第 63 轮实测——把某部门唯一的审核人
+    调岗后，一条已提交的 `pending_dept` 在 QAL 审核人、其他部门审核人、COO、
+    管理员的待办中**全部为 0 条**。它没被删也没报错，只是谁都看不见了，
+    提交人却在等一个永远不会被提示的审核。
+
+    唯一审核人离职被停用、或调岗，都是再常规不过的人事变动。
+    注意 `can_review_dept` 本来就允许 admin/coo_reviewer 审核任何部门——
+    **能力一直在，缺的只是可见性**。因此这里把这类条目补进他们的待办，
+    而不是放宽任何权限。只补"无人可审"的那些，避免把全部 pending_dept 灌给管理员。
+    """
+    return status == VersionStatus.PENDING_DEPT and (dept_id is None or dept_id not in staffed)
+
+
 @router.get("", response_model=list[dict])
 def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """按角色返回待办：提交人看自己被退回需整改；部门审核人看待审；COO/管理员看待终审。
 
     同时覆盖资料包版本（PackageVersion）与订单资料包实例（OrderPackage）两条流程线。
+    COO/管理员另外会看到「责任部门无在岗审核人」的待部门审核项（见 _no_reviewer）。
     """
+    staffed = _staffed_dept_ids(db)
     pkgs = db.query(Package).order_by(Package.sort_order, Package.code).all()
     depts = {d.id: d for d in db.query(Department).all()}
     users = {u.id: u for u in db.query(User).all()}
@@ -67,7 +95,8 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
         elif user.role == "dept_reviewer":
             mine = p.dept_id == user.dept_id and lv.status == VersionStatus.PENDING_DEPT
         elif user.role in ("coo_reviewer", "admin"):
-            mine = lv.status == VersionStatus.PENDING_COO
+            mine = (lv.status == VersionStatus.PENDING_COO
+                    or _no_reviewer(lv.status, p.dept_id, staffed))
         else:  # auditor 只读，无待办
             mine = False
         if not mine:
@@ -95,6 +124,8 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             "review_focus": p.review_focus,
             "due_date": p.due_date,
             "overdue": is_overdue(p.due_date, lv.status),
+            # 责任部门无在岗审核人：前端据此标注，避免它看起来像一条普通待审
+            "no_reviewer": _no_reviewer(lv.status, p.dept_id, staffed),
         })
 
     # ---- 订单资料包实例待办 ----
@@ -122,7 +153,8 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
         elif user.role == "dept_reviewer":
             mine = pkg.dept_id == user.dept_id and op.status == VersionStatus.PENDING_DEPT
         elif user.role in ("coo_reviewer", "admin"):
-            mine = op.status == VersionStatus.PENDING_COO
+            mine = (op.status == VersionStatus.PENDING_COO
+                    or _no_reviewer(op.status, pkg.dept_id, staffed))
         else:
             mine = False
         if not mine:
@@ -150,6 +182,7 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             "review_focus": pkg.review_focus,
             "due_date": op.due_date,
             "overdue": is_overdue(op.due_date, op.status),
+            "no_reviewer": _no_reviewer(op.status, pkg.dept_id, staffed),
         })
 
     # 按提交时间倒序，无提交时间的排最后

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, Empty, Space, Table, Typography } from 'antd'
+import { App, Button, Card, Empty, Space, Table, Typography, Tag } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { todo } from '@/api/endpoints'
@@ -60,7 +60,18 @@ export default function Todo() {
               </>
             ),
           },
-          { title: t('dept'), dataIndex: 'dept_name', width: 120, render: (v: string) => v || '-' },
+          {
+            title: t('dept'), dataIndex: 'dept_name', width: 150,
+            // 标出"责任部门无在岗审核人"：这类条目原本落在所有人待办之外，
+            // 现由 COO/管理员兜底显示；不标注的话它看起来就是一条普通待审，
+            // 兜底的人不会意识到部门那一环已经没人了
+            render: (v: string, r) => (
+              <>
+                {v || '-'}
+                {r.no_reviewer && <><br /><Tag color="volcano">{t('no_reviewer')}</Tag></>}
+              </>
+            ),
+          },
           { title: t('owner'), dataIndex: 'owner_name', width: 110, render: (v: string) => v || '-' },
           {
             title: t('due_date'), dataIndex: 'due_date', width: 120,
