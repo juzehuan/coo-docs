@@ -1,10 +1,11 @@
 """FastAPI 应用入口。"""
 import logging
 import os
+import re
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import DataError, OperationalError
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError
 
 from app.core.config import settings
 from app.core.i18n import LangMiddleware
@@ -55,6 +56,49 @@ def create_app() -> FastAPI:
     def _data_error(request, exc: DataError):
         logging.getLogger("app").warning("数据校验失败 %s: %s", request.url.path, exc)
         return SafeIntJSONResponse(status_code=400, content={"detail": "字段内容过长或格式不正确，请检查后重试"})
+
+    # 唯一约束冲突应回 400 而非 500。
+    #
+    # 各创建接口都做了"先查存在再插入"的预检并回 400（订单号已存在 / 用户名已存在 …），
+    # 但检查与插入之间存在时间窗，并发请求会双双通过预检、由数据库的唯一索引兜住，
+    # 而 IntegrityError 此前**没有任何处理器**，直接变成裸 500 "Internal Server Error"。
+    #
+    # 第 67 轮实测（8 个并发请求用同一个唯一键创建）：
+    #   订单   1×201 · 6×400 · **1×500**
+    #   资料包 1×201 · 2×400 · **5×500**
+    #   用户   1×201 · **7×500**  ← 8 个里 7 个是 500
+    # 用户创建最严重，因为预检之后要跑一次 bcrypt 哈希（约 200ms），
+    # 这段耗时把时间窗撑到几乎必然命中。
+    #
+    # 真实触发场景不必是攻击：慢网下重复点一次提交、超时后重试（见第 65 轮）、
+    # 两个管理员同时建同一个部门，都会走到这里。而用户看到的是"Internal Server Error"
+    # ——一个让人以为系统坏了的提示，正确答案其实只是"这个编号已经有了"。
+    #
+    # 关键是**用户不应该能分辨自己走的是预检还是竞态**：因此这里回同样的 400、
+    # 同样的文案。MySQL 的 1062 报错里带唯一键名（形如 `users.ix_users_username`），
+    # 据此映射到与预检一致的措辞；认不出来时给通用文案，不回显数据库原文
+    # （原文含冲突的具体取值，不必要地暴露给调用方）。
+    _UNIQUE_HINTS = {
+        "users": "用户名已存在",
+        "orders": "订单号已存在",
+        "packages": "资料包编号已存在",
+        "factories": "工厂编码已存在",
+        "departments": "部门编码已存在",
+    }
+
+    @app.exception_handler(IntegrityError)
+    def _integrity_error(request, exc: IntegrityError):
+        raw = str(getattr(exc, "orig", None) or exc)
+        logging.getLogger("app").warning("唯一约束冲突 %s: %s", request.url.path, raw)
+        m = re.search(r"for key '([^']+)'", raw)
+        key = (m.group(1) if m else "").lower()
+        head = key.split(".")[0]
+        detail = "已存在相同的记录，请刷新后确认"
+        for table, msg in _UNIQUE_HINTS.items():
+            if head == table or key.startswith(f"ix_{table}_") or f".ix_{table}_" in key:
+                detail = msg
+                break
+        return SafeIntJSONResponse(status_code=400, content={"detail": detail})
 
     # 数据库暂时不可用（重启、网络抖动）应回 503 而非 500：
     # 503 表示"暂时性、可重试"，500 会把运维引向"代码有 bug"的排查方向；
