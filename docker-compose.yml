@@ -1,12 +1,18 @@
+# 配置全部来自 .env（见 .env.example）。首次部署请运行 scripts/install.sh，
+# 它会生成随机口令、写好 .env 再起服务——不要手工照抄任何示例口令。
+#
+# 镜像一律固定到具体版本：用 :latest / :alpine 时重新 pull 可能拿到与测试过的
+# 不同的东西（本项目历史上 nginx 因此出过两次问题）。升级请显式改这里的版本号。
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.46
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: coo
-      MYSQL_USER: coo
-      MYSQL_PASSWORD: coo123456
+      # :? 表示未设置就直接报错退出——宁可起不来，也不要静默地用上一个弱默认口令
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?未设置，请先运行 scripts/install.sh 生成 .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-coo}
+      MYSQL_USER: ${MYSQL_USER:-coo}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?未设置，请先运行 scripts/install.sh 生成 .env}
     volumes:
       - mysql_data:/var/lib/mysql
     restart: unless-stopped
@@ -15,17 +21,18 @@ services:
       # 宿主侧映射 3307，避免与本机已有的 3306 服务冲突（backend 走容器网络不受影响）
       - "127.0.0.1:3307:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      # $$ 转义为容器内的 $：口令从容器环境读取，不会出现在 `docker compose config` 的输出里
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: coominio
-      MINIO_ROOT_PASSWORD: coominio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?未设置，请先运行 scripts/install.sh 生成 .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?未设置，请先运行 scripts/install.sh 生成 .env}
     volumes:
       - minio_data:/data
     ports:
@@ -34,38 +41,25 @@ services:
       - "127.0.0.1:9001:9001"   # 管理控制台
     restart: unless-stopped
 
-  # 严格 S3 语义交叉验证：Zenko CloudServer（模拟群晖/威联通独立 S3 服务端）
-  # 默认密钥 accessKey1/verySecretKey1，端口 8000；boto3 直接对接即可
-  zenko:
-    image: zenko/cloudserver:latest
-    environment:
-      SCALITY_ACCESS_KEY_ID: accessKey1
-      SCALITY_SECRET_ACCESS_KEY: verySecretKey1
-      ENDPOINT: zenko
-      REMOTE_MANAGEMENT_DISABLE: 1
-    ports:
-      # 仅绑定本机回环：测试用 S3 服务使用公开已知的默认密钥，绝不可对外暴露
-      - "127.0.0.1:8001:8000"   # 主机映射 8001 避免与后端冲突
-    restart: unless-stopped
-
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: mysql+pymysql://coo:coo123456@mysql:3306/coo?charset=utf8mb4
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-coo}:${MYSQL_PASSWORD:?未设置}@mysql:3306/${MYSQL_DATABASE:-coo}?charset=utf8mb4
       # JWT 密钥不再走环境变量：首次启动自动生成并存库，超管可在「组织管理 → 安全设置」轮换
       # 生产模式：不创建演示账号；首次启动仅建 admin，随机密码打印在启动日志（仅一次）
       SEED_DEMO_DATA: "false"
       # 站点时区：NAS 定时同步与超期判断按此计算
-      TIMEZONE: Asia/Bangkok
-      CORS_ORIGINS: http://localhost,http://localhost:5173
+      TIMEZONE: ${TIMEZONE:-Asia/Bangkok}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
       NAS_ROOT: /app/data/nas
       UPLOAD_DIR: /app/data/uploads
-      # NAS 归档走 S3 兼容接口（MinIO 本地模拟）
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_ACCESS_KEY: coominio
-      S3_SECRET_KEY: coominio123
-      S3_BUCKET: coo-nas
-      S3_REGION: us-east-1
+      # NAS 归档走 S3 兼容接口（MinIO 本地模拟）。
+      # 访问密钥直接引用 MinIO 的根凭据，避免两处各写一份、改一处漏一处
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:?未设置}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?未设置}
+      S3_BUCKET: ${S3_BUCKET:-coo-nas}
+      S3_REGION: ${S3_REGION:-us-east-1}
     volumes:
       # NAS 挂载点：本地目录回退模式使用；S3 模式不再依赖挂载
       - ./nas_mount:/app/data/nas

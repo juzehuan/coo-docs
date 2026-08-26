@@ -12,7 +12,23 @@ cd "$(dirname "$0")/.."
 SRC="${1:-$(ls -t backups/*.sql.gz backups/*.sql.gz.enc 2>/dev/null | head -1)}"
 DRILL_DB="coo_restore_drill"
 PROD_DB="${MYSQL_DATABASE:-coo}"
-ROOT_PASS="${MYSQL_ROOT_PASSWORD:-rootpass}"
+# 自动读取 .env：口令自 2026-08-26 起只存在于 .env（compose 只引用不存值）。
+# 脚本自己读，就不必依赖 cron 行里记得写 `. ./.env`——少一个会静默失效的前提。
+# **只补齐未设置的变量**：`set -a && . ./.env` 会覆盖调用者显式传入的值，
+# 那会让"临时指向另一套配置跑一次"变得不可能，且失败原因极难看出来。
+if [ -f ./.env ]; then
+  while IFS='=' read -r _k _v; do
+    case "$_k" in ''|'#'*) continue ;; *[!A-Za-z0-9_]*) continue ;; esac
+    [ -n "${!_k:-}" ] || export "$_k=$_v"
+  done < ./.env
+fi
+
+# 不设弱默认值：口令拿不到就失败退出，而不是拿 rootpass 去试
+ROOT_PASS="${MYSQL_ROOT_PASSWORD:-}"
+if [ -z "$ROOT_PASS" ]; then
+  echo "[ERROR] 未取到 MYSQL_ROOT_PASSWORD：请确认项目根目录下有 .env（见 .env.example）。" >&2
+  exit 1
+fi
 
 [ -n "$SRC" ] && [ -f "$SRC" ] || { echo "[ERROR] 找不到备份文件（先执行 scripts/backup_mysql.sh）" >&2; exit 1; }
 echo "演练备份：$SRC"

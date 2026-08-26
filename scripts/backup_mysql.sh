@@ -5,11 +5,29 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# 自动读取 .env：口令自 2026-08-26 起只存在于 .env（compose 只引用不存值）。
+# 脚本自己读，就不必依赖 cron 行里记得写 `. ./.env`——少一个会静默失效的前提。
+# **只补齐未设置的变量**：`set -a && . ./.env` 会覆盖调用者显式传入的值，
+# 那会让"临时指向另一套配置跑一次"变得不可能，且失败原因极难看出来。
+if [ -f ./.env ]; then
+  while IFS='=' read -r _k _v; do
+    case "$_k" in ''|'#'*) continue ;; *[!A-Za-z0-9_]*) continue ;; esac
+    [ -n "${!_k:-}" ] || export "$_k=$_v"
+  done < ./.env
+fi
+
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 KEEP_DAYS="${KEEP_DAYS:-30}"
 DB_USER="${MYSQL_USER:-coo}"
-DB_PASS="${MYSQL_PASSWORD:-coo123456}"   # 与 docker-compose.yml 保持一致；轮换密码后同步修改
 DB_NAME="${MYSQL_DATABASE:-coo}"
+# 不设弱默认值：口令拿不到就直接失败退出。此前默认回退到 `coo123456`，
+# 在口令已轮换的部署上会导致每晚认证失败，而失败原因看起来像"数据库挂了"
+DB_PASS="${MYSQL_PASSWORD:-}"
+if [ -z "$DB_PASS" ]; then
+  echo "[ERROR] 未取到 MYSQL_PASSWORD：请确认项目根目录下有 .env（见 .env.example），" >&2
+  echo "        或在环境变量中提供该值。" >&2
+  exit 1
+fi
 
 mkdir -p "$BACKUP_DIR"
 STAMP="$(date +%F_%H%M%S)"
