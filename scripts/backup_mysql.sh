@@ -81,7 +81,9 @@ done
 UPLOAD_DIR="${UPLOAD_DIR:-./data/uploads}"
 FILES_OUT="$BACKUP_DIR/coo_files_${STAMP}.tar.gz"
 if [ -d "$UPLOAD_DIR" ]; then
-  if ! tar -czf "$FILES_OUT" -C "$(dirname "$UPLOAD_DIR")" "$(basename "$UPLOAD_DIR")"; then
+  # .export-jobs / .export-tmp / .zip-tmp 是导出产物与临时文件（24 小时即清、可重新生成），
+  # 不是证据，且可能是数 GB 的 ZIP——不进备份
+  if ! tar --exclude=".export-jobs" --exclude=".export-tmp" --exclude=".zip-tmp" -czf "$FILES_OUT" -C "$(dirname "$UPLOAD_DIR")" "$(basename "$UPLOAD_DIR")"; then
     echo "[ERROR] 附件目录打包失败：$UPLOAD_DIR" >&2
     rm -f "$FILES_OUT"; exit 1
   fi

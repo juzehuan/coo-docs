@@ -103,6 +103,9 @@ class DepartmentOut(BaseModel):
 
 
 # ---------- 用户 ----------
+RoleName = Literal["submitter", "dept_reviewer", "coo_reviewer", "auditor", "admin"]
+
+
 class UserCreate(BaseModel):
     username: str = Field(max_length=64)
     # 留空则服务端生成一次性临时密码并在响应里返回一次（与「重置密码」同一套流程）。
@@ -112,7 +115,8 @@ class UserCreate(BaseModel):
     email: str = Field("", max_length=128)
     phone: str = Field("", max_length=32)
     dept_id: Optional[int] = None
-    role: str = Field("submitter", max_length=32)
+    # 角色必须是已知值：此前是自由字符串，实测 role="coo" 也能建成，登录后侧栏全空、正文 403（第 92 轮）
+    role: RoleName = "submitter"
     factory_ids: list[int] = []   # 授权工厂
 
 
@@ -121,8 +125,8 @@ class UserUpdate(BaseModel):
     email: Optional[str] = Field(None, max_length=128)
     phone: Optional[str] = Field(None, max_length=32)
     dept_id: Optional[int] = None
-    role: Optional[str] = Field(None, max_length=32)
-    status: Optional[str] = Field(None, max_length=16)
+    role: Optional[RoleName] = None
+    status: Optional[Literal["active", "disabled"]] = None
     factory_ids: Optional[list[int]] = None
 
 

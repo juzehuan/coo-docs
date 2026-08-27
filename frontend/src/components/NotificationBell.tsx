@@ -5,6 +5,7 @@ import { BellOutlined, CheckOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { notifications } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
+import { useAuth } from '@/store/AuthContext'
 import { formatTime } from '@/utils/format'
 import { notifyText } from '@/utils/notify'
 import type { NotificationItem } from '@/types'
@@ -26,6 +27,7 @@ export default function NotificationBell() {
   const { t, lang } = useI18n()
   const nav = useNavigate()
   const { message } = App.useApp()
+  const { user } = useAuth()
   const [unread, setUnread] = useState(0)
   const [total, setTotal] = useState(0)
   const [open, setOpen] = useState(false)
@@ -43,11 +45,14 @@ export default function NotificationBell() {
     }
   }
 
+  // 强制改密期间后端对通知接口一律 403：不必每 30 秒白打一次请求、在日志里留一条 403
+  const blocked = !!user?.must_change_password
   useEffect(() => {
+    if (blocked) return
     load()
     timer.current = window.setInterval(load, 30000)
     return () => window.clearInterval(timer.current)
-  }, [])
+  }, [blocked])
 
   const markAll = async () => {
     try {
