@@ -9,7 +9,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC="${1:-$(ls -t backups/*.sql.gz backups/*.sql.gz.enc 2>/dev/null | head -1)}"
+# 第 102 轮：这里曾写成 `SRC="${1:-$(ls -t a/*.gz a/*.gz.enc | head -1)}"`——没有 .enc 备份时
+# ls 对未匹配的 glob 返回 2，pipefail 让整个命令替换返回 2，set -e 据此退出，
+# 而**赋值语句失败不打印任何东西**：演练在"只有明文备份"的常见情形下静默退出码 2，
+# 从加密分支加入起就没真正跑过。用 nullglob 让未匹配的 glob 消失，而不是变成一个不存在的文件名。
+SRC="${1:-}"
+if [ -z "$SRC" ]; then
+  shopt -s nullglob
+  _cands=(backups/*.sql.gz backups/*.sql.gz.enc)
+  shopt -u nullglob
+  if [ "${#_cands[@]}" -gt 0 ]; then SRC="$(ls -t "${_cands[@]}" | head -1)"; fi
+fi
 DRILL_DB="coo_restore_drill"
 PROD_DB="${MYSQL_DATABASE:-coo}"
 # 自动读取 .env：口令自 2026-08-26 起只存在于 .env（compose 只引用不存值）。
@@ -63,7 +73,7 @@ gunzip -c "$SRC" | my "$DRILL_DB"
 ELAPSED=$(( $(date +%s) - START ))
 echo "恢复耗时：${ELAPSED}s"
 
-TABLES="users orders order_packages attachments audit_logs package_versions packages departments factories notifications sync_records system_settings user_factories"
+TABLES="users orders order_packages attachments audit_logs package_versions packages departments factories notifications sync_records system_settings user_factories export_jobs"
 fail=0
 printf "\n%-20s %10s %10s   %s\n" "表" "生产" "恢复" "结果"
 for t in $TABLES; do
@@ -86,6 +96,9 @@ check "JWT密钥保真" "SELECT value FROM $PROD_DB.system_settings LIMIT 1" "SE
 check "密码哈希保真" "SELECT password_hash FROM $PROD_DB.users WHERE username='admin'" "SELECT password_hash FROM $DRILL_DB.users WHERE username='admin'"
 check "已放行锁定态保留" "SELECT COUNT(*) FROM $PROD_DB.order_packages WHERE locked=1" "SELECT COUNT(*) FROM $DRILL_DB.order_packages WHERE locked=1"
 check "索引随备份恢复" "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='$PROD_DB'" "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='$DRILL_DB'"
+# 列结构：后加的列（password_changed_at / must_change_password / per_order …）由应用启动时补建，
+# 备份里若缺了列，恢复后的库在应用起来之前就是"旧结构"——这里比对两库的列总数与列名集合
+check "列结构随备份恢复" "SELECT GROUP_CONCAT(CONCAT(table_name,'.',column_name) ORDER BY table_name,column_name) FROM information_schema.columns WHERE table_schema='$PROD_DB'" "SELECT GROUP_CONCAT(CONCAT(table_name,'.',column_name) ORDER BY table_name,column_name) FROM information_schema.columns WHERE table_schema='$DRILL_DB'"
 
 # ---- 附件文件在位校验 ----
 # 数据库恢复得再完美，附件文件缺失一样是「证据丢失」：附件表里每条记录都指向
