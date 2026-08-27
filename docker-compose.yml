@@ -50,8 +50,10 @@ services:
     environment:
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-coo}:${MYSQL_PASSWORD:?未设置}@mysql:3306/${MYSQL_DATABASE:-coo}?charset=utf8mb4
       # JWT 密钥不再走环境变量：首次启动自动生成并存库，超管可在「组织管理 → 安全设置」轮换
-      # 生产模式：不创建演示账号；首次启动仅建 admin，随机密码打印在启动日志（仅一次）
-      SEED_DEMO_DATA: "false"
+      # 生产模式：不创建演示账号；首次启动仅建 admin，随机密码打印在启动日志（仅一次）。
+      # 演示/验收环境在 .env 里设 SEED_DEMO_DATA=true 才会建全套演示账号与示例订单——
+      # 默认仍是 false，正式交付时把 .env 里那行删掉即可回到生产语义。
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
       # 站点时区：NAS 定时同步与超期判断按此计算
       TIMEZONE: ${TIMEZONE:-Asia/Bangkok}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}

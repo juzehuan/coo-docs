@@ -166,13 +166,24 @@ def seed(db: Session):
             if f.id not in cur:
                 u.factories.append(f)
 
-    # 资料包责任人 = 责任部门审核人（补 owner_user_id，供提交人/责任人维度可见性使用）
+    # 资料包责任人 = 本部门**提交人**；只有该部门没有提交人时才回退到部门审核人。
+    #
+    # 原来一律指给部门审核人，两个后果：①上传人与审核人成了同一个人，职责分离
+    # 形同虚设（代码在本部门无第二名审核人时不阻止，否则流程会死锁）；②资料包
+    # 可见性按责任人过滤，于是提交人的「资料包」页面永远是空的，而规格 §2.4 写明
+    # 提交人的核心权限就是"上传/替换本人负责资料包的文件"。
+    # 顺序无关：提交人直接覆盖，审核人只用 setdefault 兜底。
     owner_by_dept = {}
     for username, _name, role, dept_code, _pwd in ACCOUNTS:
-        if role == Role.DEPT_REVIEWER and dept_code:
-            rv = db.query(User).filter(User.username == username).first()
-            if rv:
-                owner_by_dept[dept_code] = rv.id
+        if not dept_code:
+            continue
+        u = db.query(User).filter(User.username == username).first()
+        if not u:
+            continue
+        if role == Role.SUBMITTER:
+            owner_by_dept[dept_code] = u.id
+        elif role == Role.DEPT_REVIEWER:
+            owner_by_dept.setdefault(dept_code, u.id)
     for code, _zh, _en, _th, dept_code, _focus in PACKAGE_SEED:
         p = db.query(Package).filter(Package.code == code).first()
         if p and p.owner_user_id is None and dept_code in owner_by_dept:
