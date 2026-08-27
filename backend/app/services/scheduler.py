@@ -133,21 +133,43 @@ def _run_once() -> None:
         db.close()
 
 
+# 循环体出错后的退避等待：既不要热循环空转，也不要一睡一小时错过当天的同步
+ERROR_BACKOFF_SECONDS = 60.0
+
+
 def _loop() -> None:
+    """调度主循环。**整个循环体都必须包在 try 里。**
+
+    第 76 轮实测：此前只有 `_run_once()` 被 try 包着，而 `nas_config.get_config()`
+    在缓存为空时会开一个数据库会话——**一次数据库抖动就让这个线程永久结束**
+    （实测：注入一次异常后 `t.is_alive()` 立刻为 False），NAS 自动同步从此不再
+    执行，直到有人重启后端进程，而全程没有任何告警。
+
+    这不是假想场景：P1-2 轮换数据库口令明确需要"短暂停机窗口"，MySQL 一重启，
+    HTTP 请求能自愈（`pool_pre_ping`，第 23 轮已验证 16 秒恢复），
+    但这个后台线程会悄悄死掉——同一次运维操作，一半自愈、一半永久停摆。
+
+    与第 59 轮修的是同一类静默失效（自动同步不执行、不报错、界面照常显示
+    "上次同步成功"），只是换了一扇门进来。
+    """
     while True:
-        # 每轮重新读取配置：管理员在界面改同步时间或关闭自动同步后，
-        # 下一次等待即按新值计算，不需要重启服务
-        cfg = nas_config.get_config()
-        time.sleep(min(_seconds_until(cfg["sync_time"]), MAX_SLEEP_SECONDS))
-        cfg = nas_config.get_config()
-        if not cfg["auto_sync"]:
-            continue
-        if not _due(datetime.datetime.now(_tz()), cfg["sync_time"], _last_auto_date()):
-            continue
         try:
+            # 每轮重新读取配置：管理员在界面改同步时间或关闭自动同步后，
+            # 下一次等待即按新值计算，不需要重启服务
+            cfg = nas_config.get_config()
+            time.sleep(min(_seconds_until(cfg["sync_time"]), MAX_SLEEP_SECONDS))
+            cfg = nas_config.get_config()
+            if not cfg["auto_sync"]:
+                continue
+            if not _due(datetime.datetime.now(_tz()), cfg["sync_time"], _last_auto_date()):
+                continue
             _run_once()
         except Exception:
-            logger.exception("NAS 自动同步失败，将于明日计划时间重试")
+            # 线程绝不能因为任何异常而结束。退避一分钟再继续：
+            # 数据库抖动这类问题通常几十秒内恢复，而持续失败也不会变成热循环。
+            logger.exception("NAS 自动同步循环出错，%.0f 秒后重试（线程继续运行）",
+                             ERROR_BACKOFF_SECONDS)
+            time.sleep(ERROR_BACKOFF_SECONDS)
 
 
 def start_nas_sync_scheduler() -> None:
