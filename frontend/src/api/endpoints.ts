@@ -2,7 +2,7 @@ import {
   del, downloadBlob, get, patch, post, put, upload,
 } from './client'
 import type {
-  Attachment, AuditLogList, AuditQuery, ControlledList, ExportJob, OrderList, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
+  Assignee, Attachment, AuditLogList, AuditQuery, ControlledList, ExportJob, OrderList, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
   OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, Role, SyncRecord, TodoItem, User, Version,
 } from '@/types'
@@ -86,6 +86,8 @@ export const org = {
   updateDepartment: (id: string, data: { name_zh?: string; name_en?: string; name_th?: string }) =>
     patch<Department>(`/org/departments/${id}`, data),
   listUsers: (dept_id?: string) => get<User[]>('/org/users', dept_id ? { dept_id } : undefined),
+  /** 可指派的在岗人员（精简字段）：listUsers 是 admin 专用，提交人派活时取不到 */
+  assignees: () => get<Assignee[]>('/org/assignees'),
   createUser: (data: { username: string; password: string; display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string; factory_ids?: number[] }) =>
     post<User>('/org/users', data),
   updateUser: (id: string, data: { display_name?: string; email?: string; phone?: string; dept_id?: string | null; role?: string; status?: string; factory_ids?: number[] }) =>

@@ -8,9 +8,10 @@ import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { downloadFile, errMessage } from '@/api/client'
 import { exportOrQueue, exportErrMessage } from '@/utils/exportOrQueue'
-import { orders, packages as pkgApi } from '@/api/endpoints'
+import { orders, org, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
+import { ROLE_LABELS } from '@/i18n/messages'
 import { useSubmit } from '@/hooks/useSubmit'
 import { useUploadLimits, oversizeNames } from '@/hooks/useUploadLimits'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
@@ -21,13 +22,13 @@ import PageHeader from '@/components/PageHeader'
 import RowActions, { ActionButton } from '@/components/RowActions'
 import { formatTime } from '@/utils/format'
 import { ELLIPSIS, actionWidth } from '@/utils/table'
-import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, User } from '@/types'
+import type { Assignee, Lang, OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, Role, User } from '@/types'
 
 const { Dragger } = Upload
 
 // ---------- 单包：附件 / 上传 / 提审 ----------
-function RowAttachments({ orderId, orderOwnerId, op, user, onChanged }: {
-  orderId: string; orderOwnerId: string | null; op: OrderPackage; user: User; onChanged: () => void
+function RowAttachments({ orderId, op, user, onChanged }: {
+  orderId: string; op: OrderPackage; user: User; onChanged: () => void
 }) {
 
   const { t } = useI18n()
@@ -44,10 +45,9 @@ function RowAttachments({ orderId, orderOwnerId, op, user, onChanged }: {
   // 可编辑（上传/删附件/提交）：COO/管理员任意；部门审核人仅本部门实例；提交人仅本人负责实例
   const isStaff = user.role === 'admin' || user.role === 'coo_reviewer' ||
     (user.role === 'dept_reviewer' && op.package_dept_id != null && op.package_dept_id === user.dept_id)
-  // 与后端 can_edit_order_package 保持一致：订单负责人对自己订单下的任一实例都可操作。
-  // 只看 op.owner_user_id 的话，提交人加完资料包附件区不出现——实例负责人默认成了模板负责人
-  const ownerOk = user.role === 'submitter' &&
-    (op.owner_user_id === user.id || (orderOwnerId != null && orderOwnerId === user.id))
+  // 与后端 can_edit_order_package 保持一致：提交人只操作指派给自己的实例。
+  // 建单人若要自己传，在「添加资料包」里把责任人改成自己即可
+  const ownerOk = user.role === 'submitter' && op.owner_user_id === user.id
   const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
   // reviewable_dept 由后端下发：职责分离（本部门另有审核人时不得审自己提交的内容）
   // 需要查库才能判定，前端单凭角色+部门算不出来，此前因此显示了必然 403 的按钮
@@ -203,6 +203,7 @@ export default function OrderDetail() {
   const { message, modal } = App.useApp()
   const [order, setOrder] = useState<OrderDetailResp | null>(null)
   const [templates, setTemplates] = useState<Package[]>([])
+  const [assignees, setAssignees] = useState<Assignee[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -221,6 +222,8 @@ export default function OrderDetail() {
     // 用 catalog 而不是 list：list 对提交人只返回他名下的资料包，导致「添加资料包」
     // 下拉是空的，提交人建完订单就走不下去了（后端 add_package_to_order 本就允许）
     pkgApi.catalog().then((p) => setTemplates(p)).catch(() => setTemplates([]))
+    // 责任人可选清单：拿不到就退化成"沿用资料包的责任人"，不阻断添加
+    org.assignees().then(setAssignees).catch(() => setAssignees([]))
   }, [load])
 
   if (loading) return <Card variant="borderless" loading />
@@ -247,7 +250,12 @@ export default function OrderDetail() {
     const v = await form.validateFields().catch(() => null)
     if (!v) return
     const ok = await submitRun(
-      () => orders.addPackage(order.id, { package_id: v.package_id, due_date: v.due_date || '' }),
+      () => orders.addPackage(order.id, {
+        package_id: v.package_id,
+        // 留空表示沿用资料包的责任人，由后端决定；不要传空串
+        owner_user_id: v.owner_user_id || null,
+        due_date: v.due_date || '',
+      }),
       t('add_package'))
     if (ok) { setOpen(false); form.resetFields(); load() }
   }
@@ -303,7 +311,7 @@ export default function OrderDetail() {
           dataSource={order.packages}
           pagination={false}
           expandable={{
-            expandedRowRender: (op) => <RowAttachments orderId={order.id} orderOwnerId={order.owner_user_id} op={op} user={user!} onChanged={load} />,
+            expandedRowRender: (op) => <RowAttachments orderId={order.id} op={op} user={user!} onChanged={load} />,
           }}
           // 列宽之和（含展开列）；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
           scroll={{ x: 750 + actionWidth(1) + 48 }}
@@ -325,9 +333,27 @@ export default function OrderDetail() {
 
       <Modal title={t('add_package')} open={open} onOk={addPkg} confirmLoading={submitting}
         onCancel={() => setOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={form} layout="vertical" onFinish={addPkg}>
+        <Form form={form} layout="vertical" onFinish={addPkg}
+          // 选定资料包后自动带出它的责任人：一张订单要凑齐 18 类证据，默认就该派给
+          // 各类材料的责任人；建单人要自己传（或临时改派给别人）时再手动改这一项。
+          // 没有这个字段时，建单人加完只能干等——他既不知道派给了谁，也改不了。
+          onValuesChange={(chg) => {
+            if (chg.package_id !== undefined) {
+              const tpl = templates.find((p) => p.id === chg.package_id)
+              form.setFieldValue('owner_user_id', tpl?.owner_user_id ?? undefined)
+            }
+          }}>
           <Form.Item name="package_id" label={t('packages')} rules={[{ required: true }]}>
-            <Select options={templates.map((p) => ({ label: `${p.code} · ${typeName(p)}`, value: p.id }))} />
+            <Select showSearch optionFilterProp="label"
+              options={templates.map((p) => ({ label: `${p.code} · ${typeName(p)}`, value: p.id }))} />
+          </Form.Item>
+          <Form.Item name="owner_user_id" label={t('owner')} extra={t('assignee_hint')}>
+            <Select allowClear showSearch optionFilterProp="label"
+              placeholder={t('owner')}
+              options={assignees.map((a) => ({
+                label: `${a.display_name}（${ROLE_LABELS[a.role as Role]?.[lang as Lang] ?? a.role}）`,
+                value: a.id,
+              }))} />
           </Form.Item>
           <Form.Item name="due_date" label={t('due_date')}
             /* 用日期选择器而不是自由文本：截止日期此前是纯 Input，任何文本都能存进去，

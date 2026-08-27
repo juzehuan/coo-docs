@@ -248,15 +248,13 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
         package_id=pkg.id,
         project_code=settings.PROJECT_CODE,
         status=VersionStatus.DRAFT,
-        # 提交人给自己的订单加资料包时，实例归他自己——模板负责人（pkg.owner_user_id）
-        # 是"资料包线"的分工（部门经理维护常备档案），不该顺带接管订单实例。
-        # 原来的顺序把提交人那一档写在 pkg.owner_user_id 之后，而模板负责人实测 18 个
-        # 全部有值，那一档等于死代码：采购专员建完订单，实例负责人成了部门经理，
-        # 他既传不了附件，待办里也看不到这条活，反倒是部门经理收到"指派给你"。
-        # 管理员 / COO 添加时仍沿用模板负责人——那才是"派活给部门"的场景。
-        owner_user_id=(payload.owner_user_id
-                       or (user.id if user.role == "submitter" else None)
-                       or pkg.owner_user_id),
+        # 默认沿用资料包的责任人：一张订单要凑齐 18 类证据，建单人只是列清单，
+        # 各类材料由各自的责任人上传（下面的通知就是"派活"）。建单人可在
+        # 「添加资料包」里当场改派，走 payload.owner_user_id。
+        # 注：曾经把"提交人自己"提到 pkg.owner_user_id 之前，那会废掉派活路由——
+        # 采购专员把财务付款证明加进订单，本该派给财务专员，却归了他自己。
+        owner_user_id=(payload.owner_user_id or pkg.owner_user_id
+                       or (user.id if user.role == "submitter" else None)),
         required=payload.required,
         due_date=payload.due_date or pkg.due_date,
     )

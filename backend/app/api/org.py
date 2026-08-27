@@ -66,6 +66,30 @@ def list_users(dept_id: int | None = Query(None), db: Session = Depends(get_db),
     return q.order_by(User.id).all()
 
 
+@router.get("/assignees", response_model=list[dict])
+def list_assignees(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """可被指派为责任人的在岗人员（精简字段），供订单线「添加资料包」的责任人选择器用。
+
+    为什么不复用 /org/users：那个是 admin_only，而指派资料包的人通常是提交人
+    （建单人给各部门派活），他取不到用户列表就只能盲选，界面上也就一直没有这个字段。
+    这里只下发 id / 姓名 / 角色 / 部门，不含邮箱、电话、工厂授权、登录时间；
+    姓名本来就在待办、资料包列表的「责任人」列里对所有角色可见，不构成新的暴露面。
+    审计查看人只读、不指派，因此不开放。
+    """
+    if user.role == "auditor":
+        raise HTTPException(status_code=403, detail="无权查看")
+    rows = (
+        db.query(User)
+        .filter(User.status == "active",
+                User.role.in_(("submitter", "dept_reviewer", "coo_reviewer", "admin")))
+        .order_by(User.role, User.id)
+        .all()
+    )
+    return [{"id": str(u.id), "display_name": u.display_name or u.username,
+             "username": u.username, "role": u.role,
+             "dept_id": str(u.dept_id) if u.dept_id else None} for u in rows]
+
+
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db),
                 user: User = Depends(admin_only)):

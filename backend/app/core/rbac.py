@@ -233,13 +233,13 @@ def can_edit_order(u: User, order) -> bool:
 
 def can_edit_order_package(u: User, op) -> bool:
     """订单实例的上传/删除附件、提交审核：COO/管理员任意；
-    部门审核人仅本部门实例；提交人本人负责的实例，或自己订单下的任一实例。
+    部门审核人仅本部门实例；提交人仅本人负责的实例。
 
-    最后那一条是补的：`can_edit_order` 已经允许提交人往自己的订单里**增删**资料包实例，
-    却不允许他往刚加进去的实例传附件——能删不能传，自相矛盾。而《用户操作手册》§6.1
-    「上传并提交(订单线)」写的正是"点添加资料包 → 在该实例的附件区上传附件"。
-    实测：采购专员给自己的订单加 COO-01 后 canEdit=False，附件区根本不出现。
-    审核放行仍要走部门 + COO 两级，这里放开的只是"谁能往自己的订单里放材料"。
+    "列清单的人"与"填清单的人"可以不是同一个：建单人往订单里加一条资料包，
+    等于把这类材料派给它的责任人（见 orders.add_package_to_order 的通知），
+    不代表他要去传别人那份。曾经放开成"订单负责人可操作自己订单下任一实例"，
+    那是在资料包责任人尚未分配（18 个全挂在部门经理名下）时用代码去补配置，
+    分工会被一并抹掉。责任人已按责任部门分配到各专员，这里恢复原判定。
     """
     if u.role in ("admin", "coo_reviewer"):
         return True
@@ -247,8 +247,5 @@ def can_edit_order_package(u: User, op) -> bool:
         pkg = op.package if op.package is not None else None
         return pkg is not None and pkg.dept_id is not None and pkg.dept_id == u.dept_id
     if u.role == "submitter":
-        if op.owner_user_id == u.id:
-            return True
-        order = op.order if op.order is not None else None
-        return order is not None and order.owner_user_id == u.id
+        return op.owner_user_id == u.id
     return False

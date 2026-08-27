@@ -153,6 +153,15 @@ export interface Version {
   attachments: Attachment[]
 }
 
+/** 可被指派为责任人的在岗人员（/org/assignees 的精简字段，非完整 User） */
+export interface Assignee {
+  id: string
+  display_name: string
+  username: string
+  role: string
+  dept_id: string | null
+}
+
 export interface Package {
   id: string
   code: string
