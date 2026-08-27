@@ -373,9 +373,13 @@ def download_attachment(pkg_id: int, vid: int, aid: int, request: Request, previ
     # 取 basename 兜底：上传侧已剥离路径分隔符，但库里的历史记录仍可能带着
     # `../../etc/passwd.txt` 这类原名，而它会原样进 Content-Disposition
     dl_name = sanitize_name(os.path.basename(att.original_name or "")) or att.file_name
+    # 把内容 sha256 放进响应头：存储名本身就是哈希，零成本；核查方拿到文件后
+    # 可以自行验证拿到的确实是系统登记的那份内容（第 83 轮：下载本身不做校验，
+    # 大文件逐次重算会让每次下载的 IO 翻倍，交给外部核验更合理）
+    hdrs = {"X-Content-SHA256": os.path.splitext(att.file_name)[0]}
     if preview and mime in PREVIEW_MIME:
-        return FileResponse(path, media_type=mime, filename=dl_name)
-    return FileResponse(path, filename=dl_name)
+        return FileResponse(path, media_type=mime, filename=dl_name, headers=hdrs)
+    return FileResponse(path, filename=dl_name, headers=hdrs)
 
 
 # ---------- 提交 / 审核 ----------

@@ -68,6 +68,14 @@ def _unique_segment(s: str, fallback: str = "_") -> str:
     return safe
 
 
+def file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def file_md5(path: str) -> str:
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -397,6 +405,16 @@ def _run_sync_locked(db: Session, run_type: str, triggered_by: int | None) -> Sy
             src = os.path.join(settings.UPLOAD_DIR, att.file_name)
             if not os.path.exists(src):
                 failures.append({"attachment_id": att.id, "reason": "源文件缺失"})
+                continue
+            # **先验源文件，再推 NAS。** 存储名就是内容的 sha256，本地文件一旦被改动
+            # （位翻转/误覆盖/篡改）这里就对不上。此前的顺序是"先上传、再拿 NAS 侧的
+            # ETag 与库里的 md5 比"——第 83 轮实测：源文件被改后，坏内容**已经被推上
+            # NAS**，校验失败只是事后报告，而 NAS 是只增不删的归档，坏副本就此留在
+            # 核查方直接调阅的目录里。失败原因也要说清是哪一侧错了：此前一律
+            # "上传或校验不一致"，运维会先去怀疑 NAS，而真正坏的是本地证据。
+            if file_sha256(src) != os.path.splitext(att.file_name)[0]:
+                failures.append({"attachment_id": att.id,
+                                 "reason": "源文件内容与哈希不符（本地证据已损坏或被篡改），未推送 NAS"})
                 continue
             if att.version_id is not None:
                 ver = db.get(PackageVersion, att.version_id)

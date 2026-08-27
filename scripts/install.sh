@@ -81,11 +81,15 @@ else
 fi
 CRON_BK="0 2 * * * cd $ROOT && set -a && . ./.env && set +a && $BK >> $LOGDIR/coo_backup.log 2>&1 # coo-docs-backup"
 CRON_DR="0 3 1 * * cd $ROOT && set -a && . ./.env && set +a && $DR >> $LOGDIR/coo_drill.log 2>&1 # coo-docs-drill"
+# 每周日 04:00 逐个重算附件 sha256：证据文件被改动（位翻转/误覆盖/篡改）时，
+# 只有这一项能发现；存在性巡检与备份演练都查不出内容错误（第 83 轮）
+CRON_VF="0 4 * * 0 cd $ROOT && docker compose exec -T backend python /app/scripts/storage_check.py --verify >> $LOGDIR/coo_verify.log 2>&1 # coo-docs-verify"
 # 追加而非覆盖：宿主上可能还有别的项目的任务，crontab - 会整体替换
 CUR="$(crontab -l 2>/dev/null || true)"
 ADD=""
 echo "$CUR" | grep -q 'coo-docs-backup' || ADD="$ADD$CRON_BK"$'\n'
 echo "$CUR" | grep -q 'coo-docs-drill'  || ADD="$ADD$CRON_DR"$'\n'
+echo "$CUR" | grep -q 'coo-docs-verify' || ADD="$ADD$CRON_VF"$'\n'
 if [ -n "$ADD" ]; then
   printf '%s\n%s' "$CUR" "$ADD" | sed '/^$/d' | crontab -
   echo "已追加定时任务（原有任务保留）："
@@ -93,7 +97,7 @@ if [ -n "$ADD" ]; then
 else
   echo "定时任务已存在，跳过。"
 fi
-touch "$LOGDIR/coo_backup.log" "$LOGDIR/coo_drill.log" 2>/dev/null || true
+touch "$LOGDIR/coo_backup.log" "$LOGDIR/coo_drill.log" "$LOGDIR/coo_verify.log" 2>/dev/null || true
 echo "  备份日志：$LOGDIR/coo_backup.log · 演练日志：$LOGDIR/coo_drill.log"
 
 say "4/4 自检"

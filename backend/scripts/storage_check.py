@@ -38,6 +38,8 @@ def main() -> int:
                     help="核对 NAS 归档：清单列出的文件是否真的存在")
     ap.add_argument("--fix-nas-manifests", action="store_true",
                     help="把「列着文件却没有文件」的清单改写为真实内容（需配合 --check-nas）")
+    ap.add_argument("--verify", action="store_true",
+                    help="逐个重算文件 sha256 并与存储名比对，发现内容损坏/篡改")
     args = ap.parse_args()
 
     updir = settings.UPLOAD_DIR
@@ -71,6 +73,44 @@ def main() -> int:
         print(f"  {f}")
     if len(orphans) > 20:
         print(f"  …另有 {len(orphans) - 20} 个")
+
+    # ---- 内容完整性（可选，需读全部文件）----
+    # 存储名就是内容的 sha256，因此"内容还对不对"是可以零依赖地验出来的。
+    # 第 83 轮实测：把一个证据文件的最后 4 字节改掉（长度不变）——本脚本默认
+    # 报"悬空 0 / 孤儿 0"，下载以 200 返回篡改后的内容且无任何提示，
+    # 只有 NAS 同步会在**尚未同步**的附件上发现不一致；已同步过的文件以后被
+    # 改动就再也没人查了。对一个以"证据完整"为全部价值的系统，这是必须补的一环。
+    # 做成可选：生产上可能有数 GB 附件，逐个读一遍不该发生在每次随手执行时；
+    # 由 install.sh 装的每周 cron 定期跑，见运维手册 §9。
+    if args.verify:
+        import hashlib
+        import time
+        t0 = time.time()
+        # 按**物理文件**算一次，而不是按附件行：内容寻址下一个文件可被几十条记录
+        # 引用（本库 131 条记录只对应 6 个文件），按行算等于把同一文件哈希几十遍
+        bad_files, checked, nbytes = set(), 0, 0
+        for fn in sorted(referenced & on_disk):
+            path = os.path.join(updir, fn)
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+            checked += 1
+            nbytes += os.path.getsize(path)
+            if h.hexdigest() != os.path.splitext(fn)[0]:
+                bad_files.add(fn)
+        corrupted = [(aid, fn, orig) for aid, fn, orig in rows if fn in bad_files]
+        print(f"\n内容完整性：核对 {checked} 个物理文件 / {human(nbytes)} / {time.time() - t0:.1f}s")
+        if bad_files:
+            print(f"  损坏的物理文件 {len(bad_files)} 个，波及附件记录 {len(corrupted)} 条")
+        print(f"  内容与哈希不符（已损坏或被篡改，证据不可信）：{len(corrupted)}")
+        for aid, fn, orig in corrupted[:20]:
+            print(f"  附件 {aid}  {orig}  ->  {fn}")
+        if len(corrupted) > 20:
+            print(f"  …另有 {len(corrupted) - 20} 条")
+        if corrupted:
+            print("  处理：该文件的每个引用附件都受影响；从 NAS 副本或备份取回同名文件后重跑本检查。")
+            return 1
 
     if args.purge_orphans and orphans:
         removed = 0
