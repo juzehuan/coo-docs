@@ -19,7 +19,7 @@ from app.core.http_headers import content_disposition
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.zipout import compression_for, zip_builder, zip_response
 from app.core.snowflake import next_id
-from app.core.storage import save_upload, storage_guard
+from app.core.storage import purge_files, save_upload, storage_guard
 from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload, sanitize_name
 from app.db import get_db
@@ -68,30 +68,6 @@ def _package_stats(op: OrderPackage) -> dict:
     }
 
 
-def _purge_files(db: Session, atts: list) -> None:
-    """批量删除附件行对应的物理文件。
-
-    存储按 sha256 内容哈希命名，多个附件行（订单附件 / 版本附件）可能复用同一
-    物理文件，仅当删除集合之外无其它引用时才删除，避免误删仍被引用的文件。
-    """
-    if not atts:
-        return
-    names = {a.file_name for a in atts}
-    ids = [a.id for a in atts]
-    # 与上传的去重复用互斥：否则可能删掉一个刚被复用、其附件行尚未提交的文件
-    with storage_guard():
-        for name in names:
-            q = db.query(Attachment.id).filter(Attachment.file_name == name)
-            if ids:
-                q = q.filter(Attachment.id.notin_(ids))
-            if q.first():
-                continue
-            path = os.path.join(settings.UPLOAD_DIR, name)
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
 def _order_row(db: Session, o: Order, fac_map: dict | None = None) -> dict:
     # 列表场景传入 fac_map，避免每行各查一次工厂（两年规模下等于数百条 SQL）
     if fac_map is not None:
@@ -254,7 +230,7 @@ def delete_order(order_id: int, request: Request, db: Session = Depends(get_db),
         synchronize_session=False)
     db.delete(o)
     db.commit()
-    _purge_files(db, atts)
+    purge_files(db, atts)
     log_event(db, AuditDomain.PACKAGE, "order_delete", actor=user, ip=client_ip(request),
               target=o.order_no)
     return Msg(msg="已删除")
@@ -318,7 +294,7 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
     atts = list(op.attachments)
     db.delete(op)
     db.commit()
-    _purge_files(db, atts)
+    purge_files(db, atts)
     log_event(db, AuditDomain.PACKAGE, "order_package_remove", actor=user, ip=client_ip(request),
               target=f"{o.order_no}/{op_id}")
     return Msg(msg="已移除")
@@ -518,7 +494,7 @@ def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Reques
     if op.locked or op.status == VersionStatus.RELEASED:
         raise HTTPException(status_code=400, detail="已放行版本不可修改")
     # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
-    _purge_files(db, [att])
+    purge_files(db, [att])
     db.delete(att)
     _reset_status_on_edit(op)
     db.commit()

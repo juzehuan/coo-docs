@@ -79,3 +79,38 @@ def save_upload(content: bytes, ext: str) -> str:
 def stored_file_path(file_name: str) -> str:
     """拼接存储文件的绝对路径。"""
     return os.path.join(settings.UPLOAD_DIR, file_name)
+
+
+def purge_files(db, atts: list) -> None:
+    """删除这批附件行对应的物理文件（仅当集合之外再无引用）。
+
+    **调用顺序有硬性要求：必须在 `db.commit()` 成功之后调用。**
+    反过来"先删文件、再提交"会在提交失败回滚时留下**附件行还在、文件已经没了**
+    的悬空记录——也就是 storage_check 报的「证据丢失，需人工恢复」。
+    第 71 轮发现 `packages.delete_attachment` 正是这个反向顺序，且没有持
+    storage_guard()——它自己内联了一份引用计数，因此接连错过了第 49/50 轮
+    给这条路径加的并发保护。这里合并为**唯一实现**，就是为了不再出现
+    "改了三处、漏了第四处"。
+
+    存储按 sha256 内容哈希命名，多个附件行（订单附件 / 版本附件）会复用同一
+    物理文件，仅当删除集合之外无其它引用时才删除，避免误删仍被引用的文件。
+    """
+    if not atts:
+        return
+    from app.models import Attachment
+    names = {a.file_name for a in atts}
+    ids = [a.id for a in atts]
+    # 与上传的去重复用互斥：否则可能删掉一个刚被复用、其附件行尚未提交的文件
+    with storage_guard():
+        for name in names:
+            q = db.query(Attachment.id).filter(Attachment.file_name == name)
+            if ids:
+                q = q.filter(Attachment.id.notin_(ids))
+            if q.first():
+                continue
+            path = os.path.join(settings.UPLOAD_DIR, name)
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass

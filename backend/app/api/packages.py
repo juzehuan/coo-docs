@@ -16,7 +16,7 @@ from app.core.rbac import (
     optional_current_user, user_from_download_ticket,
 )
 from app.core.snowflake import next_id
-from app.core.storage import save_upload, storage_guard
+from app.core.storage import purge_files, save_upload, storage_guard
 from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload, sanitize_name
 from app.db import get_db
@@ -62,32 +62,6 @@ def _lock_version(db: Session, vid: int) -> PackageVersion | None:
         .filter(PackageVersion.id == vid)
         .first()
     )
-
-
-def _purge_files(db: Session, atts: list) -> None:
-    """批量删除附件行对应的物理文件。
-
-    存储按 sha256 内容哈希命名，多个附件行（订单附件 / 版本附件）可能复用同一
-    物理文件，仅当删除集合之外无其它引用时才删除，避免误删仍被引用的文件。
-    """
-    if not atts:
-        return
-    names = {a.file_name for a in atts}
-    ids = [a.id for a in atts]
-    # 与上传的去重复用互斥：否则可能删掉一个刚被复用、其附件行尚未提交的文件
-    with storage_guard():
-        for name in names:
-            q = db.query(Attachment.id).filter(Attachment.file_name == name)
-            if ids:
-                q = q.filter(Attachment.id.notin_(ids))
-            if q.first():
-                continue
-            path = os.path.join(settings.UPLOAD_DIR, name)
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
 
 
 @router.get("", response_model=list[dict])
@@ -221,7 +195,7 @@ def delete_version(pkg_id: int, vid: int, request: Request, db: Session = Depend
     target = f"{p.code if p else pkg_id}/{v.version_no}"
     db.delete(v)
     db.commit()
-    _purge_files(db, atts)
+    purge_files(db, atts)
     log_event(db, AuditDomain.PACKAGE, "version_delete", actor=user, ip=client_ip(request),
               target=target)
     return Msg(msg="已删除")
@@ -291,6 +265,16 @@ async def upload_attachments(
     return created
 
 
+class _AttRef:
+    """purge_files 只需要 id 与 file_name；附件行已被删除，不再引用 ORM 对象。"""
+
+    __slots__ = ("id", "file_name")
+
+    def __init__(self, id, file_name):
+        self.id = id
+        self.file_name = file_name
+
+
 @router.delete("/{pkg_id}/versions/{vid}/attachments/{aid}", response_model=Msg)
 def delete_attachment(pkg_id: int, vid: int, aid: int, request: Request,
                       db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -304,17 +288,20 @@ def delete_attachment(pkg_id: int, vid: int, aid: int, request: Request,
     v = _lock_version(db, vid) or v   # 加锁重读，避免与并发终审放行竞态
     if v.status == VersionStatus.RELEASED or v.locked:
         raise HTTPException(status_code=400, detail="已放行版本不可修改")
-    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
-    reused = db.query(Attachment.id).filter(
-        Attachment.file_name == att.file_name, Attachment.id != att.id).first()
-    path = os.path.join(settings.UPLOAD_DIR, att.file_name)
-    if not reused and os.path.exists(path):
-        os.remove(path)
+    # 顺序很重要：**先提交、后删物理文件**。
+    # 此前是反过来的（先 os.remove 再 commit），提交一旦失败回滚，就会留下
+    # 附件行还在、文件已经没了的悬空记录——即 storage_check 报的
+    # 「证据丢失，需人工恢复」。而且那份内联的引用计数没有持 storage_guard()，
+    # 因此接连错过了第 49/50 轮给另外三条删除路径加的并发保护。
+    # 现统一走 core.storage.purge_files（唯一实现），见第 71 轮。
+    snapshot = _AttRef(att.id, att.file_name)
+    orig_name = att.original_name
     db.delete(att)
     _reset_status_on_edit(v)
     db.commit()
+    purge_files(db, [snapshot])
     log_event(db, AuditDomain.ATTACHMENT, "delete", actor=user, ip=client_ip(request),
-              target=f"{p.code}/{v.version_no}/{att.original_name}")
+              target=f"{p.code}/{v.version_no}/{orig_name}")
     return Msg(msg="已删除")
 
 
