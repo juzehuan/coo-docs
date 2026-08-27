@@ -5,6 +5,7 @@ import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { DownloadOutlined, EyeOutlined, FileZipOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
+import { exportOrQueue, exportErrMessage } from '@/utils/exportOrQueue'
 import { factories, orders } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { localName, useI18n } from '@/i18n'
@@ -19,6 +20,20 @@ import type { Factory, Order } from '@/types'
 const PAGE_SIZE = 20
 
 export default function Orders() {
+
+  /** 导出：先直接下载，服务器名额已满（429）时自动转为排队作业。
+   *  说明见 utils/exportOrQueue.ts —— 不把 0.08 秒的导出也改成"提交→轮询"。 */
+  async function runExport(kind: 'order_xlsx' | 'order_zip', id: string, orderNo: string) {
+    try {
+      const how = await exportOrQueue(
+        () => (kind === 'order_zip' ? orders.exportZip(id, orderNo) : orders.exportCsv(id, orderNo)),
+        kind, { order_id: id })
+      if (how === 'queued') message.info(t('export_queued'))
+    } catch (e) {
+      message.error(await exportErrMessage(e))
+    }
+  }
+
   const { t, lang } = useI18n()
   const { loading: submitting, run: submitRun } = useSubmit()
   const { user } = useAuth()
@@ -111,8 +126,8 @@ export default function Orders() {
                 <RowActions>
                   <ActionButton label={t('detail')} icon={<EyeOutlined />} onClick={() => nav(`/orders/${r.id}`)} />
                   {canExport && (<>
-                    <ActionButton label={t('export_csv')} icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)} />
-                    <ActionButton label={t('export_zip')} icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)} />
+                    <ActionButton label={t('export_csv')} icon={<DownloadOutlined />} onClick={() => runExport('order_xlsx', r.id, r.order_no)} />
+                    <ActionButton label={t('export_zip')} icon={<FileZipOutlined />} onClick={() => runExport('order_zip', r.id, r.order_no)} />
                   </>)}
                 </RowActions>
               ),

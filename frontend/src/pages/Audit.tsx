@@ -4,6 +4,7 @@ import { DownloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { errMessage } from '@/api/client'
+import { exportOrQueue, exportErrMessage } from '@/utils/exportOrQueue'
 import { audit } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -65,15 +66,18 @@ export default function Audit() {
 
   async function exportXlsx() {
     try {
-      const blob = await audit.exportXlsx(query())
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'audit_logs.xlsx'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e: any) {
-      message.error(errMessage(e))
+      const how = await exportOrQueue(async () => {
+        const blob = await audit.exportXlsx(query())
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'audit_logs.xlsx'
+        a.click()
+        URL.revokeObjectURL(url)
+      }, 'audit_xlsx', query() as Record<string, unknown>)
+      if (how === 'queued') message.info(t('export_queued'))
+    } catch (e) {
+      message.error(await exportErrMessage(e))
     }
   }
 

@@ -4,6 +4,7 @@ import { App, Button, Card, Col, Empty, Progress, Row, Table, Spin, Typography }
 import { AuditOutlined, DownloadOutlined, EyeOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
 import type { Lang } from '@/types'
 import { errMessage } from '@/api/client'
+import { exportOrQueue, exportErrMessage } from '@/utils/exportOrQueue'
 import { dashboard } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -25,13 +26,16 @@ export default function Dashboard() {
   const canExport = ['coo_reviewer', 'auditor', 'admin'].includes(user?.role || '')
   async function exportArchive() {
     try {
-      const blob = await dashboard.exportCsv()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = 'archive_list.xlsx'; a.click()
-      URL.revokeObjectURL(url)
+      const how = await exportOrQueue(async () => {
+        const blob = await dashboard.exportCsv()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = 'archive_list.xlsx'; a.click()
+        URL.revokeObjectURL(url)
+      }, 'archive_xlsx')
+      if (how === 'queued') message.info(t('export_queued'))
     } catch (e) {
-      message.error(errMessage(e))
+      message.error(await exportErrMessage(e))
     }
   }
 

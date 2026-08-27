@@ -10,6 +10,10 @@ export const ROUTE_ROLES: { key: string; label: string; roles: string[]; hidden?
   { key: '/org', label: 'users', roles: ['admin'] },
   // 通知中心不进侧边菜单（入口在顶栏铃铛），但必须登记角色，
   // 否则路由守卫按兜底规则处理，未来改动容易出现"能进但不该进"
+  // 我的导出：导出在名额已满时会转为后台作业，这里是取回产物的地方。
+  // 给它一个**可见**的菜单项而不是只靠通知链接——第 64 轮的教训是
+  // "能力做好了却没有入口等于没做"。
+  { key: '/exports', label: 'my_exports', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/notifications', label: 'notifications', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'], hidden: true },
 ]
 

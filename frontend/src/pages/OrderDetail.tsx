@@ -7,6 +7,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { downloadFile, errMessage } from '@/api/client'
+import { exportOrQueue, exportErrMessage } from '@/utils/exportOrQueue'
 import { orders, packages as pkgApi } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -28,6 +29,7 @@ const { Dragger } = Upload
 function RowAttachments({ orderId, op, user, onChanged }: {
   orderId: string; op: OrderPackage; user: User; onChanged: () => void
 }) {
+
   const { t } = useI18n()
   const { message } = App.useApp()
   const [batchNo, setBatchNo] = useState('')
@@ -176,6 +178,20 @@ function RowAttachments({ orderId, op, user, onChanged }: {
 
 // ---------- 订单详情页 ----------
 export default function OrderDetail() {
+
+  /** 导出：先直接下载，服务器名额已满（429）时自动转为排队作业。
+   *  说明见 utils/exportOrQueue.ts —— 不把 0.08 秒的导出也改成"提交→轮询"。 */
+  async function runExport(kind: 'order_xlsx' | 'order_zip', id: string, orderNo: string) {
+    try {
+      const how = await exportOrQueue(
+        () => (kind === 'order_zip' ? orders.exportZip(id, orderNo) : orders.exportCsv(id, orderNo)),
+        kind, { order_id: id })
+      if (how === 'queued') message.info(t('export_queued'))
+    } catch (e) {
+      message.error(await exportErrMessage(e))
+    }
+  }
+
   const { id } = useParams()
   const { user } = useAuth()
   const { t, lang } = useI18n()
@@ -257,8 +273,8 @@ export default function OrderDetail() {
         extra={<Space>
           {canExport && (
             <>
-              <Button icon={<DownloadOutlined />} onClick={() => orders.exportCsv(order.id, order.order_no)}>{t('export_csv')}</Button>
-              <Button icon={<FileZipOutlined />} onClick={() => orders.exportZip(order.id, order.order_no)}>{t('export_zip')}</Button>
+              <Button icon={<DownloadOutlined />} onClick={() => runExport('order_xlsx', order.id, order.order_no)}>{t('export_csv')}</Button>
+              <Button icon={<FileZipOutlined />} onClick={() => runExport('order_zip', order.id, order.order_no)}>{t('export_zip')}</Button>
             </>
           )}
           <Button type="primary" icon={<PlusOutlined />} disabled={!canEditOrder} onClick={() => setOpen(true)}>{t('add_package')}</Button>

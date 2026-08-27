@@ -95,6 +95,34 @@ def _run_one(db, job: ExportJob) -> None:
     finally:
         job.finished_at = datetime.datetime.utcnow()
         db.commit()
+        _notify_done(db, job)
+
+
+def _notify_done(db, job: ExportJob) -> None:
+    """作业完成/失败后通知提交人。
+
+    没有通知的话，用户提交完只能自己去"我的导出"里反复刷新——第 64 轮的教训：
+    「指派了活却没有任何信号」等于把这件事做空了。通知失败不能影响作业本身，
+    因此整段包在 try 里。
+    """
+    try:
+        import json as _json
+
+        from app.services.notify import notify_users
+        ok = job.status == "done"
+        title = f"{job.file_name or job.kind} " + ("导出完成" if ok else "导出失败")
+        # **必须带 params**：前端 notifyText 没有 params 时会直接回退到这里的
+        # 中文 title，泰文/英文界面的用户又会看到中文——那正是早先专门修过的
+        # "通知按创建者语言而非收件人语言"。带上结构化参数后，
+        # 前端用 notif_export_done / notif_export_failed 按收件人语言拼装。
+        params = _json.dumps({"subject": job.file_name or job.kind}, ensure_ascii=False)
+        notify_users(db, [job.user_id], title=title,
+                     ntype="export_done" if ok else "export_failed",
+                     link="/exports", params=params,
+                     body=("" if ok else (job.error or "")[:200]))
+        db.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("导出完成通知发送失败 job=%s（不影响作业本身）", job.id)
 
 
 def _cleanup(db) -> None:

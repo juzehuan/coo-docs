@@ -19,6 +19,7 @@ const Controlled = lazy(() => import('./pages/Controlled'))
 const Audit = lazy(() => import('./pages/Audit'))
 const Org = lazy(() => import('./pages/Org'))
 const Nas = lazy(() => import('./pages/Nas'))
+const Exports = lazy(() => import('./pages/Exports'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -90,6 +91,7 @@ export default function App() {
                 <Route path="/nas" element={<Nas />} />
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/org" element={<Org />} />
+                <Route path="/exports" element={<Exports />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

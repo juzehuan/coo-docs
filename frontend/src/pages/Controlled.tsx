@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { App, Card, Table, Tag, Typography } from 'antd'
 import { DownloadOutlined, LockOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
+import { exportOrQueue, exportErrMessage } from '@/utils/exportOrQueue'
 import { controlled, orders, packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
@@ -33,13 +34,23 @@ export default function Controlled() {
       .finally(() => setLoading(false))
   }, [page, message])
 
-  function downloadZip(r: ControlledItem) {
+  async function downloadZip(r: ControlledItem) {
     const name = `controlled_${r.package_code}_${r.subject}.zip`
-    const p = r.kind === 'order'
-      ? controlled.exportOrderZip(r.ids.order_id!, r.ids.op_id!, name)
-      : controlled.exportZip(r.ids.pkg_id!, r.ids.version_id!, name)
-    p.then(() => message.success(t('export_zip')))
-      .catch((e) => message.error(errMessage(e)))
+    const isOrder = r.kind === 'order'
+    try {
+      const how = await exportOrQueue(
+        () => (isOrder
+          ? controlled.exportOrderZip(r.ids.order_id!, r.ids.op_id!, name)
+          : controlled.exportZip(r.ids.pkg_id!, r.ids.version_id!, name)),
+        isOrder ? 'controlled_order_zip' : 'controlled_version_zip',
+        isOrder
+          ? { order_id: r.ids.order_id, op_id: r.ids.op_id }
+          : { pkg_id: r.ids.pkg_id, version_id: r.ids.version_id },
+      )
+      message.success(how === 'queued' ? t('export_queued') : t('export_zip'))
+    } catch (e) {
+      message.error(await exportErrMessage(e))
+    }
   }
 
   /** 附件预览地址按所属线选择：两条线的附件端点不同。 */

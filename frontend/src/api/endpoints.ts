@@ -2,7 +2,7 @@ import {
   del, downloadBlob, get, patch, post, put, upload,
 } from './client'
 import type {
-  Attachment, AuditLogList, AuditQuery, ControlledList, OrderList, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
+  Attachment, AuditLogList, AuditQuery, ControlledList, ExportJob, OrderList, Dashboard, Department, Factory, NasConfig, NasStatus, NotificationItem,
   NotificationList, Order, OrderAttachment,
   OrderDetail, OrderPackage, Package, PackageDetailResp, PackageRow, PasswordResetOut, Role, SyncRecord, TodoItem, User, Version,
 } from '@/types'
@@ -186,4 +186,19 @@ export const nas = {
   config: () => get<NasConfig>('/nas/config'),
   saveConfig: (data: NasConfig) => put<NasConfig>('/nas/config', data),
   testConfig: (data: NasConfig) => post<{ ok: boolean; detail: string }>('/nas/config/test', data),
+}
+
+/** 异步导出作业。
+ *
+ * 设计上**不把所有导出都改成异步**：实测订单清单只要 0.08 秒，
+ * 强制走"提交→轮询→下载"反而更难用。直接下载仍是主路径，
+ * 只有服务器返回 429（导出名额已满，见后端 core/heavy.py）时才转为排队作业——
+ * 快的路径保持快，过载时也不会撞上死路。 */
+export const exportJobs = {
+  submit: (kind: string, params: Record<string, unknown> = {}) =>
+    post<ExportJob>('/exports', { kind, params }),
+  list: (limit = 20) => get<ExportJob[]>('/exports', { limit }),
+  status: (id: string) => get<ExportJob>(`/exports/${id}`),
+  remove: (id: string) => del<{ msg: string }>(`/exports/${id}`),
+  downloadUrl: (id: string) => `/api/exports/${id}/download`,
 }

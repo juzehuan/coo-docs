@@ -295,3 +295,14 @@ export type Lang = 'zh' | 'en' | 'th'
 
 export const ROLES = ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] as const
 export type Role = (typeof ROLES)[number]
+
+export interface ExportJob {
+  id: string
+  kind: string
+  status: 'pending' | 'running' | 'done' | 'failed'
+  file_name: string
+  file_size: number
+  error: string
+  created_at: string
+  finished_at: string | null
+}

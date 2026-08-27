@@ -5,6 +5,7 @@ import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
   AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined, MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
   BookOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { errMessage } from '@/api/client'
@@ -37,6 +38,7 @@ const ICONS: Record<string, React.ReactNode> = {
   '/controlled': <SafetyOutlined />,
   '/nas': <DatabaseOutlined />,
   '/audit': <FileSearchOutlined />,
+  '/exports': <CloudDownloadOutlined />,
   '/org': <TeamOutlined />,
 }
 
