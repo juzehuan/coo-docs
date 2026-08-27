@@ -107,6 +107,8 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
         dept_id=payload.dept_id,
         role=payload.role,
         status="active",
+        # 管理员知道这个密码（自己填的或系统生成给他看的），用户首次登录必须换掉
+        must_change_password=True,
     )
     if payload.factory_ids:
         u.factories = db.query(Factory).filter(Factory.id.in_(payload.factory_ids)).all()
@@ -179,6 +181,7 @@ def reset_password(user_id: int, request: Request, db: Session = Depends(get_db)
     # 重置即作废该用户的全部既有会话：这是怀疑账号被盗时的处置手段
     import datetime
     u.password_changed_at = datetime.datetime.utcnow()
+    u.must_change_password = True
     db.commit()
     # 必须记录操作人：谁重置了谁的密码是账号接管风险的关键证据
     log_event(db, AuditDomain.ORG, "user_reset_pwd", actor=user, ip=client_ip(request), target=u.username)

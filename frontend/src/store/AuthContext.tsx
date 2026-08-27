@@ -7,6 +7,8 @@ interface AuthCtx {
   user: User | null
   loading: boolean
   login: (username: string, password: string) => Promise<void>
+  /** 本地修正当前用户的部分字段（如改密后清除强制改密标记），不必等下一次复核 */
+  patchUser: (p: Partial<User>) => void
   logout: () => void
 }
 
@@ -75,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!prev) return prev
             const changed = prev.role !== fresh.role
               || prev.status !== fresh.status
+              || !!prev.must_change_password !== !!fresh.must_change_password
               || JSON.stringify(prev.factory_ids) !== JSON.stringify(fresh.factory_ids)
             return changed ? fresh : prev
           })
@@ -104,7 +107,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
-  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>
+  const patchUser = (p: Partial<User>) => setUser((prev) => (prev ? { ...prev, ...p } : prev))
+
+  return <Ctx.Provider value={{ user, loading, login, logout, patchUser }}>{children}</Ctx.Provider>
 }
 
 export function useAuth(): AuthCtx {

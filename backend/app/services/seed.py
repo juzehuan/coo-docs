@@ -167,6 +167,8 @@ def seed(db: Session):
                 dept_id=dept_map[dept_code].id if dept_code else None,
                 role=role.value if isinstance(role, Role) else role,
                 status="active",
+                # 生产初始化的 admin 初始密码打印在日志里，首次登录必须换掉；演示账号不强制
+                must_change_password=(username == "admin" and not demo),
             )
             db.add(u)
             db.flush()

@@ -78,6 +78,8 @@ def _ensure_columns() -> None:
         ("order_packages", "source_version_id", "BIGINT NULL"),
         # 密码变更时刻，用于作废此前签发的令牌
         ("users", "password_changed_at", "DATETIME NULL"),
+        # 首次登录强制改密标记：历史账号一律 0，不打扰已在用的人
+        ("users", "must_change_password", "TINYINT(1) NOT NULL DEFAULT 0"),
     ]
     insp = inspect(engine)
     with engine.connect() as conn:

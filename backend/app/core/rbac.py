@@ -47,7 +47,15 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme),
         )
     # 供请求日志中间件标注操作人：否则日志里的 4xx/5xx 无法回答"是谁触发的"
     request.state.log_user = f"{user.username}({user.role})"
+    # 首次登录强制改密：临时密码只能用来改密。403 而非 401——凭证本身有效，
+    # 前端不该据此登出，而是弹出改密窗
+    if user.must_change_password and not request.url.path.endswith(_PWD_CHANGE_ALLOWED):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先修改初始密码后再使用系统")
     return user
+
+
+# 强制改密期间仍放行的路径（改密本身、身份查询、登出）
+_PWD_CHANGE_ALLOWED = ("/auth/change-password", "/auth/me", "/auth/logout")
 
 
 # 可选 Bearer：下载端点允许"票据"或"Bearer"二选一，缺少 Authorization 头时

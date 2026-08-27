@@ -8,6 +8,7 @@ export interface User {
   role: string
   status: string
   factory_ids: string[]
+  must_change_password?: boolean
   last_login_at: string | null
   created_at: string | null
 }

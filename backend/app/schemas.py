@@ -137,6 +137,7 @@ class UserOut(BaseModel):
     role: str
     status: str
     factory_ids: list[int] = []
+    must_change_password: bool = False
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 

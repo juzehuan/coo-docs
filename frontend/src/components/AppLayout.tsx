@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { App, Layout, Menu, Avatar, Dropdown, Button, Form, Input, Modal, theme as antdTheme } from 'antd'
+import { Alert, App, Layout, Menu, Avatar, Dropdown, Button, Form, Input, Modal, theme as antdTheme } from 'antd'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
@@ -46,7 +46,7 @@ const ICONS: Record<string, React.ReactNode> = {
 const MENU: MenuItem[] = ROUTE_ROLES.map((r) => ({ key: r.key, icon: ICONS[r.key], label: r.label, roles: r.roles, hidden: r.hidden }))
 
 export default function AppLayout({ children }: { children?: ReactNode }) {
-  const { user, logout } = useAuth()
+  const { user, patchUser, logout } = useAuth()
   const { t } = useI18n()
   const { loading: submitting, run: submitRun } = useSubmit()
   const navigate = useNavigate()
@@ -74,8 +74,13 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     // 改密会作废所有旧令牌（含本标签页这张）：必须换上响应里的新令牌，否则下一次请求就被登出
     if (await submitRun(() => auth.changePassword(v.old_password, v.new_password).then((r) => setToken(r.access_token)), t('save'))) {
       setPwdOpen(false); pwdForm.resetFields()
+      patchUser({ must_change_password: false })
     }
   }
+
+  // 首次登录强制改密：临时密码只能用来改密（后端对其它接口一律 403），弹窗不可关闭
+  const forcePwd = !!user?.must_change_password
+  useEffect(() => { if (forcePwd) setPwdOpen(true) }, [forcePwd])
 
   if (!user) return null
   const items = MENU.filter((m) => !m.hidden && m.roles.includes(user.role)).map((m) => ({
@@ -195,8 +200,11 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       </Layout>
 
       <Modal title={t('change_password')} open={pwdOpen} onOk={submitPwd} confirmLoading={submitting}
-             onCancel={() => { setPwdOpen(false); pwdForm.resetFields() }}
+             onCancel={() => { if (forcePwd) return; setPwdOpen(false); pwdForm.resetFields() }}
+             closable={!forcePwd} maskClosable={!forcePwd} keyboard={!forcePwd}
+             cancelButtonProps={{ style: { display: forcePwd ? 'none' : undefined } }}
              okText={t('save')} cancelText={t('cancel')} destroyOnHidden>
+        {forcePwd && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t('pwd_must_change')} />}
         <Form form={pwdForm} layout="vertical" onFinish={submitPwd}>
           <Form.Item name="old_password" label={t('old_password')} rules={[{ required: true }]}>
             <Input.Password />

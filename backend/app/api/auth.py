@@ -148,6 +148,7 @@ def change_password(payload: PasswordChange, request: Request, db: Session = Dep
     user.password_hash = hash_password(payload.new_password)
     # 作废所有旧令牌（其它设备/标签页上的会话），再给本人签一张新的
     user.password_changed_at = datetime.utcnow()
+    user.must_change_password = False
     db.commit()
     log_event(db, AuditDomain.AUTH, "change_password", actor=user, ip=client_ip(request))
     return PasswordChangeOut(msg="密码已更新", access_token=create_access_token(str(user.id), user.role))
