@@ -26,8 +26,8 @@ import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Pac
 const { Dragger } = Upload
 
 // ---------- 单包：附件 / 上传 / 提审 ----------
-function RowAttachments({ orderId, op, user, onChanged }: {
-  orderId: string; op: OrderPackage; user: User; onChanged: () => void
+function RowAttachments({ orderId, orderOwnerId, op, user, onChanged }: {
+  orderId: string; orderOwnerId: string | null; op: OrderPackage; user: User; onChanged: () => void
 }) {
 
   const { t } = useI18n()
@@ -44,7 +44,10 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   // 可编辑（上传/删附件/提交）：COO/管理员任意；部门审核人仅本部门实例；提交人仅本人负责实例
   const isStaff = user.role === 'admin' || user.role === 'coo_reviewer' ||
     (user.role === 'dept_reviewer' && op.package_dept_id != null && op.package_dept_id === user.dept_id)
-  const ownerOk = user.role === 'submitter' && op.owner_user_id === user.id
+  // 与后端 can_edit_order_package 保持一致：订单负责人对自己订单下的任一实例都可操作。
+  // 只看 op.owner_user_id 的话，提交人加完资料包附件区不出现——实例负责人默认成了模板负责人
+  const ownerOk = user.role === 'submitter' &&
+    (op.owner_user_id === user.id || (orderOwnerId != null && orderOwnerId === user.id))
   const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
   // reviewable_dept 由后端下发：职责分离（本部门另有审核人时不得审自己提交的内容）
   // 需要查库才能判定，前端单凭角色+部门算不出来，此前因此显示了必然 403 的按钮
@@ -300,7 +303,7 @@ export default function OrderDetail() {
           dataSource={order.packages}
           pagination={false}
           expandable={{
-            expandedRowRender: (op) => <RowAttachments orderId={order.id} op={op} user={user!} onChanged={load} />,
+            expandedRowRender: (op) => <RowAttachments orderId={order.id} orderOwnerId={order.owner_user_id} op={op} user={user!} onChanged={load} />,
           }}
           // 列宽之和（含展开列）；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
           scroll={{ x: 750 + actionWidth(1) + 48 }}
