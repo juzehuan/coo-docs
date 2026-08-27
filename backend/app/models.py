@@ -69,6 +69,9 @@ class User(Base):
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
     last_login_at = Column(DateTime, nullable=True)
+    # 密码最近一次变更（自改或管理员重置）。签发早于此刻的令牌一律作废：
+    # 重置密码正是怀疑账号被盗时的处置手段，旧会话若继续有效等于没处置（第 89 轮）
+    password_changed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     department = relationship("Department", back_populates="users")

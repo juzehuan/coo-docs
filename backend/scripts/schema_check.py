@@ -29,7 +29,9 @@ def _expected():
     idx_src = pyi.getsource(_ensure_indexes)
     col_src = pyi.getsource(_ensure_columns)
     idxs = re.findall(r'\("(\w+)",\s*"([^"]+)",\s*"(\w+)"\)', idx_src)
-    cols = re.findall(r'\("(\w+)",\s*"(\w+)",\s*"(\w+)"\)', col_src)
+    # DDL 里有空格（"TINYINT(1) NOT NULL DEFAULT 1"），第三项不能用 \w+：
+    # 原先只匹配到 notifications.params 一条，其余列根本没被核对过
+    cols = re.findall(r'\("(\w+)",\s*"(\w+)",\s*"([^"]+)"\)', col_src)
     return idxs, cols
 
 

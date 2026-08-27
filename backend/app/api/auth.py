@@ -12,7 +12,7 @@ from app.core.rbac import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import get_db
 from app.models import AuditDomain, User
-from app.schemas import LoginRequest, Msg, PasswordChange, TokenResponse, UserOut
+from app.schemas import LoginRequest, Msg, PasswordChange, PasswordChangeOut, TokenResponse, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -140,15 +140,17 @@ def me(user: User = Depends(get_current_user)):
     return user
 
 
-@router.post("/change-password", response_model=Msg)
+@router.post("/change-password", response_model=PasswordChangeOut)
 def change_password(payload: PasswordChange, request: Request, db: Session = Depends(get_db),
                     user: User = Depends(get_current_user)):
     if not verify_password(payload.old_password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="原密码错误")
     user.password_hash = hash_password(payload.new_password)
+    # 作废所有旧令牌（其它设备/标签页上的会话），再给本人签一张新的
+    user.password_changed_at = datetime.utcnow()
     db.commit()
     log_event(db, AuditDomain.AUTH, "change_password", actor=user, ip=client_ip(request))
-    return Msg(msg="密码已更新")
+    return PasswordChangeOut(msg="密码已更新", access_token=create_access_token(str(user.id), user.role))
 
 
 @router.post("/logout", response_model=Msg)

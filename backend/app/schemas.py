@@ -68,6 +68,11 @@ class PasswordChange(BaseModel):
     new_password: str = Field(min_length=6)
 
 
+class PasswordChangeOut(Msg):
+    """改密成功：旧令牌已全部作废，附带一张新令牌让本人当前会话不中断。"""
+    access_token: str
+
+
 class SecretRotate(BaseModel):
     """超管轮换 JWT 密钥：custom_key 留空则随机生成（推荐）。"""
     custom_key: str = ""

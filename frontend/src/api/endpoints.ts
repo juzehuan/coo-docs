@@ -13,7 +13,7 @@ export const auth = {
     post<{ access_token: string; user: User }>('/auth/login', { username, password }),
   me: () => get<User>('/auth/me'),
   changePassword: (old_password: string, new_password: string) =>
-    post('/auth/change-password', { old_password, new_password }),
+    post<{ msg: string; access_token: string }>('/auth/change-password', { old_password, new_password }),
   logout: () => post('/auth/logout'),
   /** 当前环境真实存在的演示账号（生产部署返回空数组，登录页据此隐藏快捷登录入口） */
   demoAccounts: () => get<{ username: string; display_name: string; role: Role }[]>('/auth/demo-accounts'),

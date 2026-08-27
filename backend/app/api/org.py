@@ -171,6 +171,9 @@ def reset_password(user_id: int, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="用户不存在")
     tmp = generate_temp_password()
     u.password_hash = hash_password(tmp)
+    # 重置即作废该用户的全部既有会话：这是怀疑账号被盗时的处置手段
+    import datetime
+    u.password_changed_at = datetime.datetime.utcnow()
     db.commit()
     # 必须记录操作人：谁重置了谁的密码是账号接管风险的关键证据
     log_event(db, AuditDomain.ORG, "user_reset_pwd", actor=user, ip=client_ip(request), target=u.username)

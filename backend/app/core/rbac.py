@@ -25,6 +25,18 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme),
     user = db.get(User, int(payload["sub"]))
     if not user:
         raise cred_exc
+    # 密码变更后作废此前签发的令牌。iat 与变更时刻都按整秒比较：
+    # 同一秒内"先改密、后签发"的新令牌必须仍然有效（自改密的响应就是这样签的）
+    changed = user.password_changed_at
+    if changed is not None:
+        import calendar
+        changed_ts = calendar.timegm(changed.timetuple())
+        if int(payload.get("iat") or 0) < changed_ts:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="密码已变更，请重新登录",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     if user.status == "disabled":
         # 用 401 而非 403：账号停用意味着这张令牌不再是有效凭证（认证失效），
         # 403 表示"已认证但无权限"，前端不会据此登出，用户会卡在数据全空却无提示的界面里。

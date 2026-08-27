@@ -8,7 +8,7 @@ import {
   CloudDownloadOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { errMessage } from '@/api/client'
+import { errMessage, setToken } from '@/api/client'
 import { auth } from '@/api/endpoints'
 import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
@@ -71,7 +71,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     const v = await pwdForm.validateFields().catch(() => null)
     if (!v) return
     // 连点尤其要防：第二次请求的"原密码"已经失效，用户会在成功之后紧接着看到一条报错
-    if (await submitRun(() => auth.changePassword(v.old_password, v.new_password), t('save'))) {
+    // 改密会作废所有旧令牌（含本标签页这张）：必须换上响应里的新令牌，否则下一次请求就被登出
+    if (await submitRun(() => auth.changePassword(v.old_password, v.new_password).then((r) => setToken(r.access_token)), t('save'))) {
       setPwdOpen(false); pwdForm.resetFields()
     }
   }

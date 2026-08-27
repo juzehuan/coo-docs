@@ -76,6 +76,8 @@ def _ensure_columns() -> None:
         ("packages", "per_order", "TINYINT(1) NOT NULL DEFAULT 1"),
         # 引用型订单实例指向的资料包版本
         ("order_packages", "source_version_id", "BIGINT NULL"),
+        # 密码变更时刻，用于作废此前签发的令牌
+        ("users", "password_changed_at", "DATETIME NULL"),
     ]
     insp = inspect(engine)
     with engine.connect() as conn:
