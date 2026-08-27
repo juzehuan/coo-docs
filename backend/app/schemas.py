@@ -105,7 +105,9 @@ class DepartmentOut(BaseModel):
 # ---------- 用户 ----------
 class UserCreate(BaseModel):
     username: str = Field(max_length=64)
-    password: str = Field(min_length=6)
+    # 留空则服务端生成一次性临时密码并在响应里返回一次（与「重置密码」同一套流程）。
+    # 界面此前把密码预填为 user123：交付后管理员建的每个账号都会是这个演示密码（第 90 轮）
+    password: Optional[str] = Field(None, min_length=6)
     display_name: str = Field("", max_length=128)
     email: str = Field("", max_length=128)
     phone: str = Field("", max_length=32)
@@ -140,6 +142,11 @@ class UserOut(BaseModel):
 
 
 # ---------- 工厂 ----------
+class UserCreateOut(UserOut):
+    """建用户返回：未指定密码时附带一次性临时密码，只在这一次响应里出现。"""
+    temp_password: str = ""
+
+
 class FactoryCreate(BaseModel):
     code: str = Field(max_length=32)
     name_zh: str = Field(max_length=128)

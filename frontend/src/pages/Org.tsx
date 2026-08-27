@@ -85,15 +85,26 @@ export default function Org() {
   async function submitUser() {
     const v = await userForm.validateFields().catch(() => null)
     if (!v) return
+    // 密码由服务端生成并只返回这一次，与「重置密码」共用同一个展示弹窗。
+    // 此前表单把密码预填为 user123，交付后管理员建的每个账号都会是这个演示密码
+    let created: { username: string; display_name?: string; temp_password?: string } | null = null
     const ok = await submitRun(
-      () => org.createUser({ ...v, dept_id: v.dept_id || null, factory_ids: v.factory_ids || [] }),
+      () => org.createUser({ ...v, dept_id: v.dept_id || null, factory_ids: v.factory_ids || [] }).then((r) => { created = r }),
       t('create'))
-    if (ok) { setUserOpen(false); userForm.resetFields(); load() }
+    if (ok) {
+      setUserOpen(false); userForm.resetFields(); load()
+      const c = created as { username: string; display_name?: string; temp_password?: string } | null
+      if (c?.temp_password) setPwdReset({ username: c.display_name || c.username, password: c.temp_password })
+    }
   }
   const [pwdReset, setPwdReset] = useState<{ username: string; password: string } | null>(null)
   async function resetPwd(r: User) {
-    const res = await org.resetPassword(r.id)
-    setPwdReset({ username: r.display_name || r.username, password: res.password })
+    try {
+      const res = await org.resetPassword(r.id)
+      setPwdReset({ username: r.display_name || r.username, password: res.password })
+    } catch (e) {
+      message.error(errMessage(e))   // 失败不能静默：管理员会以为已重置并把旧密码告诉用户
+    }
   }
 
   // ---- 用户编辑 / 停用启用（F-02）----
@@ -297,10 +308,10 @@ export default function Org() {
       </Modal>
 
       <Modal title={t('create_user')} open={userOpen} onOk={submitUser} confirmLoading={submitting} onCancel={() => setUserOpen(false)} okText={t('save')} cancelText={t('cancel')}>
-        <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter', password: 'user123' }} onFinish={submitUser}>
+        <Form form={userForm} layout="vertical" initialValues={{ role: 'submitter' }} onFinish={submitUser}>
           <Form.Item name="username" label={t('username')} rules={[{ required: true }]}><Input maxLength={64} /></Form.Item>
           <Form.Item name="display_name" label={t('display_name')}><Input /></Form.Item>
-          <Form.Item name="password" label={t('password')} rules={[{ required: true }, { min: 6, message: t('v_too_short').replace('{n}', '6') }]}><Input /></Form.Item>
+          <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t('temp_pwd_auto')} />
           <Form.Item name="role" label={t('role')} rules={[{ required: true }]}><Select options={ROLES.map((r) => ({ label: r, value: r }))} /></Form.Item>
           <Form.Item name="dept_id" label={t('dept')}><Select allowClear options={depts.map((d) => ({ label: d.name_zh, value: d.id }))} /></Form.Item>
           <Form.Item name="factory_ids" label={t('factory')} extra={t('factory_hint')}>
@@ -330,9 +341,9 @@ export default function Org() {
       <Modal title={t('reset_pwd')} open={!!pwdReset} onOk={() => setPwdReset(null)} onCancel={() => setPwdReset(null)} okText={t('confirm')} cancelText={t('cancel')}>
         {pwdReset && (
           <div>
-            <p>{lang === 'zh' ? `已为「${pwdReset.username}」生成一次性临时密码，请立即告知用户：` : `Temporary password generated for "${pwdReset.username}", share it with the user:`}</p>
+            <p>{t('temp_pwd_intro').replace('{name}', pwdReset.username)}</p>
             <Typography.Title level={4} copyable style={{ textAlign: 'center', margin: '12px 0', letterSpacing: 2 }}>{pwdReset.password}</Typography.Title>
-            <p style={{ color: '#9c4134', margin: 0 }}>{lang === 'zh' ? '该密码仅本次展示，关闭后不可再次查看，请务必先复制。' : 'Shown only once; copy it now.'}</p>
+            <p style={{ color: '#9c4134', margin: 0 }}>{t('temp_pwd_once')}</p>
           </div>
         )}
       </Modal>

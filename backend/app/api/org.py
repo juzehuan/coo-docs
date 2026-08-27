@@ -11,7 +11,7 @@ from app.db import get_db
 from app.models import AuditDomain, Department, Factory, User
 from app.schemas import (
     DepartmentCreate, DepartmentOut, DepartmentUpdate, Msg, PasswordResetOut,
-    SecretRotate, UserCreate, UserOut, UserUpdate,
+    SecretRotate, UserCreate, UserCreateOut, UserOut, UserUpdate,
 )
 
 router = APIRouter(prefix="/org", tags=["org"])
@@ -90,15 +90,17 @@ def list_assignees(db: Session = Depends(get_db), user: User = Depends(get_curre
              "dept_id": str(u.dept_id) if u.dept_id else None} for u in rows]
 
 
-@router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/users", response_model=UserCreateOut, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db),
                 user: User = Depends(admin_only)):
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
+    # 未指定密码：生成一次性临时密码，与「重置密码」同一策略，只在本次响应返回
+    tmp = payload.password or generate_temp_password()
     u = User(
         id=next_id(),
         username=payload.username,
-        password_hash=hash_password(payload.password),
+        password_hash=hash_password(tmp),
         display_name=payload.display_name or payload.username,
         email=payload.email,
         phone=payload.phone,
@@ -113,7 +115,10 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
     db.refresh(u)
     log_event(db, AuditDomain.ORG, "user_create", actor=user, ip=client_ip(request),
               target=u.username)
-    return u
+    out = UserCreateOut.model_validate(u)
+    if not payload.password:
+        out.temp_password = tmp
+    return out
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
