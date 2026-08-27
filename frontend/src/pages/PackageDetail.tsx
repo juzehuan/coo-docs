@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { App, Button, Card, Descriptions, Divider, Space, Tabs, Tag, Typography } from 'antd'
+import { App, Button, Card, Descriptions, Divider, Space, Tabs, Tag, Typography, Result } from 'antd'
 import { ArrowLeftOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { packages } from '@/api/endpoints'
@@ -39,7 +39,15 @@ export default function PackageDetail() {
   useEffect(() => { load() }, [load])
 
   if (loading) return <Card variant="borderless" loading />
-  if (!pkg) return <Card variant="borderless">{t('no_data')}</Card>
+  // 与订单详情一致：区分"资料包不存在/已删除"与"暂无数据"（第 95 轮实测，此前是一张像空资料包的页面）
+  if (!pkg) return (
+    <Result
+      status="404"
+      title="404"
+      subTitle={t('package_not_found')}
+      extra={<Button type="primary" onClick={() => nav('/packages')}>{t('packages')}</Button>}
+    />
+  )
 
   const ver: Version | undefined = pkg.versions.find((v) => v.id === activeVid) || pkg.versions[0]
 
