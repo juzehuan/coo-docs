@@ -4,6 +4,7 @@ import SubmitOnEnter from '@/components/SubmitOnEnter'
 import {
   DashboardOutlined, FolderOpenOutlined, SafetyOutlined, FileSearchOutlined,
   AuditOutlined, TeamOutlined, DatabaseOutlined, LogoutOutlined, UserOutlined, ShoppingCartOutlined, BellOutlined, MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
+  BookOutlined,
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { errMessage } from '@/api/client'
@@ -160,6 +161,11 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
               menu={{
                 items: [
                   { key: 'pwd', icon: <KeyOutlined />, label: t('change_password'), onClick: () => setPwdOpen(true) },
+                  // 用户操作手册是 nginx 直接下发的静态页（不在 SPA 路由内），
+                  // 因此用真链接而非 navigate；另开标签页，免得用户看手册时丢掉当前填写的内容
+                  { key: 'manual', icon: <BookOutlined />,
+                    label: <a href="/manual" target="_blank" rel="noopener noreferrer">{t('user_manual')}</a> },
+                  { type: 'divider' },
                   { key: 'logout', icon: <LogoutOutlined />, label: t('logout'), onClick: () => { logout(); navigate('/login') } },
                 ],
               }}
