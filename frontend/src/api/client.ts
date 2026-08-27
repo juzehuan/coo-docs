@@ -61,14 +61,23 @@ interface ValidationItem {
 function formatValidation(items: ValidationItem[]): string {
   const first = items[0]
   if (!first) return tOutside('request_failed')
-  const field = (first.loc || []).filter((x) => x !== 'body' && x !== 'query' && x !== 'path').join('.')
+  const rawField = (first.loc || []).filter((x) => x !== 'body' && x !== 'query' && x !== 'path').join('.')
+  // 字段名尽量用界面上的标签（order_no → 订单号）；没有对应词条时才退回原始键名。
+  // 第 98 轮浏览器实测，此前提示是 "order_no: 至少需要 1 个字符"、
+  // "username: String should match pattern '^\S+$'" —— 键名与 pydantic 原文直接给了用户
+  const field = rawField && tOutside(rawField) !== rawField ? tOutside(rawField) : rawField
   const ctx = first.ctx || {}
   const t = first.type || ''
   let what: string
-  if (t.includes('too_short') || t.includes('greater_than')) what = tOutside('v_too_short').replace('{n}', String(ctx.min_length ?? ctx.ge ?? ''))
-  else if (t.includes('too_long') || t.includes('less_than')) what = tOutside('v_too_long').replace('{n}', String(ctx.max_length ?? ctx.le ?? ''))
+  if (t.includes('too_short')) {
+    // 后端对必填文本用 min_length=1（去空白后非空）：对用户而言就是"必填"，而不是"至少 1 个字符"
+    what = Number(ctx.min_length) <= 1 ? tOutside('v_required') : tOutside('v_too_short').replace('{n}', String(ctx.min_length ?? ''))
+  } else if (t.includes('too_long')) what = tOutside('v_too_long').replace('{n}', String(ctx.max_length ?? ''))
+  else if (t.includes('greater_than')) what = tOutside('v_min').replace('{n}', String(ctx.ge ?? ctx.gt ?? ''))
+  else if (t.includes('less_than')) what = tOutside('v_max').replace('{n}', String(ctx.le ?? ctx.lt ?? ''))
+  else if (t.includes('pattern')) what = tOutside('v_invalid_chars')
   else if (t.includes('missing')) what = tOutside('v_required')
-  else if (t.includes('parsing') || t.includes('type')) what = tOutside('v_invalid')
+  else if (t.includes('parsing') || t.includes('type') || t.includes('enum') || t.includes('literal')) what = tOutside('v_invalid')
   else what = first.msg || tOutside('v_invalid')
   return field ? `${field}: ${what}` : what
 }
