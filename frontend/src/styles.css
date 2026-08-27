@@ -77,6 +77,12 @@ body {
   border-color: var(--coo-line);
 }
 
+/* 同排卡片等高：Card 默认只占内容高度，同一行里内容多少不同的两张卡片就会参差
+   （工作台的「完成度」有环形图、「重点关注」空态只有一行字，差出一大截）。
+   加这个类后卡片撑满所在 Col，卡片体跟着拉伸，内容还能在其中居中。 */
+.coo-card-fill { height: 100%; display: flex; flex-direction: column; }
+.coo-card-fill > .ant-card-body { flex: 1 1 auto; }
+
 /* ---------- 页面顶部标题带（宋体大标题 + 黄铜装饰线） ---------- */
 .coo-pagehead {
   display: flex;

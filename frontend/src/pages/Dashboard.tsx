@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, Col, Progress, Row, Table, Spin, Typography } from 'antd'
+import { App, Button, Card, Col, Empty, Progress, Row, Table, Spin, Typography } from 'antd'
 import { AuditOutlined, DownloadOutlined, EyeOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
 import type { Lang } from '@/types'
 import { errMessage } from '@/api/client'
@@ -59,9 +59,13 @@ export default function Dashboard() {
         <Col xs={12} md={6}><div className="coo-rise coo-rise-4"><StatCard title={t('attachment')} value={d.total_attachments} icon={<InboxOutlined />} color="#a8833c" /></div></Col>
       </Row>
 
+      {/* 同一行的两张卡片等高：Row 的 Col 本就会拉伸到同高，但 Card 默认只占内容
+          高度，「重点关注」为空时缩成一条，与左边的完成度环差出一大截。
+          coo-card-fill 让卡片和卡片体都撑满 Col，内容再在其中居中。 */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} md={10}>
-          <Card variant="borderless" className="coo-card" title={t('progress')}>
+          <Card variant="borderless" className="coo-card coo-card-fill" title={t('progress')}
+            styles={{ body: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' } }}>
             <Progress type="dashboard" percent={d.package_completion} strokeColor={{ '0%': '#a8833c', '100%': '#c9b06a' }} strokeWidth={10} />
             <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
               {t('released')} <b style={{ color: '#3f7d5c' }}>{d.released}</b> · {t('overdue')} <b style={{ color: d.overdue > 0 ? '#cf1322' : '#3f7d5c' }}>{d.overdue}</b>
@@ -69,9 +73,14 @@ export default function Dashboard() {
           </Card>
         </Col>
         <Col xs={24} md={14}>
-          <Card variant="borderless" className="coo-card" title={t('need_attention')}>
+          <Card variant="borderless" className="coo-card coo-card-fill" title={t('need_attention')}
+            /* 空态时把卡片体变成居中容器；有表格时保持普通块级布局，免得表格被 flex 压窄 */
+            styles={d.need_attention.length === 0
+              ? { body: { display: 'flex', alignItems: 'center', justifyContent: 'center' } }
+              : undefined}>
             {d.need_attention.length === 0
-              ? <Typography.Text type="secondary">{t('no_data')}</Typography.Text>
+              /* 空态与待办页、通知页统一用 Empty：原先是一行小灰字，卡片直接塌下去 */
+              ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('no_data')} style={{ margin: '24px 0' }} />
               : (
                 <Table
                   rowKey={(_, i) => String(i)}
