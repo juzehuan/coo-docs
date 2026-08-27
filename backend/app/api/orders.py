@@ -12,7 +12,8 @@ from app.core.config import settings
 from app.core import dl_ticket
 from app.core.i18n import local_name, status_label, t
 from app.core.rbac import (
-    can_edit_order, can_edit_order_package, export_viewer, get_current_user,
+    can_edit_order, can_edit_order_package, export_viewer,
+    factory_ids as _factory_ids, get_current_user,
     optional_current_user, user_from_download_ticket,
 )
 from app.core.http_headers import content_disposition
@@ -36,20 +37,6 @@ from app.services.notify import notify_params, coo_reviewer_ids, dept_reviewer_i
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 PREVIEW_MIME = {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/bmp", "image/webp"}
-
-
-def _factory_ids(user: User, db: Session) -> list[int]:
-    """当前账号可见的工厂 ID；admin 可见全部工厂。
-
-    这里**不能**按 status 过滤：本函数同时用于 _visible_orders_q（可见性），
-    停用一个工厂会让该厂的历史订单对管理员整体消失、详情返回 404，
-    看起来与数据丢失无异；而普通用户走 user.factories 不受影响，
-    结果是唯一看不到的反而是管理员。
-    "停用"只应阻止新建订单，该约束在 create_order 里按工厂 status 单独判断。
-    """
-    if user.role == "admin":
-        return [f.id for f in db.query(Factory).all()]
-    return [f.id for f in user.factories]
 
 
 def _visible_orders_q(db: Session, user: User):

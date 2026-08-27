@@ -153,6 +153,26 @@ def can_review_dept(u: User, package_dept_id, submitted_by=None, db=None) -> boo
     return False
 
 
+def factory_ids(user: User, db: Session) -> list[int]:
+    """当前账号可见的工厂 ID；admin 可见全部工厂。
+
+    **不能按 status 过滤。** 本函数同时用于订单可见性：停用一个工厂会让该厂的
+    历史订单对管理员整体消失、详情返回 404，看起来与数据丢失无异（第 28 轮实测
+    停用 WEV 后管理员可见订单 126 → 95）；而普通用户走 user.factories 不受影响，
+    结果是唯一看不到的反而是管理员。
+    "停用"只应阻止新建订单，该约束在 create_order 里按工厂 status 单独判断。
+    工作台同理：在此过滤会让停用当天的完成率/统计与归档导出静默少掉该厂全部数据，
+    而报表看不出任何缺失迹象。
+
+    第 72 轮合并：此前 api/dashboard.py 与 api/orders.py 各存一份（语义一致但
+    各自维护），上面这条来之不易的约束理应只写一次。
+    """
+    from app.models import Factory
+    if user.role == "admin":
+        return [f.id for f in db.query(Factory).all()]
+    return [f.id for f in user.factories]
+
+
 def staffed_dept_ids(db: Session) -> set:
     """有至少一名在岗部门审核人的部门。"""
     rows = (db.query(User.dept_id)

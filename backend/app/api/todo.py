@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.constants import VersionStatus
 from app.core.i18n import local_name
 from app.core.overdue import is_overdue
+from app.core.queries import latest_version as _latest_version
 from app.core.rbac import get_current_user, no_reviewer_for, staffed_dept_ids
 from app.db import get_db
 from app.models import Attachment, Department, Factory, Order, OrderPackage, Package, PackageVersion, User
@@ -28,15 +29,6 @@ def _att_counts(db: Session, column, ids: list[int]) -> dict[int, int]:
     return {k: v for k, v in rows}
 
 router = APIRouter(prefix="/todo", tags=["todo"])
-
-
-def _latest_version(db: Session, pkg_id: int) -> PackageVersion | None:
-    return (
-        db.query(PackageVersion)
-        .filter(PackageVersion.package_id == pkg_id)
-        .order_by(PackageVersion.id.desc())   # 同 packages.py：按单调递增的雪花 ID 取最新
-        .first()
-    )
 
 
 def _eval_version(p: Package, lv: PackageVersion, user: User, staffed: set,

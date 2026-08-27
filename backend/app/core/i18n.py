@@ -16,6 +16,8 @@ from contextvars import ContextVar
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.constants import VERSION_STATUS_LABELS
+
 SUPPORTED = ("zh", "en", "th")
 DEFAULT_LANG = "zh"
 
@@ -99,13 +101,6 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "no":           {"zh": "否", "en": "No", "th": "ไม่ใช่"},
     "kind_version": {"zh": "资料包版本", "en": "Package Version", "th": "เวอร์ชันแพ็กเกจ"},
     "kind_order":   {"zh": "订单实例", "en": "Order Instance", "th": "อินสแตนซ์คำสั่งซื้อ"},
-    # 状态措辞与前端 statusLabels 完全一致
-    "st_draft":        {"zh": "草稿", "en": "Draft", "th": "ร่าง"},
-    "st_pending_dept": {"zh": "待部门审核", "en": "Pending Dept", "th": "รอแผนก"},
-    "st_pending_coo":  {"zh": "待COO终审", "en": "Pending COO", "th": "รอ COO"},
-    "st_released":     {"zh": "已放行", "en": "Released", "th": "อนุมัติ"},
-    "st_rejected":     {"zh": "已退回", "en": "Rejected", "th": "ถูกตีกลับ"},
-    "st_withdrawn":    {"zh": "已撤回", "en": "Withdrawn", "th": "ถูกถอน"},
     # —— 工作表名 ——
     "sheet_order_list":   {"zh": "订单资料清单", "en": "Order Document List", "th": "รายการเอกสารคำสั่งซื้อ"},
     "sheet_archive_list": {"zh": "归档清单", "en": "Archive List", "th": "รายการจัดเก็บ"},
@@ -128,7 +123,15 @@ def status_label(status: str | None) -> str:
     导出里此前直接写 `released` 这类枚举原值——它既不是中文也不是给人看的英文，
     而界面上写的是"已放行"，同一个状态两个说法，核对时会被当成两回事。
     未知状态原样返回，不要吞掉信息。
+
+    **取值来自 `constants.VERSION_STATUS_LABELS`，不在这里另存一份。**
+    第 68 轮加导出词条时没发现 constants 里已有这张表（当时零使用点、是死代码），
+    于是逐字抄了第二份——正是第 72 轮在排查的"同一段数据复制多份、迟早各自跑偏"。
+    现改为直接读那张表：状态措辞只有一个来源，前端 STATUS_LABELS 与它逐条一致。
     """
     if not status:
         return ""
-    return t(f"st_{status}", status)
+    m = VERSION_STATUS_LABELS.get(status)
+    if not m:
+        return status
+    return m.get(current_lang()) or m.get("zh") or status

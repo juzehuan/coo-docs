@@ -16,6 +16,7 @@ from app.core.rbac import (
     optional_current_user, user_from_download_ticket,
 )
 from app.core.snowflake import next_id
+from app.core.queries import latest_version as _latest_version
 from app.core.storage import purge_files, save_upload, storage_guard
 from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload, sanitize_name
@@ -42,15 +43,6 @@ def _visible_packages(db: Session, user: User):
         q = q.filter(Package.owner_user_id == user.id)
     # admin / coo_reviewer / auditor 可见全部
     return q.order_by(Package.sort_order, Package.code).all()
-
-
-def _latest_version(db: Session, pkg_id: int):
-    return (
-        db.query(PackageVersion)
-        .filter(PackageVersion.package_id == pkg_id)
-        .order_by(PackageVersion.id.desc())   # 按雪花 ID：created_at 是秒级精度，同秒创建时排序不确定
-        .first()
-    )
 
 
 def _lock_version(db: Session, vid: int) -> PackageVersion | None:
@@ -203,7 +195,16 @@ def delete_version(pkg_id: int, vid: int, request: Request, db: Session = Depend
 
 # ---------- 附件上传 / 删除 ----------
 def _reset_status_on_edit(v: PackageVersion):
-    """上传/替换附件后，若已处于审核/放行/退回态则回退至待部门审核。"""
+    """上传/替换附件后，若已处于审核/放行/退回态则回退至待部门审核。
+
+    `locked` 守卫与订单线的同名函数保持一致：两个调用点都已先拦下
+    `status == RELEASED or v.locked`，因此这层当前不可达；但订单线那份有、
+    这份没有——第 72 轮排查同名函数分叉时发现的**唯一一处真实差异**。
+    纵深防御不该只在两条线中的一条上有：F-07「已放行不可编辑」是硬约束，
+    万一将来新增一个忘记加守卫的调用点，这里能兜住。
+    """
+    if v.locked:
+        return
     if v.status in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO,
                     VersionStatus.RELEASED, VersionStatus.REJECTED):
         v.status = VersionStatus.PENDING_DEPT

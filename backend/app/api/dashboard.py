@@ -9,25 +9,14 @@ from app.core.overdue import is_overdue
 from app.core.http_headers import content_disposition
 from app.core.i18n import local_name, status_label, t
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
-from app.core.rbac import (can_view_package, export_viewer, get_current_user,
+from app.core.rbac import (can_view_package, export_viewer, factory_ids as _factory_ids,
+                           get_current_user,
                            no_reviewer_for, staffed_dept_ids)
 from app.db import get_db
 from app.models import Attachment, AuditDomain, Factory, Order, OrderPackage, Package, PackageVersion, User
 from app.schemas import DashboardOut
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
-
-
-def _factory_ids(user: User, db: Session) -> list[int]:
-    """当前账号可见工厂 ID；admin 可见全部工厂。
-
-    不按 status 过滤：停用工厂只应阻止新建订单。若在此过滤，
-    停用当天工作台的完成率/统计与归档导出会静默少掉该厂全部数据，
-    而报表看不出任何缺失迹象。
-    """
-    if user.role == "admin":
-        return [f.id for f in db.query(Factory).all()]
-    return [f.id for f in user.factories]
 
 
 @router.get("", response_model=DashboardOut)
