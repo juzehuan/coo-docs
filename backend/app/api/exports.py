@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
 from app.core.http_headers import content_disposition
-from app.core.rbac import get_current_user
+from app.core import dl_ticket
+from app.core.rbac import get_current_user, optional_current_user, user_from_download_ticket
 from app.db import get_db
 from app.models import AuditDomain, ExportJob, User
 from app.schemas import Msg
@@ -71,14 +72,33 @@ def export_status(job_id: int, db: Session = Depends(get_db),
     return _out(j)
 
 
+@router.post("/{job_id}/ticket")
+def issue_export_ticket(job_id: int, db: Session = Depends(get_db),
+                        user: User = Depends(get_current_user)):
+    """签发下载票据。
+
+    产物（尤其 ZIP）可能很大，走浏览器原生下载才有进度与断点续传（第 53 轮），
+    而原生下载带不了 Bearer 头——第 87 轮浏览器实测：「我的导出」的下载按钮
+    点开是 `Not authenticated`，整条异步链路的最后一步不通。与附件下载同一套票据。
+    """
+    j = db.get(ExportJob, job_id)
+    if not j or j.user_id != user.id:
+        raise HTTPException(status_code=404, detail="导出作业不存在")
+    return {"ticket": dl_ticket.issue(job_id, user.id), "expires_in": dl_ticket.TICKET_TTL_SECONDS}
+
+
 @router.get("/{job_id}/download")
-def download_export(job_id: int, request: Request, db: Session = Depends(get_db),
-                    user: User = Depends(get_current_user)):
+def download_export(job_id: int, request: Request, ticket: str | None = None,
+                    db: Session = Depends(get_db),
+                    user: User | None = Depends(optional_current_user)):
     """下载产物。
 
     只允许提交人本人下载：产物是按**提交时的可见范围**生成的，
-    换个人下载就等于绕过可见性收敛。
+    换个人下载就等于绕过可见性收敛。票据换出的用户同样要过这一关。
     """
+    user = user_from_download_ticket(request, job_id, ticket, db) or user
+    if user is None:
+        raise HTTPException(status_code=401, detail="无效或过期的凭证")
     j = db.get(ExportJob, job_id)
     if not j or j.user_id != user.id:
         raise HTTPException(status_code=404, detail="导出作业不存在")

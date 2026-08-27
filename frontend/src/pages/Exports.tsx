@@ -3,7 +3,7 @@ import { App, Button, Card, Popconfirm, Space, Table, Tag, Typography } from 'an
 import { DeleteOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 
-import { errMessage } from '@/api/client'
+import { downloadFile, errMessage } from '@/api/client'
 import { exportJobs } from '@/api/endpoints'
 import PageHeader from '@/components/PageHeader'
 import { useI18n } from '@/i18n'
@@ -57,7 +57,7 @@ export default function Exports() {
   }
 
   const columns: ColumnsType<ExportJob> = [
-    { title: t('type'), dataIndex: 'kind', width: 190 },
+    { title: t('type'), dataIndex: 'kind', width: 190, render: (v: string) => t(`export_kind_${v}`) || v },
     {
       title: t('status'), dataIndex: 'status', width: 110,
       render: (v: string) => {
@@ -75,16 +75,18 @@ export default function Exports() {
       // 失败原因必须显示出来：只标一个"失败"等于让用户重试到放弃。
       // 用独立词条而不是复用 reject_reason（那是审核退回的语义，不是导出失败）
       title: t('export_error'), dataIndex: 'error', ellipsis: true,
-      render: (v: string) => (v ? <Typography.Text type="danger">{v}</Typography.Text> : '-'),
+      // 只有失败才标红：排队中的"服务重启已自动重排"是说明，不是错误
+      render: (v: string, r) => (v ? <Typography.Text type={r.status === 'failed' ? 'danger' : 'secondary'}>{v}</Typography.Text> : '-'),
     },
     {
       title: '', key: 'act', width: 130, fixed: 'right',
       render: (_, r) => (
         <Space size={4}>
+          {/* 换票后走浏览器原生下载：纯 <a href> 带不了 Bearer 头（第 87 轮实测 401） */}
           <Button size="small" type="primary" ghost icon={<DownloadOutlined />}
             disabled={r.status !== 'done'}
-            href={r.status === 'done' ? exportJobs.downloadUrl(r.id) : undefined}
-            target="_blank" rel="noopener noreferrer" />
+            onClick={() => downloadFile(exportJobs.downloadUrl(r.id), r.file_name, exportJobs.ticketUrl(r.id))
+              .catch((e) => message.error(errMessage(e)))} />
           <Popconfirm title={t('export_confirm_delete')} onConfirm={() => remove(r.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>

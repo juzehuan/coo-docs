@@ -203,4 +203,5 @@ export const exportJobs = {
   status: (id: string) => get<ExportJob>(`/exports/${id}`),
   remove: (id: string) => del<{ msg: string }>(`/exports/${id}`),
   downloadUrl: (id: string) => `/api/exports/${id}/download`,
+  ticketUrl: (id: string) => `/exports/${id}/ticket`,
 }
