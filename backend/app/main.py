@@ -169,13 +169,21 @@ def create_app() -> FastAPI:
         from app.services import s3
         if s3.enabled():
             s3.ensure_bucket()
-        # 每日定时自动同步 NAS（此前 NAS_SYNC_TIME 无调度器引用，auto 同步从不执行）
-        from app.services.scheduler import start_nas_sync_scheduler
-        start_nas_sync_scheduler()
-        # 异步导出作业 worker。放在路由注册之后启动，确保各 api 模块已把
-        # 自己的导出类型注册进来（注册发生在模块导入时）。
-        from app.services.export_jobs import start_worker
-        start_worker()
+        # 这两个后台线程是"全系统只该跑一份"的：多进程部署下每个进程各起一份，
+        # 会把当日 NAS 同步跑 N 遍、让 N 个 worker 争抢同一批导出作业。
+        # 用数据库命名锁选出主进程；非主进程只记录告警、不启动它们。
+        from app.core.singleton import is_primary
+        if is_primary():
+            # 每日定时自动同步 NAS（此前 NAS_SYNC_TIME 无调度器引用，auto 同步从不执行）
+            from app.services.scheduler import start_nas_sync_scheduler
+            start_nas_sync_scheduler()
+            # 异步导出作业 worker。放在路由注册之后启动，确保各 api 模块已把
+            # 自己的导出类型注册进来（注册发生在模块导入时）。
+            from app.services.export_jobs import start_worker
+            start_worker()
+        else:
+            logging.getLogger("app").warning(
+                "非主进程：已跳过 NAS 定时同步与导出 worker 的启动")
 
     return app
 
