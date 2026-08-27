@@ -144,7 +144,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 20px 0 12px', background: '#fffdf7',
+          padding: isMobile ? '0 10px 0 6px' : '0 20px 0 12px', background: '#fffdf7',
           borderBottom: '1px solid #e8e1d3',
           boxShadow: '0 1px 3px rgba(34,42,51,0.04)',
           position: 'sticky', top: 0, zIndex: 10,
@@ -154,7 +154,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             onClick={() => setCollapsed(!collapsed)}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 14, minWidth: 0 }}>
             <NotificationBell />
             <LanguageSwitcher />
             <Dropdown
@@ -172,7 +172,15 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '4px 8px', borderRadius: 8 }}>
                 <Avatar size="small" style={{ background: '#16263f', color: '#f7e9c9' }} icon={<UserOutlined />} />
-                <span style={{ fontWeight: 600, color: '#232a33' }}>{user.display_name || user.username}</span>
+                {/* 窄屏不显示用户名：头部横向已经放不下（语言切换 + 铃铛 + 角色标签），
+                    名字会被压到零宽而逐字换行，「系统管理员」变成一列竖排的单字。
+                    宽屏也加 nowrap + 截断，长名字同样不该把头部撑开。身份信息在
+                    角色标签和头像菜单里都还在。 */}
+                {!isMobile && (
+                  <span style={{ fontWeight: 600, color: '#232a33', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+                    {user.display_name || user.username}
+                  </span>
+                )}
                 <RoleTag role={user.role} />
               </div>
             </Dropdown>

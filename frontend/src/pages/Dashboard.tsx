@@ -46,9 +46,13 @@ export default function Dashboard() {
           <h1 className="coo-pagehead-title">{t('dashboard')}</h1>
           <div className="coo-pagehead-desc">{t('dashboard_desc')}</div>
         </div>
-        {/* F-10「归档清单可导出为 Excel/CSV」：后端接口一直存在但界面无入口 */}
+        {/* F-10「归档清单可导出为 Excel/CSV」：后端接口一直存在但界面无入口。
+            外面这层 coo-pagehead-extra 与 PageHeader 组件保持一致——窄屏页头改为上下
+            堆叠，没有它按钮会被拉伸成占满整行。 */}
         {canExport && (
-          <Button icon={<DownloadOutlined />} onClick={exportArchive}>{t('export_csv')}</Button>
+          <div className="coo-pagehead-extra">
+            <Button icon={<DownloadOutlined />} onClick={exportArchive}>{t('export_csv')}</Button>
+          </div>
         )}
       </div>
 

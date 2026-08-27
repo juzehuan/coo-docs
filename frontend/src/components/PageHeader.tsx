@@ -12,7 +12,7 @@ export default function PageHeader({ title, desc, extra }: {
         <h1 className="coo-pagehead-title">{title}</h1>
         {desc && <div className="coo-pagehead-desc">{desc}</div>}
       </div>
-      {extra && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>{extra}</div>}
+      {extra && <div className="coo-pagehead-extra">{extra}</div>}
     </div>
   )
 }

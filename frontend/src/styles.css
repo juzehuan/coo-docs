@@ -115,6 +115,31 @@ body {
   font-size: 13px;
   letter-spacing: 0.3px;
 }
+/* flex 子项的 min-width 默认是 auto，右侧操作区（搜索框 + 下拉 + 按钮）在窄屏
+   会把标题块压到接近零宽，标题于是一个字一行竖着排。min-width:0 允许它正常收缩。 */
+.coo-pagehead > :first-child { min-width: 0; }
+.coo-pagehead-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 窄屏：标题与操作区改为上下堆叠，各自占满整行，谁也不挤谁 */
+@media (max-width: 767.98px) {
+  .coo-pagehead {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .coo-pagehead-title { font-size: 19px; letter-spacing: 1px; }
+  .coo-pagehead-extra { flex-wrap: wrap; }
+  /* 工具区里的输入框/下拉在桌面写死了 width，窄屏按比例收，免得溢出 */
+  .coo-pagehead-extra .ant-input-affix-wrapper,
+  .coo-pagehead-extra .ant-input-group-wrapper,
+  .coo-pagehead-extra .ant-select,
+  .coo-pagehead-extra .ant-picker { min-width: 140px; flex: 1 1 140px; width: auto !important; }
+}
 
 /* 品牌渐变文本（黄铜→亮黄铜） */
 .coo-grad-text {
