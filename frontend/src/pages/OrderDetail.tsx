@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Progress, App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Typography, Upload,
+import { Progress, App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Tooltip, Typography, Upload,
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -129,15 +129,13 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     <div>
       <Table rowKey="id" size="small" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} scroll={{ x: 680 + attActWidth }} />
 
+      {/* 虚线框内只放"上传这批文件"需要的东西：批次号是给本批文件贴的标签。
+          提交审核 / 撤回是整条资料包实例的流程动作，不属于上传，移到框外（见下）。
+          两者并排时，「提交」看上去像是在提交批次号，而它实际提交的是整条待审。 */}
       {canEdit && (
         <div style={{ marginTop: 8, padding: 12, background: '#faf6ec', border: '1px dashed #d8cdb0', borderRadius: 8 }}>
-          <Space style={{ marginBottom: 8 }}>
-            <Input addonBefore={t('batch_no')} value={batchNo} onChange={(e) => setBatchNo(e.target.value)} style={{ width: 220 }} />
-            <Button type="primary" icon={<SendOutlined />} disabled={atts.length === 0} loading={busy} onClick={submit}>{t('submit')}</Button>
-            {canWithdraw && (
-              <Button danger icon={<UndoOutlined />} loading={busy} onClick={withdraw}>{t('withdraw')}</Button>
-            )}
-          </Space>
+          <Input addonBefore={t('batch_no')} value={batchNo} onChange={(e) => setBatchNo(e.target.value)}
+            style={{ width: 220, marginBottom: 8 }} />
           <Dragger
             multiple showUploadList={false} disabled={uploading}
             // 受控为空，防止 antd 内部 fileList 跨批次累积（否则第二批会把第一批重复上传一遍）
@@ -158,6 +156,26 @@ function RowAttachments({ orderId, op, user, onChanged }: {
           {uploading && (
             <Progress percent={progress} size="small" status="active"
               format={(p) => `${t('uploading')} ${p}%`} style={{ marginTop: 8 }} />
+          )}
+        </div>
+      )}
+
+      {/* 流程动作独立一行、右对齐、主操作在最右——与弹窗页脚同一套阅读顺序。
+          与资料包详情页把「提交审核 / 撤回」放在页头是同一个意思：它作用于整条记录。 */}
+      {(canEdit || canWithdraw) && (
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          {canWithdraw && (
+            <Button danger icon={<UndoOutlined />} loading={busy} onClick={withdraw}>{t('withdraw')}</Button>
+          )}
+          {canEdit && (
+            /* 没有附件时禁用。光禁用不解释的话，用户只会反复点——后端那句
+               「请先上传至少一个附件」在按钮被禁用时根本没机会出现 */
+            <Tooltip title={atts.length === 0 ? t('submit_need_attachment') : ''}>
+              <span style={{ display: 'inline-flex' }}>
+                <Button type="primary" icon={<SendOutlined />} disabled={atts.length === 0}
+                  loading={busy} onClick={submit}>{t('submit')}</Button>
+              </span>
+            </Tooltip>
           )}
         </div>
       )}
