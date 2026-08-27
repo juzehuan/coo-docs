@@ -3,10 +3,7 @@ export const ROUTE_ROLES: { key: string; label: string; roles: string[]; hidden?
   { key: '/', label: 'dashboard', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/todo', label: 'todo', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'admin'] },
   { key: '/orders', label: 'orders', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
-  // 提交人不进资料包线：这条线按「责任部门 / 责任人」分工，归部门审核人维护常备档案，
-  // 而资料包的责任人实际全部配成了部门经理——提交人点进来永远是空列表。
-  // 提交人的工作在订单线（客户订单 → 添加资料包 → 传附件 → 提交审核），见手册 §6.1。
-  { key: '/packages', label: 'packages', roles: ['dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
+  { key: '/packages', label: 'packages', roles: ['submitter', 'dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/controlled', label: 'controlled', roles: ['dept_reviewer', 'coo_reviewer', 'auditor', 'admin'] },
   { key: '/nas', label: 'nas', roles: ['coo_reviewer', 'auditor', 'admin'] },
   { key: '/audit', label: 'audit', roles: ['auditor', 'admin'] },
