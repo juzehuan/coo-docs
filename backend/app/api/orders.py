@@ -194,12 +194,18 @@ def update_order(order_id: int, payload: OrderUpdate, request: Request,
     data = payload.model_dump(exclude_unset=True)
     if "factory_id" in data and data["factory_id"] != o.factory_id:
         raise HTTPException(status_code=400, detail="创建后不允许变更工厂")
+    # 审计必须记到字段级：F-10 要求留痕含"说明"，而此前 order_update 的 detail 是空的
+    # ——"谁把数量从 100 改成 1000"完全不可追溯（第 84 轮实测）。只记真正变了的字段。
+    changes = []
     for k, v in data.items():
+        old_v = getattr(o, k)
+        if old_v != v:
+            changes.append(f"{k}: {old_v!r} -> {v!r}")
         setattr(o, k, v)
     db.commit()
     db.refresh(o)
     log_event(db, AuditDomain.PACKAGE, "order_update", actor=user, ip=client_ip(request),
-              target=o.order_no)
+              target=o.order_no, detail="; ".join(changes) if changes else "无实际变更")
     return _order_row(db, o)
 
 
@@ -253,6 +259,7 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
         raise HTTPException(status_code=404, detail="订单不存在")
     if not can_edit_order(user, o):
         raise HTTPException(status_code=403, detail="无权为订单添加资料包")
+    _ensure_open(o)
     pkg = db.get(Package, payload.package_id)
     if not pkg:
         raise HTTPException(status_code=404, detail="资料包模板不存在")
@@ -354,6 +361,7 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
 def submit_order_package(order_id: int, op_id: int, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    _ensure_open(o)
     op = _lock_op(db, op_id) or op   # 与并发审核串行化
     _reject_if_referenced(op)
     if not can_edit_order_package(user, op):
@@ -493,6 +501,7 @@ async def upload_order_attachment(
     db: Session = Depends(get_db), user: User = Depends(get_current_user),
 ):
     o, op = _get_op(db, order_id, op_id, user)
+    _ensure_open(o)
     _reject_if_referenced(op)
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
@@ -538,6 +547,7 @@ async def upload_order_attachment(
 def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Request,
                             db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    _ensure_open(o)
     _reject_if_referenced(op)
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
@@ -664,6 +674,21 @@ def _lock_op(db: Session, op_id: int) -> OrderPackage | None:
         .filter(OrderPackage.id == op_id)
         .first()
     )
+
+
+def _ensure_open(o: Order) -> None:
+    """已关闭/已完成的订单不再接受新的资料变更。
+
+    第 84 轮实测："已关闭"此前是纯装饰——加资料包 201、上传 200、提交 200 全部照常，
+    而系统自己在拒绝删除含已放行实例的订单时给的建议就是"请将订单状态改为已关闭"。
+    与第 28 轮工厂停用、第 82 轮资料包停用同一模式：状态标签必须有约束力。
+    审核、撤回、下载不受影响：关闭只表示"不再新接资料"，在办的照常走完。
+    需要补交时把状态改回 active 即可（同一 PATCH，留痕记录字段变更）。
+    """
+    if (o.status or "active") in ("closed", "completed"):
+        label = "已关闭" if o.status == "closed" else "已完成"
+        raise HTTPException(status_code=400,
+                            detail=f"订单{label}，不可再变更资料；如需补交请先将订单状态改回进行中")
 
 
 def _get_op(db: Session, order_id: int, op_id: int, user: User):

@@ -1,6 +1,6 @@
 """Pydantic 请求/响应模型。"""
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
@@ -170,10 +170,15 @@ class OrderCreate(BaseModel):
     customer: str = Field("", max_length=255)
     product: str = Field("", max_length=255)
     quantity: int = 0
-    export_date: str = Field("", max_length=32)
+    export_date: DueDate = Field("", max_length=32)
     status: str = Field("active", max_length=16)
     note: str = ""
     owner_user_id: Optional[int] = None
+
+
+# 订单状态只有这三种；此前 status 是任意 ≤16 字符的字符串，第 84 轮实测 PATCH
+# status='banana' 返回 200，界面上会渲染出一个谁也不认识的状态
+ORDER_STATUSES = ("active", "completed", "closed")
 
 
 class OrderUpdate(BaseModel):
@@ -181,8 +186,10 @@ class OrderUpdate(BaseModel):
     customer: Optional[str] = Field(None, max_length=255)
     product: Optional[str] = Field(None, max_length=255)
     quantity: Optional[int] = None
-    export_date: Optional[str] = Field(None, max_length=32)
-    status: Optional[str] = Field(None, max_length=16)
+    # 出口日期与截止日期同构（第 62 轮）：不校验就会存进"明年"这类文本。
+    # 它目前只用于展示，但导出清单是交给核查方的，日期写法必须可解析、统一为 ISO
+    export_date: Optional[DueDate] = Field(None, max_length=32)
+    status: Optional[Literal["active", "completed", "closed"]] = None
     note: Optional[str] = None
     owner_user_id: Optional[int] = None
 
