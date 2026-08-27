@@ -67,38 +67,7 @@ say "2/4 构建并启动服务"
 docker compose up -d --build
 
 say "3/4 安装定时任务"
-BK="$ROOT/scripts/backup_mysql.sh"
-DR="$ROOT/scripts/restore_drill.sh"
-# 日志目录必须先确定再拼 cron 行：非 root 部署时 /var/log 不可写，
-# 若仍把路径写成 /var/log/...，cron 的输出会直接丢掉——而"备份失败"正是
-# 靠这份日志和退出码被发现的，写进一个黑洞等于把告警关掉了
-if [ -w /var/log ] || { touch /var/log/coo_backup.log 2>/dev/null; }; then
-  LOGDIR=/var/log
-else
-  LOGDIR="$ROOT/logs"
-  mkdir -p "$LOGDIR"
-  warn "/var/log 不可写，备份日志改落 $LOGDIR"
-fi
-CRON_BK="0 2 * * * cd $ROOT && set -a && . ./.env && set +a && $BK >> $LOGDIR/coo_backup.log 2>&1 # coo-docs-backup"
-CRON_DR="0 3 1 * * cd $ROOT && set -a && . ./.env && set +a && $DR >> $LOGDIR/coo_drill.log 2>&1 # coo-docs-drill"
-# 每周日 04:00 逐个重算附件 sha256：证据文件被改动（位翻转/误覆盖/篡改）时，
-# 只有这一项能发现；存在性巡检与备份演练都查不出内容错误（第 83 轮）
-CRON_VF="0 4 * * 0 cd $ROOT && docker compose exec -T backend python /app/scripts/storage_check.py --verify >> $LOGDIR/coo_verify.log 2>&1 # coo-docs-verify"
-# 追加而非覆盖：宿主上可能还有别的项目的任务，crontab - 会整体替换
-CUR="$(crontab -l 2>/dev/null || true)"
-ADD=""
-echo "$CUR" | grep -q 'coo-docs-backup' || ADD="$ADD$CRON_BK"$'\n'
-echo "$CUR" | grep -q 'coo-docs-drill'  || ADD="$ADD$CRON_DR"$'\n'
-echo "$CUR" | grep -q 'coo-docs-verify' || ADD="$ADD$CRON_VF"$'\n'
-if [ -n "$ADD" ]; then
-  printf '%s\n%s' "$CUR" "$ADD" | sed '/^$/d' | crontab -
-  echo "已追加定时任务（原有任务保留）："
-  crontab -l | grep 'coo-docs' | sed 's/^/  /'
-else
-  echo "定时任务已存在，跳过。"
-fi
-touch "$LOGDIR/coo_backup.log" "$LOGDIR/coo_drill.log" "$LOGDIR/coo_verify.log" 2>/dev/null || true
-echo "  备份日志：$LOGDIR/coo_backup.log · 演练日志：$LOGDIR/coo_drill.log"
+"$ROOT/scripts/install_cron.sh"
 
 say "4/4 自检"
 # 端口从 compose 的实际映射里取，不写死：override 或改过端口时写死的 8000 会误报失败
