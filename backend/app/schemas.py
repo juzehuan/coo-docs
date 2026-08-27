@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Annotated, Literal, Optional
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.core.overdue import parse_due
 
@@ -40,6 +40,17 @@ def _normalize_due(v):
 DueDate = Annotated[str, AfterValidator(_normalize_due)]
 
 
+def _strip(v):
+    return v.strip() if isinstance(v, str) else v
+
+
+# 首尾空白一律去掉。第 96 轮实测：订单号 " WS96-A " 与 "WS96-A" 并存（实质重复，
+# 唯一约束拦不住）、纯空白订单号能建成、用户名 " ws96 " 入库后只能带空格登录、
+# 部门编码 " D96 "。这些值会进 NAS 目录名、审计 target 与唯一约束。
+# 密码字段**不**用它：密码里的空格是内容的一部分。
+Stripped = Annotated[str, BeforeValidator(_strip)]
+
+
 # ---------- 通用 ----------
 class Msg(BaseModel):
     msg: str
@@ -53,7 +64,7 @@ class PasswordResetOut(BaseModel):
 
 # ---------- 认证 ----------
 class LoginRequest(BaseModel):
-    username: str
+    username: Stripped
     password: str
 
 
@@ -80,16 +91,16 @@ class SecretRotate(BaseModel):
 
 # ---------- 部门 ----------
 class DepartmentCreate(BaseModel):
-    code: str = Field(max_length=32)
-    name_zh: str = Field(max_length=128)
-    name_en: str = Field("", max_length=128)
-    name_th: str = Field("", max_length=128)
+    code: Stripped = Field(min_length=1, pattern=r"^\S+$", max_length=32)
+    name_zh: Stripped = Field(min_length=1, max_length=128)
+    name_en: Stripped = Field("", max_length=128)
+    name_th: Stripped = Field("", max_length=128)
 
 
 class DepartmentUpdate(BaseModel):
-    name_zh: Optional[str] = Field(None, max_length=128)
-    name_en: Optional[str] = Field(None, max_length=128)
-    name_th: Optional[str] = Field(None, max_length=128)
+    name_zh: Optional[Stripped] = Field(None, min_length=1, max_length=128)
+    name_en: Optional[Stripped] = Field(None, max_length=128)
+    name_th: Optional[Stripped] = Field(None, max_length=128)
 
 
 class DepartmentOut(BaseModel):
@@ -107,13 +118,13 @@ RoleName = Literal["submitter", "dept_reviewer", "coo_reviewer", "auditor", "adm
 
 
 class UserCreate(BaseModel):
-    username: str = Field(max_length=64)
+    username: Stripped = Field(min_length=1, pattern=r"^\S+$", max_length=64)
     # 留空则服务端生成一次性临时密码并在响应里返回一次（与「重置密码」同一套流程）。
     # 界面此前把密码预填为 user123：交付后管理员建的每个账号都会是这个演示密码（第 90 轮）
     password: Optional[str] = Field(None, min_length=6)
-    display_name: str = Field("", max_length=128)
-    email: str = Field("", max_length=128)
-    phone: str = Field("", max_length=32)
+    display_name: Stripped = Field("", max_length=128)
+    email: Stripped = Field("", max_length=128)
+    phone: Stripped = Field("", max_length=32)
     dept_id: Optional[int] = None
     # 角色必须是已知值：此前是自由字符串，实测 role="coo" 也能建成，登录后侧栏全空、正文 403（第 92 轮）
     role: RoleName = "submitter"
@@ -121,9 +132,9 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    display_name: Optional[str] = Field(None, max_length=128)
-    email: Optional[str] = Field(None, max_length=128)
-    phone: Optional[str] = Field(None, max_length=32)
+    display_name: Optional[Stripped] = Field(None, max_length=128)
+    email: Optional[Stripped] = Field(None, max_length=128)
+    phone: Optional[Stripped] = Field(None, max_length=32)
     dept_id: Optional[int] = None
     role: Optional[RoleName] = None
     status: Optional[Literal["active", "disabled"]] = None
@@ -153,18 +164,18 @@ class UserCreateOut(UserOut):
 
 
 class FactoryCreate(BaseModel):
-    code: str = Field(max_length=32)
-    name_zh: str = Field(max_length=128)
-    name_en: str = Field("", max_length=128)
-    name_th: str = Field("", max_length=128)
+    code: Stripped = Field(min_length=1, pattern=r"^\S+$", max_length=32)
+    name_zh: Stripped = Field(min_length=1, max_length=128)
+    name_en: Stripped = Field("", max_length=128)
+    name_th: Stripped = Field("", max_length=128)
     sort_order: int = 0
 
 
 class FactoryUpdate(BaseModel):
-    name_zh: Optional[str] = Field(None, max_length=128)
-    name_en: Optional[str] = Field(None, max_length=128)
-    name_th: Optional[str] = Field(None, max_length=128)
-    status: Optional[str] = Field(None, max_length=16)
+    name_zh: Optional[Stripped] = Field(None, min_length=1, max_length=128)
+    name_en: Optional[Stripped] = Field(None, max_length=128)
+    name_th: Optional[Stripped] = Field(None, max_length=128)
+    status: Optional[Stripped] = Field(None, max_length=16)
     sort_order: Optional[int] = None
 
 
@@ -183,13 +194,13 @@ class FactoryOut(BaseModel):
 # ---------- 订单 ----------
 class OrderCreate(BaseModel):
     factory_id: int
-    order_no: str = Field(max_length=64)
-    customer: str = Field("", max_length=255)
-    product: str = Field("", max_length=255)
+    order_no: Stripped = Field(min_length=1, max_length=64)
+    customer: Stripped = Field("", max_length=255)
+    product: Stripped = Field("", max_length=255)
     quantity: int = 0
     export_date: DueDate = Field("", max_length=32)
-    status: str = Field("active", max_length=16)
-    note: str = ""
+    status: Stripped = Field("active", max_length=16)
+    note: Stripped = ""
     owner_user_id: Optional[int] = None
 
 
@@ -200,14 +211,14 @@ ORDER_STATUSES = ("active", "completed", "closed")
 
 class OrderUpdate(BaseModel):
     factory_id: Optional[int] = None
-    customer: Optional[str] = Field(None, max_length=255)
-    product: Optional[str] = Field(None, max_length=255)
+    customer: Optional[Stripped] = Field(None, max_length=255)
+    product: Optional[Stripped] = Field(None, max_length=255)
     quantity: Optional[int] = None
     # 出口日期与截止日期同构（第 62 轮）：不校验就会存进"明年"这类文本。
     # 它目前只用于展示，但导出清单是交给核查方的，日期写法必须可解析、统一为 ISO
     export_date: Optional[DueDate] = Field(None, max_length=32)
     status: Optional[Literal["active", "completed", "closed"]] = None
-    note: Optional[str] = None
+    note: Optional[Stripped] = None
     owner_user_id: Optional[int] = None
 
 
@@ -287,29 +298,29 @@ class PackageCreate(BaseModel):
     # 编号是标识符，路径分隔符在其中没有任何含义，却会让两个不同资料包
     # 归档到同一目录并互相覆盖（同 order_no 的问题，见 nas_sync._unique_segment）。
     # 现有 18 个编号均已符合本约束，加此限制不影响任何存量数据。
-    code: str = Field(max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
-    name_zh: str = Field(max_length=255)
-    name_en: str = Field("", max_length=255)
-    name_th: str = Field("", max_length=255)
+    code: Stripped = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
+    name_zh: Stripped = Field(min_length=1, max_length=255)
+    name_en: Stripped = Field("", max_length=255)
+    name_th: Stripped = Field("", max_length=255)
     dept_id: Optional[int] = None
     owner_user_id: Optional[int] = None
-    review_focus: str = ""
+    review_focus: Stripped = ""
     due_date: DueDate = Field("", max_length=32)
     required: bool = True
     per_order: bool = True        # 随单（默认）/ 公司级
 
 
 class PackageUpdate(BaseModel):
-    name_zh: Optional[str] = Field(None, max_length=255)
-    name_en: Optional[str] = Field(None, max_length=255)
-    name_th: Optional[str] = Field(None, max_length=255)
+    name_zh: Optional[Stripped] = Field(None, min_length=1, max_length=255)
+    name_en: Optional[Stripped] = Field(None, max_length=255)
+    name_th: Optional[Stripped] = Field(None, max_length=255)
     dept_id: Optional[int] = None
     owner_user_id: Optional[int] = None
-    review_focus: Optional[str] = None
+    review_focus: Optional[Stripped] = None
     due_date: Optional[DueDate] = Field(None, max_length=32)
     required: Optional[bool] = None
     per_order: Optional[bool] = None
-    status: Optional[str] = Field(None, max_length=16)
+    status: Optional[Stripped] = Field(None, max_length=16)
     sort_order: Optional[int] = None
 
 
@@ -372,16 +383,16 @@ class VersionOut(BaseModel):
 
 
 class VersionCreate(BaseModel):
-    change_note: str = ""
+    change_note: Stripped = ""
     # 同样参与 NAS 归档路径（项目代号段），限定为标识符字符；留空则取默认值
-    project_code: str = Field("", max_length=64, pattern=r"^[A-Za-z0-9._-]*$")
+    project_code: Stripped = Field("", max_length=64, pattern=r"^[A-Za-z0-9._-]*$")
 
 
 # ---------- 审核 ----------
 class ReviewRequest(BaseModel):
-    decision: str   # approve / reject
-    level: str      # dept / coo
-    reason: str = ""
+    decision: Stripped   # approve / reject
+    level: Stripped   # dept / coo
+    reason: Stripped = ""
 
 
 # ---------- 审计 ----------
