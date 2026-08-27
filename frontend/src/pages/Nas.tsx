@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { App, Button, Card, Col, Form, Input, Modal, Radio, Row, Space, Switch, Table, Tag } from 'antd'
+import { App, Button, Card, Col, Form, Input, Modal, Radio, Row, Space, Switch, Table, Tag, Typography } from 'antd'
 import { DatabaseOutlined, SettingOutlined, SyncOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { nas } from '@/api/endpoints'
@@ -10,6 +10,20 @@ import { formatTime } from '@/utils/format'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import PageHeader from '@/components/PageHeader'
 import type { NasConfig, NasStatus, SyncRecord } from '@/types'
+
+/** 同步状态：后端枚举 → 文案键与配色。running/partial 走同一档警示色。 */
+const SYNC_STATUS_LABEL: Record<string, string> = {
+  running: 'sync_running',
+  success: 'sync_ok',   // sync_success 已被「同步完成」的提示语占用
+  partial: 'sync_partial',
+  failed: 'sync_failed',
+}
+const SYNC_STATUS_STYLE: Record<string, { bg: string; fg: string }> = {
+  success: { bg: '#eaf2ec', fg: '#2f6b4a' },
+  failed: { bg: '#f9ece9', fg: '#9c4134' },
+  partial: { bg: '#faf0dc', fg: '#a67c1e' },
+  running: { bg: '#faf0dc', fg: '#a67c1e' },
+}
 
 export default function Nas() {
   const { t } = useI18n()
@@ -116,16 +130,24 @@ export default function Nas() {
         </Card>
       </Col>
       <Col span={24}>
-        <Card variant="borderless" className="coo-card" title={t('sync_status')}>
+        <Card variant="borderless" className="coo-card" title={t('sync_records')}>
+          {/* 这张表原先整列漏出后端的原始英文枚举（auto/manual、success/partial/failed），
+              还带一列数据库自增 ID——对使用者没有任何意义，反而看不出"昨晚那次到底成没成"。
+              现在只留下四件事：什么时候、谁触发的、成没成、多少件。 */}
           <Table rowKey="id" size="small" pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }} dataSource={recs}
             // 列宽之和；窄屏下改为横向滚动，列宽不被挤压，字段就不会折行
             scroll={{ x: 540 }}
             columns={[
-            { title: 'ID', dataIndex: 'id', width: 70 },
-            { title: t('type'), dataIndex: 'run_type', width: 90 },
-            { title: t('success_total'), render: (_, r) => `${r.success}/${r.total}`, width: 110 },
-            { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag className="coo-tag" style={{ background: s === 'success' ? '#eaf2ec' : s === 'failed' ? '#f9ece9' : '#faf0dc', color: s === 'success' ? '#2f6b4a' : s === 'failed' ? '#9c4134' : '#a67c1e', border: 'none' }}>{s}</Tag> },
             { title: t('time'), dataIndex: 'started_at', width: 170, render: (v: string) => formatTime(v) },
+            { title: t('sync_trigger'), dataIndex: 'run_type', width: 100, render: (v: string) => (v === 'manual' ? t('sync_manual') : t('sync_auto')) },
+            { title: t('status'), dataIndex: 'status', width: 110, render: (s: string) => <Tag className="coo-tag" style={{ background: SYNC_STATUS_STYLE[s]?.bg ?? '#faf0dc', color: SYNC_STATUS_STYLE[s]?.fg ?? '#a67c1e', border: 'none' }}>{t(SYNC_STATUS_LABEL[s] ?? 'sync_running')}</Tag> },
+            // 失败件数单独标红：只给 "128/130" 的话，差在哪、是不是该处理，用户得自己做减法
+            { title: t('success_total'), width: 160, render: (_, r) => (
+              <>
+                {r.success}/{r.total}
+                {r.failed > 0 && <Typography.Text type="danger">　{t('sync_failed_n', { n: r.failed })}</Typography.Text>}
+              </>
+            ) },
           ]} />
         </Card>
       </Col>
