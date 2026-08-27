@@ -5,6 +5,7 @@
 一旦超过上限立刻抛错停止读取，内存占用被限制在 MAX_FILE_MB 以内。
 """
 import hashlib
+import re
 import os
 
 from fastapi import HTTPException, UploadFile
@@ -35,9 +36,24 @@ async def read_upload_limited(f: UploadFile, max_mb: int) -> bytes:
 MAX_ORIGINAL_NAME = 255
 
 
+# 控制字符在文件名里没有任何正当用途，且会一路污染下游：
+# xlsx 是 XML，这些字符不合法，openpyxl 直接抛 IllegalCharacterError（第 69 轮）。
+# 路径分隔符同样剔除：原名会作为下载响应的 Content-Disposition filename 下发，
+# 纯 ASCII 时 Starlette 用的是 `filename="..."` 原样形式，实测 `../../etc/passwd.txt`
+# 会被原样带进响应头——浏览器与 curl 都会自行取 basename，但"下载文件名是一个
+# 纯文件名"这个不变量本就该在源头成立，不该指望每个下载方都做防护。
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f\\/]")
+
+
+def sanitize_name(name: str | None) -> str:
+    """剔除控制字符与路径分隔符。上传入库与下载响应头共用同一套规则，
+    避免"入库时清了、下发时又冒出来"这类两头不一致。"""
+    return _CTRL_RE.sub("", name or "")
+
+
 def safe_original_name(filename: str | None, ext: str) -> str:
-    """把过长的原始文件名截断到列宽内，保留扩展名便于识别。"""
-    name = filename or f"unnamed{ext}"
+    """剔除控制字符，并把过长的原始文件名截断到列宽内，保留扩展名便于识别。"""
+    name = sanitize_name(filename) or f"unnamed{ext}"
     if len(name) <= MAX_ORIGINAL_NAME:
         return name
     keep = MAX_ORIGINAL_NAME - len(ext)

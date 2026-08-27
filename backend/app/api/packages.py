@@ -18,7 +18,7 @@ from app.core.rbac import (
 from app.core.snowflake import next_id
 from app.core.storage import save_upload, storage_guard
 from app.core.filetype import guess_mime
-from app.core.uploads import read_validated_upload
+from app.core.uploads import read_validated_upload, sanitize_name
 from app.db import get_db
 from app.models import (
     Attachment, AuditDomain, Package, PackageVersion, User,
@@ -360,9 +360,12 @@ def download_attachment(pkg_id: int, vid: int, aid: int, request: Request, previ
     # 按扩展名判定而非库里存的 mime_type：历史附件的 mime_type 来自客户端声明，
     # 一份真 PDF 若当初被声明成 text/plain，至今仍无法预览
     mime = guess_mime(os.path.splitext(att.original_name or att.file_name or "")[1])
+    # 取 basename 兜底：上传侧已剥离路径分隔符，但库里的历史记录仍可能带着
+    # `../../etc/passwd.txt` 这类原名，而它会原样进 Content-Disposition
+    dl_name = sanitize_name(os.path.basename(att.original_name or "")) or att.file_name
     if preview and mime in PREVIEW_MIME:
-        return FileResponse(path, media_type=mime, filename=att.original_name)
-    return FileResponse(path, filename=att.original_name)
+        return FileResponse(path, media_type=mime, filename=dl_name)
+    return FileResponse(path, filename=dl_name)
 
 
 # ---------- 提交 / 审核 ----------

@@ -21,6 +21,7 @@
 不会生效（实测回读为 None）。
 """
 import io
+import re
 from typing import Iterable, Sequence
 
 from openpyxl import Workbook
@@ -36,8 +37,31 @@ _HEADER_FILL = PatternFill("solid", fgColor="16263F")   # 与界面主色一致
 _HEADER_FONT = Font(color="F5F1E4", bold=True)
 
 
+# xlsx 是 XML：这些控制字符在 XML 1.0 里根本不合法，openpyxl 会直接抛
+# IllegalCharacterError。制表符(\t)、换行(\n)、回车(\r)是合法的，不要动。
+_ILLEGAL_XLSX_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def _cell_text(v) -> str:
-    return "" if v is None else str(v)
+    """单元格取值，并剔除 XML 不允许的控制字符。
+
+    **为什么必须在这里兜底**：附件原名来自用户上传,而 `safe_original_name`
+    此前只截长度、不过滤控制字符——上传一个名字里带 NUL 的文件即可入库。
+    该原名随后会进两处 xlsx：ZIP 里的交付清单,以及审计日志的 `target` 列。
+    第 69 轮实测后果：**订单 ZIP 导出 500,审计导出也 500**。
+    审计导出是全系统的合规记录,也就是说**一个用户上传的畸形文件名,
+    会让所有人的审计导出永久失效**,而错误只是一个裸 500。
+
+    替换为 U+FFFD 而不是直接删掉：交付清单列的是"附件原名",
+    静默抹掉字节会让清单与实际文件名对不上；留一个替换符至少能看出
+    这里原本有个不可打印字符。
+
+    上传侧也已同步过滤（uploads.safe_original_name），但库里已有的记录
+    只能靠这里兜住——这正是"中心化净化"必须存在的理由。
+    """
+    if v is None:
+        return ""
+    return _ILLEGAL_XLSX_RE.sub("\ufffd", str(v))
 
 
 def build_xlsx(header: Sequence[str], rows: Iterable[Sequence],
