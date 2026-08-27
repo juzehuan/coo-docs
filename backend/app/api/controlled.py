@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.constants import AuditDomain, VersionStatus
+from app.core.heavy import heavy_slot
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core.i18n import local_name, t
@@ -149,7 +150,8 @@ def controlled_area(limit: int = Query(50, ge=1, le=200), offset: int = Query(0,
 @router.get("/orders/{order_id}/packages/{op_id}/export/zip")
 def download_released_order_zip(order_id: int, op_id: int, request: Request,
                                 db: Session = Depends(get_db),
-                                user: User = Depends(controlled_access)):
+                                user: User = Depends(controlled_access),
+                                _heavy: None = Depends(heavy_slot)):
     """受控区归档下载（订单线）：打包某已放行订单实例的附件为 ZIP。"""
     op = db.get(OrderPackage, op_id)
     o = db.get(Order, order_id)
@@ -182,7 +184,8 @@ def download_released_order_zip(order_id: int, op_id: int, request: Request,
 @router.get("/{pkg_id}/versions/{vid}/export/zip")
 def download_released_zip(pkg_id: int, vid: int, request: Request,
                           db: Session = Depends(get_db),
-                          user: User = Depends(controlled_access)):
+                          user: User = Depends(controlled_access),
+                          _heavy: None = Depends(heavy_slot)):
     """受控区归档下载：打包某受控版本的已放行真实附件为 ZIP，供核查调阅/Form 28 回函。"""
     v = db.get(PackageVersion, vid)
     p = db.get(Package, pkg_id)

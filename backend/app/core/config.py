@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./data/uploads"          # 云端主存储
     NAS_ROOT: str = "./data/nas"                # 本地目录回退模式的目标（未配置 S3 时用）
     MAX_FILE_MB: int = 100
+    # 导出类重接口的并发名额（见 core/heavy.py 的压测依据）。
+    # 单进程 CPU 密集，超过约 5 个并发导出全站即对普通用户不可用。
+    MAX_CONCURRENT_EXPORT: int = 2
     ALLOWED_EXTENSIONS: str = ""                # 留空则用 constants 默认值
 
     # NAS 归档（S3 兼容接口，MinIO / 群晖 / 威联通 / 云对象存储）

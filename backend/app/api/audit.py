@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.heavy import heavy_slot
 from app.core.audit import client_ip, log_event
 from app.core.http_headers import content_disposition
 from app.core.i18n import t
@@ -105,6 +106,7 @@ def export_logs(
     end: str | None = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(audit_viewer),
+    _heavy: None = Depends(heavy_slot),
 ):
     """按与列表**完全相同**的条件导出操作日志。
 

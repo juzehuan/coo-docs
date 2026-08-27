@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
+from app.core.heavy import heavy_slot
 from app.core.audit import client_ip, log_event
 from app.core.overdue import is_overdue
 from app.core.http_headers import content_disposition
@@ -158,7 +159,8 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
 
 @router.get("/export")
 def export_archive_list(request: Request, db: Session = Depends(get_db),
-                        user: User = Depends(export_viewer)):
+                        user: User = Depends(export_viewer),
+                        _heavy: None = Depends(heavy_slot)):
     """归档清单导出（Excel）。审计查看人/COO/管理员可用。
 
     覆盖**两条线**：资料包版本与订单资料包实例。此前只导出版本线，

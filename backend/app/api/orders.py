@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
+from app.core.heavy import heavy_slot
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core import dl_ticket
@@ -542,7 +543,8 @@ def download_order_attachment(order_id: int, op_id: int, aid: int, request: Requ
 
 @router.get("/{order_id}/export")
 def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
-                 user: User = Depends(export_viewer)):
+                 user: User = Depends(export_viewer),
+                 _heavy: None = Depends(heavy_slot)):
     """按订单导出归档清单（CSV），供审计/COO/管理员核查调阅使用。"""
     o = db.get(Order, order_id)
     if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
@@ -572,7 +574,8 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
 
 @router.get("/{order_id}/export/zip")
 def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_db),
-                     user: User = Depends(export_viewer)):
+                     user: User = Depends(export_viewer),
+                     _heavy: None = Depends(heavy_slot)):
     """按订单打包全部真实附件（ZIP），供核查调阅/Form 28 回函使用。"""
     import re
 
