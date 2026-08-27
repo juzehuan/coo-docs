@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, VersionStatus
 from app.core.heavy import heavy_slot
+from app.services import export_jobs, exporter
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core import dl_ticket
@@ -545,31 +546,15 @@ def download_order_attachment(order_id: int, op_id: int, aid: int, request: Requ
 def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
                  user: User = Depends(export_viewer),
                  _heavy: None = Depends(heavy_slot)):
-    """按订单导出归档清单（CSV），供审计/COO/管理员核查调阅使用。"""
-    o = db.get(Order, order_id)
-    if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
-        raise HTTPException(status_code=404, detail="订单不存在")
-    from fastapi import Response
-    fac = db.get(Factory, o.factory_id) if o.factory_id else None
-    # 表头/状态/布尔一律按请求语言取词：这份表是交给外部核查方的，
-    # 此前表头硬编码中文、状态写枚举原值 `released`、锁定写中文"是"（第 68 轮）
-    header = [t("factory"), t("order_no"), t("pkg_code"), t("pkg_name"), t("status"),
-              t("owner"), t("attachments"), t("locked"), t("due_date")]
-    # 责任人此前填的是 19 位雪花 ID——列名写着"责任人"，内容却是一串数字，
-    # 对核查方毫无意义。改填姓名，取不到时留空而不是回退成 ID。
-    unames = {u.id: (u.display_name or u.username) for u in db.query(User).all()}
-    data = []
-    for op in sorted(o.packages, key=lambda x: x.package.code if x.package else ""):
-        pkg = op.package
-        data.append([
-            fac.code if fac else "", o.order_no, pkg.code if pkg else "",
-            local_name(pkg), status_label(op.status), unames.get(op.owner_user_id, ""),
-            str(len(op.attachments)), t("yes") if op.locked else t("no"), op.due_date,
-        ])
-    content = build_xlsx(header, data, sheet_title=t("sheet_order_list"))
-    log_event(db, AuditDomain.EXPORT, "order_export", actor=user, ip=client_ip(request), target=o.order_no)
-    return Response(content=content, media_type=XLSX_MEDIA_TYPE,
-                    headers={"Content-Disposition": content_disposition(f"order_{o.order_no}.xlsx")})
+    """按订单导出资料清单（Excel），供审计/COO/管理员核查调阅使用。"""
+    # 生成逻辑在 services/exporter.py，与异步导出作业共用同一份实现
+    try:
+        fname, path, _n = exporter.order_xlsx(db, user, {"order_id": order_id}, _visible_ids)
+    except exporter.ExportGone as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    log_event(db, AuditDomain.EXPORT, "order_export", actor=user, ip=client_ip(request),
+              target=order_id)
+    return exporter.deliver(path, XLSX_MEDIA_TYPE, fname)
 
 
 @router.get("/{order_id}/export/zip")
@@ -577,40 +562,14 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
                      user: User = Depends(export_viewer),
                      _heavy: None = Depends(heavy_slot)):
     """按订单打包全部真实附件（ZIP），供核查调阅/Form 28 回函使用。"""
-    import re
-
-    o = db.get(Order, order_id)
-    if not o or o.id not in [x.id for x in _visible_orders_q(db, user).all()]:
-        raise HTTPException(status_code=404, detail="订单不存在")
-    fac = db.get(Factory, o.factory_id) if o.factory_id else None
-    fac_code = re.sub(r"[^A-Za-z0-9_\-]", "_", fac.code) if fac else "NA"
-    safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
-
-    with zip_builder() as (zf, zpath):
-        manifest = [[t("factory"), t("order_no"), t("pkg_code"), t("file_in_zip"),
-                     t("orig_name"), t("stored_name"), t("size_bytes"), t("md5")]]
-        for op in sorted(o.packages, key=lambda x: (x.package.code if x.package else "", x.id)):
-            pkg_code = op.package.code if op.package else "NA"
-            # 同一资料包内的同名附件（如多个供应商各自的"发票.pdf"）若都用原文件名，
-            # 在 ZIP 里会生成路径完全相同的条目，解压时互相覆盖 —— 交付给核查方的
-            # 材料静默缺件，而清单仍列出全部。复用 NAS 归档的命名规则以保持一致。
-            dup = duplicate_names(op.attachments)
-            for att in op.attachments:
-                src = os.path.join(settings.UPLOAD_DIR, att.file_name)
-                if not os.path.exists(src):
-                    continue
-                # 安全化归档目录名与文件名，防路径穿越（ZIP Slip）
-                safe_code = re.sub(r"[^A-Za-z0-9_\-\u4e00-\u9fff]", "_", pkg_code)
-                safe_name = archive_name(att, dup)
-                arc = f"{fac_code}/{safe_order}/{safe_code}/{safe_name}"
-                zf.write(src, arc, compress_type=compression_for(safe_name))
-                manifest.append([fac_code, o.order_no, pkg_code, safe_name, att.original_name,
-                                 att.file_name, str(att.file_size), att.md5 or ""])
-        # 交付给核查方的清单同样用 Excel：MD5 与订单号是纯数字/长串时，
-        # CSV 会被 Excel 改写成科学计数法，清单便与实际文件对不上
-        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
-    log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request), target=o.order_no)
-    return zip_response(zpath, content_disposition(f"order_{o.order_no}_archive.zip"))
+    # 生成逻辑在 services/exporter.py，与异步导出作业共用同一份实现
+    try:
+        fname, path, _n = exporter.order_zip(db, user, {"order_id": order_id}, _visible_ids)
+    except exporter.ExportGone as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request),
+              target=order_id)
+    return zip_response(path, content_disposition(fname))
 
 
 # ---------- 工具 ----------
@@ -653,3 +612,29 @@ def _reset_status_on_edit(op: OrderPackage):
         op.status = VersionStatus.PENDING_DEPT
         op.dept_reject_reason = ""
         op.coo_reject_reason = ""
+
+
+def _visible_ids(db: Session, user: User) -> set:
+    """当前用户可见的订单 ID 集合。可见性规则只此一处，导出生成器由此获取。"""
+    return {x.id for x in _visible_orders_q(db, user).all()}
+
+
+# ---- 注册为异步导出作业类型（说明见 api/audit.py 末尾）----
+def _order_xlsx_job(db, user, params):
+    return exporter.order_xlsx(db, user, params, _visible_ids)
+
+
+def _order_zip_job(db, user, params):
+    return exporter.order_zip(db, user, params, _visible_ids)
+
+
+def _order_job_check(db, user, params):
+    """与同步端点同一套：先过 export_viewer，再确认这张订单对他可见。"""
+    export_viewer(user)
+    oid = int(params.get("order_id") or 0)
+    if oid not in _visible_ids(db, user):
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+
+export_jobs.register("order_xlsx", _order_xlsx_job, _order_job_check)
+export_jobs.register("order_zip", _order_zip_job, _order_job_check)

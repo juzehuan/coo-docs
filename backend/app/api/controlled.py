@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import AuditDomain, VersionStatus
 from app.core.heavy import heavy_slot
+from app.services import export_jobs, exporter
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core.i18n import local_name, t
@@ -153,32 +154,14 @@ def download_released_order_zip(order_id: int, op_id: int, request: Request,
                                 user: User = Depends(controlled_access),
                                 _heavy: None = Depends(heavy_slot)):
     """受控区归档下载（订单线）：打包某已放行订单实例的附件为 ZIP。"""
-    op = db.get(OrderPackage, op_id)
+    # 生成逻辑在 services/exporter.py，与异步导出作业共用同一份实现
+    fname, path, _n = exporter.controlled_order_zip(
+        db, user, {"order_id": order_id, "op_id": op_id}, _check_order)
     o = db.get(Order, order_id)
-    if not op or not o or op.order_id != o.id or op.status != VersionStatus.RELEASED or not op.locked:
-        raise HTTPException(status_code=404, detail="受控内容不存在")
-    if op.package_id not in _visible_pkg_ids(db, user) or o.factory_id not in _visible_factory_ids(db, user):
-        raise HTTPException(status_code=404, detail="受控内容不存在")
-    p = db.get(Package, op.package_id)
-
-    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", (p.code if p else "pkg") or "pkg")
-    safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
-    with zip_builder() as (zf, zpath):
-        manifest = [[t("package"), t("order_no"), t("file_in_zip"), t("orig_name"),
-                     t("stored_name"), t("size_bytes"), t("md5")]]
-        dup = duplicate_names(op.attachments)
-        for att in op.attachments:
-            src = os.path.join(settings.UPLOAD_DIR, att.file_name)
-            if not os.path.exists(src):
-                continue
-            safe_name = archive_name(att, dup)
-            zf.write(src, f"{safe_code}/{safe_order}/{safe_name}", compress_type=compression_for(safe_name))
-            manifest.append([p.code if p else "", o.order_no, safe_name, att.original_name,
-                             att.file_name, str(att.file_size), att.md5 or ""])
-        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
+    p = db.get(Package, db.get(OrderPackage, op_id).package_id)
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code if p else ''}/{o.order_no}")
-    return zip_response(zpath, content_disposition(f"controlled_{safe_code}_{safe_order}.zip"))
+    return zip_response(path, content_disposition(fname))
 
 
 @router.get("/{pkg_id}/versions/{vid}/export/zip")
@@ -187,31 +170,63 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
                           user: User = Depends(controlled_access),
                           _heavy: None = Depends(heavy_slot)):
     """受控区归档下载：打包某受控版本的已放行真实附件为 ZIP，供核查调阅/Form 28 回函。"""
+    # 生成逻辑在 services/exporter.py，与异步导出作业共用同一份实现
+    fname, path, _n = exporter.controlled_version_zip(
+        db, user, {"pkg_id": pkg_id, "version_id": vid}, _check_version)
+    p = db.get(Package, pkg_id)
     v = db.get(PackageVersion, vid)
+    log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
+              ip=client_ip(request), target=f"{p.code}/{v.version_no}")
+    return zip_response(path, content_disposition(fname))
+
+
+def _check_order(db: Session, user: User, params: dict):
+    """受控区订单线的可见性与受控状态判定。同步端点与作业共用同一套规则。"""
+    op = db.get(OrderPackage, int(params.get("op_id") or 0))
+    o = db.get(Order, int(params.get("order_id") or 0))
+    if (not op or not o or op.order_id != o.id
+            or op.status != VersionStatus.RELEASED or not op.locked):
+        raise HTTPException(status_code=404, detail="受控内容不存在")
+    if (op.package_id not in _visible_pkg_ids(db, user)
+            or o.factory_id not in _visible_factory_ids(db, user)):
+        raise HTTPException(status_code=404, detail="受控内容不存在")
+    return o, op, db.get(Package, op.package_id)
+
+
+def _check_version(db: Session, user: User, params: dict):
+    """受控区版本线的可见性与受控状态判定。"""
+    v = db.get(PackageVersion, int(params.get("version_id") or 0))
+    pkg_id = int(params.get("pkg_id") or 0)
     p = db.get(Package, pkg_id)
     if not v or v.package_id != pkg_id or v.status != VersionStatus.RELEASED:
         raise HTTPException(status_code=404, detail="受控版本不存在")
     if not p or p.id not in _visible_pkg_ids(db, user):
         raise HTTPException(status_code=404, detail="受控版本不存在")
+    return p, v
 
-    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code or "pkg")
-    with zip_builder() as (zf, zpath):
-        manifest = [[t("package"), t("version"), t("file_in_zip"), t("orig_name"),
-                     t("stored_name"), t("size_bytes"), t("md5")]]
-        # 同名附件若都用原文件名会在 ZIP 内生成同路径条目、解压时互相覆盖，
-        # 导致交付给核查方的材料静默缺件；复用 NAS 归档命名规则保持三处一致。
-        dup = duplicate_names(v.attachments)
-        for att in v.attachments:
-            src = os.path.join(settings.UPLOAD_DIR, att.file_name)
-            if not os.path.exists(src):
-                continue
-            safe_name = archive_name(att, dup)
-            arc = f"{safe_code}/{v.version_no}/{safe_name}"
-            zf.write(src, arc, compress_type=compression_for(safe_name))
-            manifest.append([p.code, v.version_no, safe_name, att.original_name, att.file_name,
-                             str(att.file_size), att.md5 or ""])
-        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
-    log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
-              ip=client_ip(request), target=f"{p.code}/{v.version_no}")
-    return zip_response(zpath, content_disposition(f"controlled_{p.code}_{v.version_no}.zip")
-    )
+
+# ---- 注册为异步导出作业类型（说明见 api/audit.py 末尾）----
+def _co_zip_job(db, user, params):
+    return exporter.controlled_order_zip(db, user, params, _check_order)
+
+
+def _cv_zip_job(db, user, params):
+    return exporter.controlled_version_zip(db, user, params, _check_version)
+
+
+# 直接用本模块的 controlled_access（它就定义在上面），不要在函数内延迟导入：
+# 延迟导入的错误**预检看不见**——preflight.sh 只做模块导入，函数体内的 import
+# 要到真正调用时才炸。第一版写成从 app.core.rbac 导入（那里根本没有这个名字），
+# 预检通过、部署上去、提交作业时才 500。
+def _co_check(db, user, params):
+    controlled_access(user)
+    _check_order(db, user, params)
+
+
+def _cv_check(db, user, params):
+    controlled_access(user)
+    _check_version(db, user, params)
+
+
+export_jobs.register("controlled_order_zip", _co_zip_job, _co_check)
+export_jobs.register("controlled_version_zip", _cv_zip_job, _cv_check)

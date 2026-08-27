@@ -180,8 +180,7 @@ def _archive_job(db, user, params):
 
 
 def _archive_job_check(db, user, params):
-    from app.core.rbac import export_viewer as _ev
-    _ev(user)
+    export_viewer(user)
 
 
 export_jobs.register("archive_xlsx", _archive_job, _archive_job_check)

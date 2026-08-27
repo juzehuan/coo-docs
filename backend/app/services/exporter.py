@@ -140,3 +140,141 @@ def archive_xlsx(db: Session, user: User, params: dict) -> tuple[str, str, int]:
                      f"{synced}/{len(op.attachments)}"])
     content = build_xlsx(header, data, sheet_title=t("sheet_archive_list"))
     return "archive_list.xlsx", _write(_tmp_path(".xlsx"), content), len(data)
+
+class ExportGone(Exception):
+    """导出目标已不存在（如订单在作业排队期间被删）。调用方翻译为 404 或作业失败原因。"""
+
+
+def order_xlsx(db: Session, user: User, params: dict, visible_ids) -> tuple[str, str, int]:
+    """按订单导出资料清单（Excel）。
+
+    `visible_ids(db, user)` 由调用方提供可见订单 ID 集合——可见性规则留在
+    api/orders.py，这里不复制一份（第 72 轮：同一份判定复制多份必然跑偏）。
+    """
+    from app.models import Factory
+    order_id = int(params.get("order_id") or 0)
+    o = db.get(Order, order_id)
+    if not o or o.id not in visible_ids(db, user):
+        raise ExportGone("订单不存在或已被删除")
+    fac = db.get(Factory, o.factory_id) if o.factory_id else None
+    header = [t("factory"), t("order_no"), t("pkg_code"), t("pkg_name"), t("status"),
+              t("owner"), t("attachments"), t("locked"), t("due_date")]
+    unames = {u.id: (u.display_name or u.username) for u in db.query(User).all()}
+    data = []
+    for op in sorted(o.packages, key=lambda x: x.package.code if x.package else ""):
+        pkg = op.package
+        data.append([
+            fac.code if fac else "", o.order_no, pkg.code if pkg else "",
+            local_name(pkg), status_label(op.status), unames.get(op.owner_user_id, ""),
+            str(len(op.attachments)), t("yes") if op.locked else t("no"), op.due_date,
+        ])
+    content = build_xlsx(header, data, sheet_title=t("sheet_order_list"))
+    return f"order_{o.order_no}.xlsx", _write(_tmp_path(".xlsx"), content), len(data)
+
+
+def order_zip(db: Session, user: User, params: dict, visible_ids) -> tuple[str, str, int]:
+    """按订单打包全部真实附件（ZIP），供核查调阅 / Form 28 回函使用。"""
+    import re
+
+    from app.core.zipout import compression_for, zip_builder
+    from app.models import Factory
+    from app.services.nas_sync import archive_name, duplicate_names
+
+    order_id = int(params.get("order_id") or 0)
+    o = db.get(Order, order_id)
+    if not o or o.id not in visible_ids(db, user):
+        raise ExportGone("订单不存在或已被删除")
+    fac = db.get(Factory, o.factory_id) if o.factory_id else None
+    fac_code = re.sub(r"[^A-Za-z0-9_\-]", "_", fac.code) if fac else "NA"
+    safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
+
+    n = 0
+    with zip_builder() as (zf, zpath):
+        manifest = [[t("factory"), t("order_no"), t("pkg_code"), t("file_in_zip"),
+                     t("orig_name"), t("stored_name"), t("size_bytes"), t("md5")]]
+        for op in sorted(o.packages, key=lambda x: (x.package.code if x.package else "", x.id)):
+            pkg_code = op.package.code if op.package else "NA"
+            # 同一资料包内的同名附件（如多个供应商各自的"发票.pdf"）若都用原文件名，
+            # 在 ZIP 里会生成路径完全相同的条目，解压时互相覆盖——交付给核查方的
+            # 材料静默缺件，而清单仍列出全部。复用 NAS 归档的命名规则以保持一致。
+            dup = duplicate_names(op.attachments)
+            for att in op.attachments:
+                src = os.path.join(settings.UPLOAD_DIR, att.file_name)
+                if not os.path.exists(src):
+                    continue
+                # 安全化归档目录名与文件名，防路径穿越（ZIP Slip）
+                safe_code = re.sub(r"[^A-Za-z0-9_\-\u4e00-\u9fff]", "_", pkg_code)
+                safe_name = archive_name(att, dup)
+                zf.write(src, f"{fac_code}/{safe_order}/{safe_code}/{safe_name}",
+                         compress_type=compression_for(safe_name))
+                manifest.append([fac_code, o.order_no, pkg_code, safe_name, att.original_name,
+                                 att.file_name, str(att.file_size), att.md5 or ""])
+                n += 1
+        # 交付给核查方的清单同样用 Excel：MD5 与订单号是纯数字/长串时，
+        # CSV 会被 Excel 改写成科学计数法，清单便与实际文件对不上
+        zf.writestr("_manifest.xlsx",
+                    build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
+    return f"order_{o.order_no}_archive.zip", zpath, n
+
+def _zip_attachments(zf, atts, arc_prefix: str, manifest, row_fn) -> int:
+    """把一批附件写进 ZIP 并追加清单行。三处 ZIP 导出共用，避免各写一遍。
+
+    同名附件若都用原文件名，会在 ZIP 内生成同路径条目、解压时互相覆盖，
+    交付给核查方的材料静默缺件而清单仍列出全部；复用 NAS 归档的命名规则
+    (`archive_name`) 保持三处一致。路径同时做安全化，防 ZIP Slip。
+    """
+    from app.core.zipout import compression_for
+    from app.services.nas_sync import archive_name, duplicate_names
+
+    dup = duplicate_names(atts)
+    n = 0
+    for att in atts:
+        src = os.path.join(settings.UPLOAD_DIR, att.file_name)
+        if not os.path.exists(src):
+            continue
+        safe_name = archive_name(att, dup)
+        zf.write(src, f"{arc_prefix}/{safe_name}", compress_type=compression_for(safe_name))
+        manifest.append(row_fn(att, safe_name))
+        n += 1
+    return n
+
+
+def controlled_order_zip(db: Session, user: User, params: dict, check) -> tuple[str, str, int]:
+    """受控区归档下载（订单线）：打包某已放行订单实例的附件。"""
+    import re
+
+    from app.core.zipout import zip_builder
+
+    o, op, p = check(db, user, params)          # 可见性与受控状态判定留在 api 层
+    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", (p.code if p else "pkg") or "pkg")
+    safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
+    with zip_builder() as (zf, zpath):
+        manifest = [[t("package"), t("order_no"), t("file_in_zip"), t("orig_name"),
+                     t("stored_name"), t("size_bytes"), t("md5")]]
+        n = _zip_attachments(
+            zf, op.attachments, f"{safe_code}/{safe_order}", manifest,
+            lambda att, sn: [p.code if p else "", o.order_no, sn, att.original_name,
+                             att.file_name, str(att.file_size), att.md5 or ""])
+        zf.writestr("_manifest.xlsx",
+                    build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
+    return f"controlled_{safe_code}_{safe_order}.zip", zpath, n
+
+
+def controlled_version_zip(db: Session, user: User, params: dict, check) -> tuple[str, str, int]:
+    """受控区归档下载（版本线）：打包某受控版本的已放行附件。"""
+    import re
+
+    from app.core.zipout import zip_builder
+
+    p, v = check(db, user, params)
+    safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code or "pkg")
+    with zip_builder() as (zf, zpath):
+        manifest = [[t("package"), t("version"), t("file_in_zip"), t("orig_name"),
+                     t("stored_name"), t("size_bytes"), t("md5")]]
+        n = _zip_attachments(
+            zf, v.attachments, f"{safe_code}/{v.version_no}", manifest,
+            lambda att, sn: [p.code, v.version_no, sn, att.original_name, att.file_name,
+                             str(att.file_size), att.md5 or ""])
+        zf.writestr("_manifest.xlsx",
+                    build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
+    return f"controlled_{safe_code}_{v.version_no}.zip", zpath, n

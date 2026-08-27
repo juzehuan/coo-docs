@@ -146,8 +146,7 @@ def _audit_job(db, user, params):
 
 def _audit_job_check(db, user, params):
     """与同步端点的 audit_viewer 同一规则。"""
-    from app.core.rbac import audit_viewer as _av
-    _av(user)
+    audit_viewer(user)
 
 
 export_jobs.register("audit_xlsx", _audit_job, _audit_job_check)
