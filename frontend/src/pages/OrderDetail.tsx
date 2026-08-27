@@ -199,7 +199,9 @@ export default function OrderDetail() {
 
   useEffect(() => {
     load()
-    pkgApi.list().then((p) => setTemplates(p)).catch(() => setTemplates([]))
+    // 用 catalog 而不是 list：list 对提交人只返回他名下的资料包，导致「添加资料包」
+    // 下拉是空的，提交人建完订单就走不下去了（后端 add_package_to_order 本就允许）
+    pkgApi.catalog().then((p) => setTemplates(p)).catch(() => setTemplates([]))
   }, [load])
 
   if (loading) return <Card variant="borderless" loading />

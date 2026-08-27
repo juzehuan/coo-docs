@@ -98,6 +98,8 @@ export const org = {
 // ---------- 资料包 / 版本 / 附件 ----------
 export const packages = {
   list: () => get<PackageRow[]>('/packages'),
+  /** 全局资料包目录：订单线「添加资料包」用，不按负责人过滤（管理页的 list 会过滤） */
+  catalog: () => get<Package[]>('/packages', { catalog: true }),
   detail: (id: string) => get<PackageDetailResp>(`/packages/${id}`),
   create: (data: Partial<Package>) => post<Package>('/packages', data),
   update: (id: string, data: Partial<Package>) => patch<Package>(`/packages/${id}`, data),

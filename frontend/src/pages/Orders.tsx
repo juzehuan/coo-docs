@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, Form, Input, InputNumber, Modal, Progress, Select, Space, Table } from 'antd'
+import { App, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Progress, Select, Space, Table } from 'antd'
+import dayjs from 'dayjs'
+import type { Dayjs } from 'dayjs'
 import { DownloadOutlined, EyeOutlined, FileZipOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { factories, orders } from '@/api/endpoints'
@@ -131,7 +133,17 @@ export default function Orders() {
           <Form.Item name="customer" label={t('customer')}><Input /></Form.Item>
           <Form.Item name="product" label={t('product')}><Input /></Form.Item>
           <Form.Item name="quantity" label={t('quantity')}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
-          <Form.Item name="export_date" label={t('export_date')}><Input placeholder="2026-10-15" /></Form.Item>
+          <Form.Item name="export_date" label={t('export_date')}
+            /* 与资料包截止日期、订单资料包截止日期用同一套：此前这里是纯 Input，
+               任何文本都能存进去（后端 export_date 就是 32 字符的宽松文本），
+               `01/15/2020` 这类美式写法会原样存下并原样显示回来，看着像是设好了。
+               getValueProps/normalize 让表单值仍是 'YYYY-MM-DD' 字符串，后端无需改动。 */
+            getValueProps={(v) => ({ value: v && dayjs(v).isValid() ? dayjs(v) : null })}
+            normalize={(v) => (v ? (v as Dayjs).format('YYYY-MM-DD') : '')}>
+            {/* inputReadOnly：只允许从日历选。antd 的 DatePicker 对无法解析的手输文本
+                会静默丢弃——输入框里还显示着它，提交的却是空串。 */}
+            <DatePicker style={{ width: '100%' }} placeholder="2026-10-15" inputReadOnly />
+          </Form.Item>
         <SubmitOnEnter /></Form>
       </Modal>
     </>

@@ -57,7 +57,26 @@ def _lock_version(db: Session, vid: int) -> PackageVersion | None:
 
 
 @router.get("", response_model=list[dict])
-def list_packages(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def list_packages(catalog: bool = False, db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)):
+    """catalog=true 返回**全局资料包目录**（不按负责人过滤），供订单线的「添加资料包」选择器使用。
+
+    为什么必须分开：`_visible_packages` 对提交人只返回 `owner_user_id == 自己` 的资料包，
+    这对「资料包」管理页是对的（那条线按责任人分工）；但订单线的模板选择器复用了同一个
+    接口，于是提交人打开「添加资料包」是空的——而 `orders.add_package_to_order` 明明
+    只校验订单权限、不校验资料包归属，甚至专门把 `owner_user_id` 默认成提交人自己。
+    也就是**后端允许的操作，界面根本给不出选项**，整条「建订单 → 加资料包 → 传附件」
+    对提交人是断的（实测：18 个资料包全部挂在部门经理名下，3 个提交人各自可见 0 个）。
+
+    目录本身不是证据，只是 18 类 COO 档案的编号与名称，提交人在自己参与的订单里本来就看得到。
+    """
+    if catalog:
+        # 只给启用中的模板：已停用的资料包不该再被加进新订单
+        pkgs = (db.query(Package)
+                .filter(Package.status == "active")
+                .order_by(Package.sort_order, Package.code)
+                .all())
+        return [PackageOut.model_validate(p).model_dump() for p in pkgs]
     pkgs = _visible_packages(db, user)
     result = []
     for p in pkgs:
