@@ -89,6 +89,12 @@ def create_app() -> FastAPI:
     @app.exception_handler(IntegrityError)
     def _integrity_error(request, exc: IntegrityError):
         raw = str(getattr(exc, "orig", None) or exc)
+        # 外键失败（MySQL 1452）与唯一冲突（1062）是两回事：第 97 轮实测
+        # owner_user_id=-1 被报成"已存在相同的记录"，用户会去找根本不存在的重复项
+        if "1452" in raw or "foreign key constraint fails" in raw.lower():
+            logging.getLogger("app").warning("外键约束失败 %s: %s", request.url.path, raw)
+            return SafeIntJSONResponse(status_code=400, content={
+                "detail": "所引用的记录不存在或已被删除（如负责人、工厂、部门），请刷新后重新选择"})
         logging.getLogger("app").warning("唯一约束冲突 %s: %s", request.url.path, raw)
         m = re.search(r"for key '([^']+)'", raw)
         key = (m.group(1) if m else "").lower()

@@ -168,7 +168,7 @@ class FactoryCreate(BaseModel):
     name_zh: Stripped = Field(min_length=1, max_length=128)
     name_en: Stripped = Field("", max_length=128)
     name_th: Stripped = Field("", max_length=128)
-    sort_order: int = 0
+    sort_order: int = Field(0, ge=0, le=2**31 - 1)
 
 
 class FactoryUpdate(BaseModel):
@@ -176,7 +176,7 @@ class FactoryUpdate(BaseModel):
     name_en: Optional[Stripped] = Field(None, max_length=128)
     name_th: Optional[Stripped] = Field(None, max_length=128)
     status: Optional[Stripped] = Field(None, max_length=16)
-    sort_order: Optional[int] = None
+    sort_order: Optional[int] = Field(None, ge=0, le=2**31 - 1)
 
 
 class FactoryOut(BaseModel):
@@ -197,7 +197,8 @@ class OrderCreate(BaseModel):
     order_no: Stripped = Field(min_length=1, max_length=64)
     customer: Stripped = Field("", max_length=255)
     product: Stripped = Field("", max_length=255)
-    quantity: int = 0
+    # 数量不能为负；上限取 INT 列范围，超出会被 DataError 处理器挡成 400 但提示不具体（第 97 轮）
+    quantity: int = Field(0, ge=0, le=2**31 - 1)
     export_date: DueDate = Field("", max_length=32)
     status: Stripped = Field("active", max_length=16)
     note: Stripped = ""
@@ -213,7 +214,7 @@ class OrderUpdate(BaseModel):
     factory_id: Optional[int] = None
     customer: Optional[Stripped] = Field(None, max_length=255)
     product: Optional[Stripped] = Field(None, max_length=255)
-    quantity: Optional[int] = None
+    quantity: Optional[int] = Field(None, ge=0, le=2**31 - 1)
     # 出口日期与截止日期同构（第 62 轮）：不校验就会存进"明年"这类文本。
     # 它目前只用于展示，但导出清单是交给核查方的，日期写法必须可解析、统一为 ISO
     export_date: Optional[DueDate] = Field(None, max_length=32)
