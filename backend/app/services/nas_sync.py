@@ -222,6 +222,9 @@ class _LocalBackend:
         # 清单同样原子替换：否则改写期间核查方可能读到被截断的半截清单
         _atomic_write_text(os.path.join(base, "manifest.txt"), "\n".join(lines) + "\n")
 
+    def target_exists(self, target: str) -> bool:
+        return os.path.exists(target)
+
     def manifest_exists(self, base: str) -> bool:
         return os.path.exists(os.path.join(base, "manifest.txt"))
 
@@ -263,6 +266,9 @@ class _S3Backend:
 
     def write_manifest(self, base: str, lines: list[str]) -> None:
         s3.put_bytes(self.cli, f"{base}/manifest.txt", ("\n".join(lines) + "\n").encode("utf-8"))
+
+    def target_exists(self, target: str) -> bool:
+        return bool(s3.head(self.cli, target))
 
     def manifest_exists(self, base: str) -> bool:
         return bool(s3.head(self.cli, f"{base}/manifest.txt"))
@@ -443,6 +449,41 @@ def _run_sync_locked(db: Session, run_type: str, triggered_by: int | None) -> Sy
         except Exception as e:  # noqa: BLE001
             failures.append({"attachment_id": att.id, "reason": str(e)})
 
+    # ---- 引用型实例：把被引用版本的文件放进订单目录 ----
+    # 公司级资料包加进订单时不重传附件、只引用资料包线的已放行版本（OrderPackage.
+    # source_version_id），因此这类实例在 attachments 表里没有自己的行，上面按
+    # 待同步附件驱动的循环永远碰不到它。第 85 轮实测：ZIP 交付物里有公司级材料，
+    # NAS 订单目录里却一个都没有——两份交付物不一致，而核查方就在 NAS 的订单目录里
+    # 按票调阅（手册 §7.3 承诺的正是 `…/{订单号}/文件`）。
+    # 这里按"目录里有没有"判定、缺则补（再上传一次源文件，走同一套校验），
+    # 而不是另加一个同步标记：文件本身就是真相，标记会和它脱节。
+    ref_ops = (db.query(OrderPackage)
+               .filter(OrderPackage.source_version_id.isnot(None),
+                       OrderPackage.status == "released",     # 本文件一律用字符串，未导入 VersionStatus
+                       OrderPackage.locked.is_(True)).all())
+    for op in ref_ops:
+        try:
+            o = db.get(Order, op.order_id)
+            pkg = db.get(Package, op.package_id)
+            src_ver = db.get(PackageVersion, op.source_version_id)
+            if not o or not pkg or not src_ver:
+                continue
+            dup = duplicate_names(src_ver.attachments)
+            for att in src_ver.attachments:
+                target = backend.order_target(att, op, pkg, o.order_no, archive_name(att, dup))
+                if backend.target_exists(target):
+                    continue
+                src = os.path.join(settings.UPLOAD_DIR, att.file_name)
+                if not os.path.exists(src) or file_sha256(src) != os.path.splitext(att.file_name)[0]:
+                    failures.append({"attachment_id": att.id,
+                                     "reason": f"引用型实例 {o.order_no}/{pkg.code}：源文件缺失或内容不符，未推送"})
+                    continue
+                if not backend.sync_one(target, src, att):
+                    failures.append({"attachment_id": att.id,
+                                     "reason": f"引用型实例 {o.order_no}/{pkg.code}：上传或校验不一致"})
+        except Exception as e:  # noqa: BLE001
+            failures.append({"attachment_id": op.id, "reason": f"引用型实例处理失败：{e}"})
+
     rec.success = success
     rec.failed = len(failures)
     rec.status = "success" if rec.failed == 0 else ("partial" if success else "failed")
@@ -520,11 +561,20 @@ def _write_manifests(db: Session, backend):
         if not o or not pkg:
             continue
         base = backend.order_base(op, pkg, o.order_no)
-        archived = [a for a in op.attachments if a.nas_synced]
+        if op.is_referenced and op.source_version is not None:
+            # 引用型：清单只列**订单目录里确实存在**的文件（与上面同步段的判定一致），
+            # 否则会出现"清单列着文件、目录里却没有"，storage_check --check-nas 也会报缺
+            src_atts = list(op.source_version.attachments)
+            dup = duplicate_names(src_atts)
+            archived = [a for a in src_atts
+                        if backend.target_exists(
+                            backend.order_target(a, op, pkg, o.order_no, archive_name(a, dup)))]
+        else:
+            archived = [a for a in op.attachments if a.nas_synced]
+            dup = duplicate_names(op.attachments)
         if not archived:
             _blank_manifest(backend, base, f"# {pkg.code} {pkg.name_zh} {o.order_no}")
             continue
-        dup = duplicate_names(op.attachments)
         lines = [f"# {pkg.code} {pkg.name_zh} {o.order_no}",
                  f"# generated {time_now()}",
                  "# 归档文件名\t字节数\tMD5\t上传原名"]

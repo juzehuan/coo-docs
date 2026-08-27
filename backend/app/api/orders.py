@@ -102,6 +102,20 @@ def _op_out(op: OrderPackage, db: Session | None = None, user: User | None = Non
     return out
 
 
+def _att_readable_via(op: OrderPackage, att) -> bool:
+    """附件能否经这个订单实例被**读取**（下载/预览/换票据）。
+
+    自有附件当然可以；引用型实例（公司级资料包，见 OrderPackage.source_version_id）
+    的附件属于资料包线的已放行版本，也应当可以——订单详情本就把它们列了出来。
+    第 85 轮实测：详情显示 3 个附件，点下载/预览/换票据却全部 404，因为三处都只认
+    `att.order_package_id == op.id`。
+    只放宽"读"：删除仍必须是自有附件，否则等于经订单路径删掉资料包线的已放行证据。
+    """
+    if att.order_package_id == op.id:
+        return True
+    return op.source_version_id is not None and att.version_id == op.source_version_id
+
+
 def _reject_if_referenced(op: OrderPackage) -> None:
     """引用型实例不接受任何内容改动。
 
@@ -229,8 +243,11 @@ def delete_order(order_id: int, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=403, detail="仅责任人/管理员可删除订单")
     # 保护已放行归档：单独移除已放行实例已被拒绝，但删除整个订单会经 cascade
     # 连带销毁其下已终审放行且锁定的实例与附件，绕开"已放行不可删除、历史永久留存"的约束。
+    # 引用型实例（公司级资料包）不算：它不持有任何自有证据，只是指向资料包线的
+    # 已放行版本，删掉订单只是解除引用。第 85 轮实测：加一个公司级资料包后，
+    # 这张订单就再也删不掉了（400「含已放行归档实例」），而它根本没有证据可保。
     locked = [op for op in o.packages
-              if op.locked or op.status == VersionStatus.RELEASED]
+              if (op.locked or op.status == VersionStatus.RELEASED) and not op.is_referenced]
     if locked:
         raise HTTPException(
             status_code=400,
@@ -574,7 +591,7 @@ def issue_order_download_ticket(order_id: int, op_id: int, aid: int,
     """签发下载票据（先走常规权限判定，通过后才发）。"""
     o, op = _get_op(db, order_id, op_id, user)
     att = db.get(Attachment, aid)
-    if not att or att.order_package_id != op.id:
+    if not att or not _att_readable_via(op, att):
         raise HTTPException(status_code=404, detail="附件不存在")
     return {"ticket": dl_ticket.issue(aid, user.id), "expires_in": dl_ticket.TICKET_TTL_SECONDS}
 
@@ -589,7 +606,7 @@ def download_order_attachment(order_id: int, op_id: int, aid: int, request: Requ
         raise HTTPException(status_code=401, detail="无效或过期的凭证")
     o, op = _get_op(db, order_id, op_id, user)
     att = db.get(Attachment, aid)
-    if not att or att.order_package_id != op.id:
+    if not att or not _att_readable_via(op, att):
         raise HTTPException(status_code=404, detail="附件不存在")
     path = os.path.join(settings.UPLOAD_DIR, att.file_name)
     if not os.path.exists(path):
