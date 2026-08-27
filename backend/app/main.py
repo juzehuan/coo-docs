@@ -14,7 +14,7 @@ from app.core.ratelimit import RateLimitMiddleware
 from app.core.reqlog import RequestLogMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.db import SessionLocal, engine, init_db
-from app.api import audit, auth, controlled, dashboard, factories, nas, notifications, orders, org, packages, todo
+from app.api import audit, auth, controlled, dashboard, exports, factories, nas, notifications, orders, org, packages, todo
 
 
 def _setup_logging() -> None:
@@ -130,7 +130,7 @@ def create_app() -> FastAPI:
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.NAS_ROOT, exist_ok=True)
 
-    for m in (auth, org, packages, orders, factories, dashboard, audit, nas, controlled, todo, notifications):
+    for m in (auth, org, packages, orders, factories, dashboard, audit, nas, controlled, todo, notifications, exports):
         app.include_router(m.router, prefix=settings.API_PREFIX)
 
     @app.get("/health")
@@ -172,6 +172,10 @@ def create_app() -> FastAPI:
         # 每日定时自动同步 NAS（此前 NAS_SYNC_TIME 无调度器引用，auto 同步从不执行）
         from app.services.scheduler import start_nas_sync_scheduler
         start_nas_sync_scheduler()
+        # 异步导出作业 worker。放在路由注册之后启动，确保各 api 模块已把
+        # 自己的导出类型注册进来（注册发生在模块导入时）。
+        from app.services.export_jobs import start_worker
+        start_worker()
 
     return app
 

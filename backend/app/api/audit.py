@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.heavy import heavy_slot
-from app.services import exporter
+from app.services import export_jobs, exporter
 from app.core.audit import client_ip, log_event
 from app.core.http_headers import content_disposition
 from app.core.i18n import t
@@ -130,3 +130,24 @@ def export_logs(
     log_event(db, AuditDomain.EXPORT, "audit_xlsx", actor=user, ip=client_ip(request),
               detail=f"rows={n}" + (f",{cond}" if cond else ",无筛选条件"))
     return exporter.deliver(path, XLSX_MEDIA_TYPE, fname)
+
+
+# ---- 注册为异步导出作业的一种类型 ----
+# 注册放在 api 层：依赖方向保持 api → services，不制造循环导入。
+# 生成器与同步端点调用的是**同一个** exporter.audit_xlsx，筛选也复用同一个
+# _apply_filters——否则同步导出与异步导出会给出不一样的文件。
+def _audit_job(db, user, params):
+    return exporter.audit_xlsx(
+        db, user, params,
+        lambda q: _apply_filters(q, params.get("actor_id"), params.get("actor"),
+                                 params.get("target"), params.get("domain"),
+                                 params.get("start"), params.get("end")))
+
+
+def _audit_job_check(db, user, params):
+    """与同步端点的 audit_viewer 同一规则。"""
+    from app.core.rbac import audit_viewer as _av
+    _av(user)
+
+
+export_jobs.register("audit_xlsx", _audit_job, _audit_job_check)

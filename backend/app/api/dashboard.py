@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
 from app.core.heavy import heavy_slot
-from app.services import exporter
+from app.services import export_jobs, exporter
 from app.core.audit import client_ip, log_event
 from app.core.overdue import is_overdue
 from app.core.http_headers import content_disposition
@@ -172,3 +172,16 @@ def export_archive_list(request: Request, db: Session = Depends(get_db),
     fname, path, n = exporter.archive_xlsx(db, user, {})
     log_event(db, AuditDomain.EXPORT, "archive_xlsx", actor=user, ip=client_ip(request))
     return exporter.deliver(path, XLSX_MEDIA_TYPE, fname)
+
+
+# ---- 注册为异步导出作业的一种类型（说明见 api/audit.py 末尾）----
+def _archive_job(db, user, params):
+    return exporter.archive_xlsx(db, user, params)
+
+
+def _archive_job_check(db, user, params):
+    from app.core.rbac import export_viewer as _ev
+    _ev(user)
+
+
+export_jobs.register("archive_xlsx", _archive_job, _archive_job_check)
