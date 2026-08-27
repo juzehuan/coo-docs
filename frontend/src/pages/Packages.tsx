@@ -13,8 +13,8 @@ import { STATUS_LABELS } from '@/i18n/messages'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
-import RowActions from '@/components/RowActions'
-import { ELLIPSIS } from '@/utils/table'
+import RowActions, { ActionButton } from '@/components/RowActions'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import type { Department, Lang, Package, PackageRow, User } from '@/types'
 
 // 可筛选的资料包当前状态（与后端 current_status 取值一致）
@@ -67,8 +67,8 @@ export default function Packages() {
     return true
   })
 
-  // 操作列固定在右侧，宽度随可见按钮数变化
-  const actWidth = isAdmin ? 184 : 100
+  // 操作列固定在右侧，宽度按实际按钮数算
+  const actWidth = actionWidth(isAdmin ? 2 : 1)
 
   const deptLabel = (id: string | null) => {
     const d = depts.find((x) => x.id === id)
@@ -133,8 +133,8 @@ export default function Packages() {
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
           { title: t('actions'), key: 'act', width: actWidth, fixed: 'right', render: (_, r) => (
             <RowActions>
-              <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/packages/${r.id}`)}>{t('detail')}</Button>
-              {isAdmin && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>{t('edit')}</Button>}
+              <ActionButton label={t('detail')} icon={<EyeOutlined />} onClick={() => nav(`/packages/${r.id}`)} />
+              {isAdmin && <ActionButton label={t('edit')} icon={<EditOutlined />} onClick={() => openEdit(r)} />}
             </RowActions>
           ) },
         ]}

@@ -11,8 +11,8 @@ import { STATUS_LABELS } from '@/i18n/messages'
 import { formatTime } from '@/utils/format'
 import StatCard from '@/components/StatCard'
 import StatusTag from '@/components/StatusTag'
-import RowActions from '@/components/RowActions'
-import { ELLIPSIS } from '@/utils/table'
+import RowActions, { ActionButton } from '@/components/RowActions'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import type { Dashboard as Dash } from '@/types'
 
 export default function Dashboard() {
@@ -104,7 +104,7 @@ export default function Dashboard() {
           dataSource={d.package_progress}
           pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
           // 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
-          scroll={{ x: 816 }}
+          scroll={{ x: 720 + actionWidth(1) }}
           columns={[
             { title: 'COO', dataIndex: 'code', width: 90 },
             { title: t('packages'), dataIndex: 'name', width: 240, ellipsis: ELLIPSIS, render: (v: string, r: { overdue?: boolean }) => (r.overdue ? <Typography.Text type="danger" strong>{v}（{t('overdue')}）</Typography.Text> : v) },
@@ -114,10 +114,10 @@ export default function Dashboard() {
               render: (p: number) => <Progress percent={p} size="small" strokeColor="#a8833c" />,
             },
             { title: t('attachment'), dataIndex: 'attachments', width: 90, render: (n: number) => `${n}` },
-            // 与其他列表页一致：行内操作一律用小号按钮，不再用裸链接
-            { title: t('actions'), key: 'act', width: 96, fixed: 'right', render: () => (
+            // 与其他列表页一致：行内操作一律用小号图标按钮，不再用裸链接
+            { title: t('actions'), key: 'act', width: actionWidth(1), fixed: 'right', render: () => (
               <RowActions>
-                <Button size="small" icon={<EyeOutlined />} onClick={() => nav('/packages')}>{t('detail')}</Button>
+                <ActionButton label={t('detail')} icon={<EyeOutlined />} onClick={() => nav('/packages')} />
               </RowActions>
             ) },
           ]}

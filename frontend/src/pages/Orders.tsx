@@ -10,8 +10,8 @@ import { useSubmit } from '@/hooks/useSubmit'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
-import RowActions from '@/components/RowActions'
-import { ELLIPSIS } from '@/utils/table'
+import RowActions, { ActionButton } from '@/components/RowActions'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import type { Factory, Order } from '@/types'
 
 const PAGE_SIZE = 20
@@ -54,9 +54,9 @@ export default function Orders() {
 
   const data = rows
 
-  // 操作列固定在右侧，宽度随可见按钮数变化；scroll.x 取各列宽之和，
+  // 操作列固定在右侧，宽度按实际按钮数算；scroll.x 取各列宽之和，
   // 列宽不被挤压，字段也就不会折行（不够宽时整表横向滚动）。
-  const actWidth = canExport ? 264 : 96
+  const actWidth = actionWidth(canExport ? 3 : 1)
 
   // ---- 新建订单 ----
   const [open, setOpen] = useState(false)
@@ -107,10 +107,10 @@ export default function Orders() {
               title: t('actions'), key: 'act', width: actWidth, fixed: 'right',
               render: (_, r) => (
                 <RowActions>
-                  <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/orders/${r.id}`)}>{t('detail')}</Button>
+                  <ActionButton label={t('detail')} icon={<EyeOutlined />} onClick={() => nav(`/orders/${r.id}`)} />
                   {canExport && (<>
-                    <Button size="small" icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)}>{t('export_csv')}</Button>
-                    <Button size="small" icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)}>{t('export_zip')}</Button>
+                    <ActionButton label={t('export_csv')} icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)} />
+                    <ActionButton label={t('export_zip')} icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)} />
                   </>)}
                 </RowActions>
               ),

@@ -17,9 +17,9 @@ import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
 import PageHeader from '@/components/PageHeader'
-import RowActions from '@/components/RowActions'
+import RowActions, { ActionButton } from '@/components/RowActions'
 import { formatTime } from '@/utils/format'
-import { ELLIPSIS } from '@/utils/table'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, User } from '@/types'
 
 const { Dragger } = Upload
@@ -102,7 +102,7 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     }
   }
 
-  const attActWidth = canEdit ? 172 : 100
+  const attActWidth = actionWidth(canEdit ? 2 : 1, 'small')
   const columns: ColumnsType<OrderAttachment> = [
     { title: t('attachment'), dataIndex: 'original_name', width: 240, ellipsis: ELLIPSIS, render: (n, r) => (
       <a onClick={() => setPreview({ url: orders.attachmentUrl(orderId, op.id, r.id, true), name: r.original_name || r.file_name })}>{n}</a>
@@ -112,8 +112,10 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
     { title: t('actions'), key: 'act', width: attActWidth, fixed: 'right', render: (_, r: OrderAttachment) => (
       <RowActions>
-        <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name, orders.attachmentTicketUrl(orderId, op.id, r.id))}>{t('download')}</Button>
-        {canEdit && <Button size="small" danger icon={<DeleteOutlined />} disabled={busy} onClick={() => run(() => orders.deleteAttachment(orderId, op.id, r.id), t('deleted'))}>{t('cancel')}</Button>}
+        <ActionButton label={t('download')} icon={<DownloadOutlined />}
+          onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name, orders.attachmentTicketUrl(orderId, op.id, r.id))} />
+        {canEdit && <ActionButton label={t('cancel')} icon={<DeleteOutlined />} danger disabled={busy}
+          onClick={() => run(() => orders.deleteAttachment(orderId, op.id, r.id), t('deleted'))} />}
       </RowActions>
     )},
   ]
@@ -283,7 +285,7 @@ export default function OrderDetail() {
             expandedRowRender: (op) => <RowAttachments orderId={order.id} op={op} user={user!} onChanged={load} />,
           }}
           // 列宽之和（含展开列）；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
-          scroll={{ x: 894 }}
+          scroll={{ x: 750 + actionWidth(1) + 48 }}
           columns={[
             { title: 'COO', dataIndex: 'package_code', width: 90, render: (v) => v || '-' },
             { title: t('packages'), dataIndex: 'package_name', width: 240, ellipsis: ELLIPSIS, render: (v) => v || '-' },
@@ -291,9 +293,9 @@ export default function OrderDetail() {
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
             { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>{t('required')}</Tag> : '-') },
-            { title: t('actions'), key: 'act', width: 96, fixed: 'right', render: (_, op: OrderPackage) => (
+            { title: t('actions'), key: 'act', width: actionWidth(1), fixed: 'right', render: (_, op: OrderPackage) => (
               <RowActions>
-                {canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)}>{t('cancel')}</Button>}
+                {canEditOrder && <ActionButton label={t('cancel')} icon={<DeleteOutlined />} danger onClick={() => removeOp(op)} />}
               </RowActions>
             ) },
           ]}

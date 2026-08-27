@@ -568,7 +568,7 @@ const th: Dict = {
   pending_sync: 'รอซิงค์',
   export_csv: 'ส่งออก Excel',
   detail: 'รายละเอียด',
-  actions: 'การดำเนินการ',
+  actions: 'จัดการ',
   back: 'ย้อนกลับ',
   no_data: 'ไม่มีข้อมูล',
   all_ok: 'ปกติ',

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, Empty, Table, Typography, Tag } from 'antd'
+import { App, Card, Empty, Table, Typography, Tag } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { todo } from '@/api/endpoints'
@@ -9,8 +9,8 @@ import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import ReviewSteps from '@/components/ReviewSteps'
-import RowActions from '@/components/RowActions'
-import { ELLIPSIS } from '@/utils/table'
+import RowActions, { ActionButton } from '@/components/RowActions'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import { formatTime } from '@/utils/format'
 import type { TodoItem } from '@/types'
 
@@ -49,7 +49,7 @@ export default function Todo() {
         locale={{ emptyText: <Empty description={t('todo_empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
         // 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
-        scroll={{ x: 1520 }}
+        scroll={{ x: 1410 + actionWidth(1) }}
         columns={[
           { title: 'COO', dataIndex: 'package_code', width: 90 },
           { title: t('packages'), dataIndex: 'package_name', width: 200, ellipsis: ELLIPSIS },
@@ -89,12 +89,12 @@ export default function Todo() {
           { title: t('reject_reason'), dataIndex: 'reject_reason', width: 200, ellipsis: ELLIPSIS, render: (v: string) => (v ? <Typography.Text type="danger">{v}</Typography.Text> : '-') },
           { title: t('submit_time'), dataIndex: 'submitted_at', width: 170, render: (v: string) => (v ? formatTime(v) : '-') },
           {
-            title: t('actions'), key: 'act', width: 110, fixed: 'right',
+            title: t('actions'), key: 'act', width: actionWidth(1), fixed: 'right',
             render: (_, r) => (
               <RowActions>
-                <Button size="small" icon={<ArrowRightOutlined />} onClick={() => nav(r.kind === 'order' && r.order_id ? `/orders/${r.order_id}` : `/packages/${r.package_id}`)}>
-                  {actionLabel(r)}
-                </Button>
+                {/* 文案随角色变化（整改 / 去审核 / 去终审），放进悬浮提示 */}
+                <ActionButton label={actionLabel(r)} icon={<ArrowRightOutlined />}
+                  onClick={() => nav(r.kind === 'order' && r.order_id ? `/orders/${r.order_id}` : `/packages/${r.package_id}`)} />
               </RowActions>
             ),
           },

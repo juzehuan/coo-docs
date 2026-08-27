@@ -7,8 +7,8 @@ import { localName, useI18n } from '@/i18n'
 import { useSubmit } from '@/hooks/useSubmit'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import RoleTag from '@/components/RoleTag'
-import RowActions from '@/components/RowActions'
-import { ELLIPSIS } from '@/utils/table'
+import RowActions, { ActionButton } from '@/components/RowActions'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import PageHeader from '@/components/PageHeader'
 import { ROLES } from '@/types'
 import type { Department, Factory, User } from '@/types'
@@ -152,14 +152,14 @@ export default function Org() {
 
   const deptTab = (
     <Card variant="borderless" className="coo-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setDeptOpen(true)}>{t('create_dept')}</Button>}>
-      <Table rowKey="id" dataSource={depts} pagination={false} scroll={{ x: 816 }} columns={[
+      <Table rowKey="id" dataSource={depts} pagination={false} scroll={{ x: 720 + actionWidth(1) }} columns={[
         { title: t('dept_code'), dataIndex: 'code', width: 120 },
         { title: t('name_zh'), dataIndex: 'name_zh', width: 200, ellipsis: ELLIPSIS },
         { title: t('name_en'), dataIndex: 'name_en', width: 200, ellipsis: ELLIPSIS },
         { title: t('name_th'), dataIndex: 'name_th', width: 200, ellipsis: ELLIPSIS },
-        { title: t('actions'), key: 'act', width: 96, fixed: 'right', render: (_, d) => (
+        { title: t('actions'), key: 'act', width: actionWidth(1), fixed: 'right', render: (_, d) => (
           <RowActions>
-            <Button size="small" icon={<EditOutlined />} onClick={() => openEditDept(d)}>{t('edit')}</Button>
+            <ActionButton label={t('edit')} icon={<EditOutlined />} onClick={() => openEditDept(d)} />
           </RowActions>
         ) },
       ]} />
@@ -168,21 +168,21 @@ export default function Org() {
 
   const factTab = (
     <Card variant="borderless" className="coo-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setFactOpen(true)}>{t('create_factory')}</Button>}>
-      <Table rowKey="id" dataSource={factList} pagination={false} scroll={{ x: 920 }} columns={[
+      <Table rowKey="id" dataSource={factList} pagination={false} scroll={{ x: 820 + actionWidth(1) }} columns={[
         { title: t('factory_code'), dataIndex: 'code', width: 120 },
         { title: t('name_zh'), dataIndex: 'name_zh', width: 200, ellipsis: ELLIPSIS },
         { title: t('name_en'), dataIndex: 'name_en', width: 200, ellipsis: ELLIPSIS },
         { title: t('name_th'), dataIndex: 'name_th', width: 200, ellipsis: ELLIPSIS },
         { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag className="coo-tag" style={{ background: s === 'active' ? '#eaf2ec' : '#f9ece9', color: s === 'active' ? '#2f6b4a' : '#9c4134', border: 'none' }}>{s === 'active' ? t('active') : t('disabled')}</Tag> },
         {
-          title: t('actions'), key: 'act', width: 100, fixed: 'right',
+          title: t('actions'), key: 'act', width: actionWidth(1), fixed: 'right',
           render: (_, f) => (
             <RowActions>
-              <Button size="small" danger={f.status === 'active'}
+              <ActionButton
+                label={f.status === 'active' ? t('disabled') : t('active')}
                 icon={f.status === 'active' ? <StopOutlined /> : <CheckCircleOutlined />}
-                onClick={() => toggleFactory(f)}>
-                {f.status === 'active' ? t('disabled') : t('active')}
-              </Button>
+                danger={f.status === 'active'}
+                onClick={() => toggleFactory(f)} />
             </RowActions>
           ),
         },
@@ -239,7 +239,7 @@ export default function Org() {
 
   const userTab = (
     <Card variant="borderless" className="coo-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setUserOpen(true)}>{t('create_user')}</Button>}>
-      <Table rowKey="id" dataSource={users} pagination={false} scroll={{ x: 1088 }} columns={[
+      <Table rowKey="id" dataSource={users} pagination={false} scroll={{ x: 830 + actionWidth(3) }} columns={[
         { title: t('display_name'), width: 160, ellipsis: ELLIPSIS, render: (_, r) => r.display_name || r.username },
         { title: t('username'), dataIndex: 'username', width: 140, ellipsis: ELLIPSIS },
         { title: t('role'), dataIndex: 'role', width: 140, render: (r: string) => <RoleTag role={r} /> },
@@ -249,19 +249,16 @@ export default function Org() {
         { title: t('factory'), width: 180, ellipsis: ELLIPSIS, render: (_, r) => (r.factory_ids?.length ? r.factory_ids.map(factLabel).join('、') : '-') },
         { title: t('status'), width: 90, render: (_, r) => <Tag className="coo-tag" style={{ background: r.status === 'active' ? '#eaf2ec' : '#f9ece9', color: r.status === 'active' ? '#2f6b4a' : '#9c4134', border: 'none' }}>{r.status === 'active' ? t('active') : t('disabled')}</Tag> },
         {
-          title: t('actions'), key: 'act', width: 258, fixed: 'right',
+          title: t('actions'), key: 'act', width: actionWidth(3), fixed: 'right',
           render: (_, r) => (
             <RowActions>
-              <Button size="small" icon={<EditOutlined />} onClick={() => openEditUser(r)}>{t('edit')}</Button>
-              <Button size="small" icon={<ReloadOutlined />} onClick={() => resetPwd(r)}>{t('reset_pwd')}</Button>
-              <Button
-                size="small"
-                danger={r.status === 'active'}
+              <ActionButton label={t('edit')} icon={<EditOutlined />} onClick={() => openEditUser(r)} />
+              <ActionButton label={t('reset_pwd')} icon={<ReloadOutlined />} onClick={() => resetPwd(r)} />
+              <ActionButton
+                label={r.status === 'active' ? t('disabled') : t('active')}
                 icon={r.status === 'active' ? <StopOutlined /> : <CheckCircleOutlined />}
-                onClick={() => toggleUserStatus(r)}
-              >
-                {r.status === 'active' ? t('disabled') : t('active')}
-              </Button>
+                danger={r.status === 'active'}
+                onClick={() => toggleUserStatus(r)} />
             </RowActions>
           ),
         },

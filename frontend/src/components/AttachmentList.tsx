@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Progress, App, Button, Input, Space, Table, Tag, Typography, Upload } from 'antd'
+import { Progress, App, Input, Space, Table, Tag, Typography, Upload } from 'antd'
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, InboxOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { downloadFile, errMessage } from '@/api/client'
@@ -7,8 +7,8 @@ import { packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import type { Attachment } from '@/types'
-import RowActions from '@/components/RowActions'
-import { ELLIPSIS } from '@/utils/table'
+import RowActions, { ActionButton } from '@/components/RowActions'
+import { ELLIPSIS, actionWidth } from '@/utils/table'
 import { useUploadLimits, oversizeNames } from '@/hooks/useUploadLimits'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
 
@@ -67,7 +67,7 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
     }
   }
 
-  const actWidth = canEdit ? 254 : 178
+  const actWidth = actionWidth(canEdit ? 3 : 2)
   const columns: ColumnsType<Attachment> = [
     {
       title: t('attachment'),
@@ -89,9 +89,10 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
       title: t('actions'), key: 'act', width: actWidth, fixed: 'right',
       render: (_, r) => (
         <RowActions>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)}>{t('detail')}</Button>
-          <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name, packages.attachmentTicketUrl(pkgId, version.id, r.id))}>{t('download')}</Button>
-          {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeAtt(r)}>{t('cancel')}</Button>}
+          <ActionButton label={t('detail')} icon={<EyeOutlined />} onClick={() => openPreview(r)} />
+          <ActionButton label={t('download')} icon={<DownloadOutlined />}
+            onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name, packages.attachmentTicketUrl(pkgId, version.id, r.id))} />
+          {canEdit && <ActionButton label={t('cancel')} icon={<DeleteOutlined />} danger onClick={() => removeAtt(r)} />}
         </RowActions>
       ),
     },
