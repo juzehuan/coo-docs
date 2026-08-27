@@ -83,6 +83,7 @@ def _ensure_indexes() -> None:
     # 执行计划依旧是 Using filesort）。列顺序须与查询一致：先等值/范围过滤列，后排序列。
     composite = [("orders", "factory_id, created_at", "ix_orders_factory_created")]
 
+    log = logging.getLogger("app.db")
     insp = inspect(engine)
     with engine.connect() as conn:
         for table, column, idx in wanted + composite:
@@ -93,6 +94,32 @@ def _ensure_indexes() -> None:
                     continue
                 conn.execute(text(f"CREATE INDEX {idx} ON {table} ({column})"))
                 conn.commit()
-                logging.getLogger("app.db").info("已补建索引 %s", idx)
+                log.info("已补建索引 %s", idx)
             except Exception:  # noqa: BLE001
-                logging.getLogger("app.db").debug("索引 %s 跳过", idx, exc_info=True)
+                # 这里保持 debug：各数据库对"索引已存在"的报错码不同，
+                # 按异常分类必然误报。真正的判定放在下面的收尾校验里。
+                log.debug("索引 %s 创建异常（可能已存在）", idx, exc_info=True)
+
+    # 收尾校验：不去猜异常的含义，直接看**最终有没有**。
+    #
+    # 此前建索引失败一律记在 debug，而默认日志级别是 INFO——第 75 轮实测：
+    # 用一个必然失败的索引定义跑一遍，**INFO 级别下零输出**，服务照常启动、
+    # 照常提供服务，只是从此少了一个索引。症状要等规模上来才显现（变慢），
+    # 而那时没有任何线索指向"某个索引当初没建成"。
+    # 同一文件里的 _ensure_columns 对同类失败记的是 WARNING，两者本就不该不一致。
+    #
+    # 第 74 轮已实测这些索引在真实规模下的作用：5 万订单时它们让订单列表从
+    # 全表扫描+filesort 变成只扫 62 行的反向索引扫描；30 万审计日志同理。
+    # 也就是说"少一个索引"不是无关痛痒，而是把一个已验证的优化悄悄拿掉。
+    insp2 = inspect(engine)
+    missing = []
+    for table, column, idx in wanted + composite:
+        if table not in insp2.get_table_names():
+            continue
+        if not any(i["name"] == idx for i in insp2.get_indexes(table)):
+            missing.append(f"{idx}({table}.{column})")
+    if missing:
+        log.warning("以下索引未建成，规模上来后相关查询会退化为全表扫描/文件排序，"
+                    "请人工建索引或检查数据库权限：%s", "、".join(missing))
+    else:
+        log.info("索引核对通过：%d 个应有索引全部就位", len(wanted) + len(composite))
