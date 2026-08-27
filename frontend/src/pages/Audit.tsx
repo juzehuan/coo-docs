@@ -8,6 +8,7 @@ import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import { formatTime } from '@/utils/format'
 import PageHeader from '@/components/PageHeader'
+import { ELLIPSIS } from '@/utils/table'
 import type { AuditLog, AuditQuery } from '@/types'
 
 const DOMAINS = ['auth', 'package', 'attachment', 'review', 'version', 'nas', 'export', 'org']
@@ -78,7 +79,7 @@ export default function Audit() {
             <DatePicker.RangePicker value={range} onChange={(v) => setRange(v)} allowEmpty={[true, true]} />
             <Select allowClear placeholder={t('domain_action')} style={{ width: 140 }} value={domain} onChange={(v) => { setDomain(v); load(v ?? null) }}
               options={DOMAINS.map((d) => ({ label: d, value: d }))} />
-            <Button type="primary" icon={<SearchOutlined />} onClick={() => load()}>{t('search')}</Button>
+            <Button icon={<SearchOutlined />} onClick={() => load()}>{t('search')}</Button>
             {canExport && <Button icon={<DownloadOutlined />} onClick={exportXlsx}>{t('export_csv')}</Button>}
           </Space>
         }
@@ -95,13 +96,16 @@ export default function Audit() {
         loading={loading}
         dataSource={logs}
         pagination={{ defaultPageSize: 15, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+        // 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
+        scroll={{ x: 1160 }}
         columns={[
           { title: t('time'), dataIndex: 'created_at', width: 170, render: (v: string) => formatTime(v) },
-          { title: t('domain_action'), render: (_, r) => `${r.event_domain}.${r.action}`, width: 200 },
-          { title: t('operator'), dataIndex: 'actor_name', width: 120 },
+          { title: t('domain_action'), render: (_, r) => `${r.event_domain}.${r.action}`, width: 200, ellipsis: ELLIPSIS },
+          { title: t('operator'), dataIndex: 'actor_name', width: 120, ellipsis: ELLIPSIS },
           { title: t('ip'), dataIndex: 'ip', width: 130 },
-          { title: t('target'), dataIndex: 'target' },
-          { title: t('desc'), dataIndex: 'detail' },
+          // target/detail 是审计里最长的两列（含路径与变更摘要），截断后悬浮看全文
+          { title: t('target'), dataIndex: 'target', width: 220, ellipsis: ELLIPSIS },
+          { title: t('desc'), dataIndex: 'detail', width: 320, ellipsis: ELLIPSIS },
         ]}
       />
       </Card>

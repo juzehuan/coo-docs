@@ -10,6 +10,8 @@ import { useSubmit } from '@/hooks/useSubmit'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
+import RowActions from '@/components/RowActions'
+import { ELLIPSIS } from '@/utils/table'
 import type { Factory, Order } from '@/types'
 
 const PAGE_SIZE = 20
@@ -52,6 +54,10 @@ export default function Orders() {
 
   const data = rows
 
+  // 操作列固定在右侧，宽度随可见按钮数变化；scroll.x 取各列宽之和，
+  // 列宽不被挤压，字段也就不会折行（不够宽时整表横向滚动）。
+  const actWidth = canExport ? 264 : 96
+
   // ---- 新建订单 ----
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -86,25 +92,27 @@ export default function Orders() {
           pagination={{ current: page, pageSize: PAGE_SIZE, total, showSizeChanger: false,
             onChange: (p) => { setPage(p); load(undefined, p) },
             showTotal: (n) => t('audit_total').replace('{total}', String(n)) }}
+          scroll={{ x: 1080 + actWidth }}
           columns={[
-            { title: t('factory'), width: 110, render: (_, r) => <span>{r.factory_code} · {r.factory_name || factName(r.factory_id)}</span> },
-            { title: t('order_no'), dataIndex: 'order_no', width: 170 },
-            { title: t('customer'), dataIndex: 'customer', ellipsis: true },
-            { title: t('product'), dataIndex: 'product', ellipsis: true },
+            // 返回纯字符串而不是 <span>：ellipsis 的悬浮提示只认字符串内容
+            { title: t('factory'), width: 160, ellipsis: ELLIPSIS, render: (_, r) => `${r.factory_code} · ${r.factory_name || factName(r.factory_id)}` },
+            { title: t('order_no'), dataIndex: 'order_no', width: 170, ellipsis: ELLIPSIS },
+            { title: t('customer'), dataIndex: 'customer', width: 160, ellipsis: ELLIPSIS },
+            { title: t('product'), dataIndex: 'product', width: 160, ellipsis: ELLIPSIS },
             { title: t('quantity'), dataIndex: 'quantity', width: 80 },
             { title: t('export_date'), dataIndex: 'export_date', width: 110, render: (v: string) => v || '-' },
             { title: t('completion'), width: 140, render: (_, r) => <Progress percent={r.completion} size="small" /> },
             { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <StatusTag status={s || 'active'} /> },
             {
-              title: '', key: 'act', width: 260,
+              title: t('actions'), key: 'act', width: actWidth, fixed: 'right',
               render: (_, r) => (
-                <Space size={4}>
+                <RowActions>
                   <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/orders/${r.id}`)}>{t('detail')}</Button>
                   {canExport && (<>
                     <Button size="small" icon={<DownloadOutlined />} onClick={() => orders.exportCsv(r.id, r.order_no)}>{t('export_csv')}</Button>
                     <Button size="small" icon={<FileZipOutlined />} onClick={() => orders.exportZip(r.id, r.order_no)}>{t('export_zip')}</Button>
                   </>)}
-                </Space>
+                </RowActions>
               ),
             },
           ]}

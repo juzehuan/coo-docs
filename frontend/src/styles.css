@@ -147,8 +147,13 @@ body {
   box-shadow: none;
 }
 
-/* 次按钮：黄铜描边 */
-.ant-btn:not(.ant-btn-primary):hover { border-color: var(--coo-gold); color: var(--coo-gold); }
+/* 次按钮：黄铜描边。只作用于默认按钮——原先的 :not(.ant-btn-primary) 连
+   危险按钮（删除/停用）和链接按钮一起改成黄铜色，同一排按钮悬浮后配色与
+   语义都对不上；危险按钮保持红色，链接按钮保持无描边。 */
+.ant-btn-default:not(.ant-btn-dangerous):hover { border-color: var(--coo-gold); color: var(--coo-gold); }
+
+/* 行内操作按钮：全站同一尺寸与字号，图标与文字间距一致 */
+.ant-table .ant-btn-sm { font-size: 12.5px; }
 
 /* ---------- 表格：发丝线、档案纸表头 ---------- */
 .ant-table {
@@ -160,10 +165,11 @@ body {
   letter-spacing: 0.6px;
   color: var(--coo-text-sub) !important;
   background: #f4efe4 !important;
+  /* 表头不折行：表头文字比列宽长时 antd 默认折成两行，各表行高随之参差 */
+  white-space: nowrap;
 }
 .ant-table-tbody > tr > td { border-bottom: 1px solid var(--coo-line-soft) !important; }
 .ant-table-tbody > tr:hover > td { background: #faf6ec !important; }
-
 /* ---------- 徽章（状态/角色） ---------- */
 .coo-tag {
   display: inline-flex;

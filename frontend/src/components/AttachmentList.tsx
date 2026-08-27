@@ -7,6 +7,8 @@ import { packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
 import { formatSize, formatTime } from '@/utils/format'
 import type { Attachment } from '@/types'
+import RowActions from '@/components/RowActions'
+import { ELLIPSIS } from '@/utils/table'
 import { useUploadLimits, oversizeNames } from '@/hooks/useUploadLimits'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
 
@@ -65,36 +67,40 @@ export default function AttachmentList({ pkgId, version, canEdit, onChanged }: P
     }
   }
 
+  const actWidth = canEdit ? 254 : 178
   const columns: ColumnsType<Attachment> = [
     {
       title: t('attachment'),
       dataIndex: 'original_name',
+      width: 240,
+      ellipsis: ELLIPSIS,
       render: (name: string, r) => (
         <a onClick={() => openPreview(r)}>{name}</a>
       ),
     },
-    { title: t('order_no'), dataIndex: 'order_no', render: (v) => v || '-' },
-    { title: t('batch_no'), dataIndex: 'batch_no', render: (v) => v || '-' },
-    { title: 'MD5', dataIndex: 'md5', ellipsis: true, render: (v) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
+    { title: t('order_no'), dataIndex: 'order_no', width: 140, ellipsis: ELLIPSIS, render: (v) => v || '-' },
+    { title: t('batch_no'), dataIndex: 'batch_no', width: 140, ellipsis: ELLIPSIS, render: (v) => v || '-' },
+    { title: 'MD5', dataIndex: 'md5', width: 150, ellipsis: ELLIPSIS, render: (v) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
     { title: 'NAS', dataIndex: 'nas_synced', width: 70, render: (s: boolean) => (s
       ? <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}>✓</Tag>
       : <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>⏳</Tag>) },
     { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v) => formatTime(v) },
     {
-      title: '', key: 'act', width: 200,
+      title: t('actions'), key: 'act', width: actWidth, fixed: 'right',
       render: (_, r) => (
-        <Space size={4}>
+        <RowActions>
           <Button size="small" icon={<EyeOutlined />} onClick={() => openPreview(r)}>{t('detail')}</Button>
           <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(packages.attachmentUrl(pkgId, version.id, r.id, false), r.original_name || r.file_name, packages.attachmentTicketUrl(pkgId, version.id, r.id))}>{t('download')}</Button>
           {canEdit && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeAtt(r)}>{t('cancel')}</Button>}
-        </Space>
+        </RowActions>
       ),
     },
   ]
 
   return (
     <div>
-      <Table rowKey="id" size="middle" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} />
+      {/* 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行 */}
+      <Table rowKey="id" size="middle" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} scroll={{ x: 900 + actWidth }} />
 
       {canEdit && (
         <div style={{ marginTop: 16, padding: 16, background: '#faf6ec', border: '1px dashed #d8cdb0', borderRadius: 8 }}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, Empty, Space, Table, Typography, Tag } from 'antd'
+import { App, Button, Card, Empty, Table, Typography, Tag } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { todo } from '@/api/endpoints'
@@ -9,6 +9,8 @@ import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
 import ReviewSteps from '@/components/ReviewSteps'
+import RowActions from '@/components/RowActions'
+import { ELLIPSIS } from '@/utils/table'
 import { formatTime } from '@/utils/format'
 import type { TodoItem } from '@/types'
 
@@ -46,9 +48,11 @@ export default function Todo() {
         dataSource={rows}
         locale={{ emptyText: <Empty description={t('todo_empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+        // 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
+        scroll={{ x: 1520 }}
         columns={[
           { title: 'COO', dataIndex: 'package_code', width: 90 },
-          { title: t('packages'), dataIndex: 'package_name', ellipsis: true },
+          { title: t('packages'), dataIndex: 'package_name', width: 200, ellipsis: ELLIPSIS },
           { title: t('version'), dataIndex: 'version_no', width: 110, render: (v: string) => v || '-' },
           {
             title: t('status'), width: 170,
@@ -82,14 +86,16 @@ export default function Todo() {
               : '-'),
           },
           { title: t('attachment'), width: 90, render: (_, r) => r.attachments },
-          { title: t('reject_reason'), dataIndex: 'reject_reason', ellipsis: true, render: (v: string) => (v ? <Typography.Text type="danger">{v}</Typography.Text> : '-') },
+          { title: t('reject_reason'), dataIndex: 'reject_reason', width: 200, ellipsis: ELLIPSIS, render: (v: string) => (v ? <Typography.Text type="danger">{v}</Typography.Text> : '-') },
           { title: t('submit_time'), dataIndex: 'submitted_at', width: 170, render: (v: string) => (v ? formatTime(v) : '-') },
           {
-            title: '', key: 'act', width: 100,
+            title: t('actions'), key: 'act', width: 110, fixed: 'right',
             render: (_, r) => (
-              <Button size="small" type="primary" ghost icon={<ArrowRightOutlined />} onClick={() => nav(r.kind === 'order' && r.order_id ? `/orders/${r.order_id}` : `/packages/${r.package_id}`)}>
-                {actionLabel(r)}
-              </Button>
+              <RowActions>
+                <Button size="small" icon={<ArrowRightOutlined />} onClick={() => nav(r.kind === 'order' && r.order_id ? `/orders/${r.order_id}` : `/packages/${r.package_id}`)}>
+                  {actionLabel(r)}
+                </Button>
+              </RowActions>
             ),
           },
         ]}

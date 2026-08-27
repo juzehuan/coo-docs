@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { App, Button, Card, Space, Table, Tag, Typography } from 'antd'
-import { DownloadOutlined, FileOutlined, LockOutlined } from '@ant-design/icons'
+import { App, Button, Card, Table, Tag, Typography } from 'antd'
+import { DownloadOutlined, LockOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { controlled, orders, packages } from '@/api/endpoints'
 import { useI18n } from '@/i18n'
@@ -8,6 +8,8 @@ import { formatSize, formatTime } from '@/utils/format'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
+import RowActions from '@/components/RowActions'
+import { ELLIPSIS } from '@/utils/table'
 import type { ControlledItem } from '@/types'
 
 const PAGE_SIZE = 20
@@ -67,10 +69,13 @@ export default function Controlled() {
                 size="small"
                 pagination={false}
                 dataSource={atts}
+                scroll={{ x: 640 }}
                 columns={[
-                  { title: t('attachment'), render: (_, a) => (
+                  // 文件名单独成串（不再前置图标）：ellipsis 的悬浮提示只认字符串内容，
+                  // 且与附件列表、订单详情里的文件名链接保持同一样式
+                  { title: t('attachment'), width: 240, ellipsis: ELLIPSIS, render: (_, a) => (
                     <a onClick={() => setPreview({ url: attUrl(r, a.id), name: a.original_name || a.file_name })}>
-                      <FileOutlined /> {a.original_name || a.file_name}
+                      {a.original_name || a.file_name}
                     </a>
                   ) },
                   { title: t('batch_no'), dataIndex: 'batch_no', width: 120, render: (x: string) => x || '-' },
@@ -81,19 +86,21 @@ export default function Controlled() {
             )
           },
         }}
+        // 列宽之和（含展开列）；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
+        scroll={{ x: 1040 }}
         columns={[
           { title: 'COO', dataIndex: 'package_code', width: 90 },
-          { title: t('packages'), dataIndex: 'package_name' },
+          { title: t('packages'), dataIndex: 'package_name', width: 240, ellipsis: ELLIPSIS },
           { title: t('kind'), dataIndex: 'kind', width: 100,
             render: (k: string) => <Tag className="coo-tag" style={{ background: k === 'order' ? '#eef2f8' : '#f6f1e6', color: k === 'order' ? '#2f4a6b' : '#8a6a1e', border: 'none' }}>{k === 'order' ? t('kind_order') : t('kind_version')}</Tag> },
-          { title: t('version'), dataIndex: 'subject', width: 150 },
+          { title: t('version'), dataIndex: 'subject', width: 150, ellipsis: ELLIPSIS },
           { title: t('status'), width: 110, render: () => <StatusTag status="released" /> },
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
-          { title: '', key: 'lock', width: 60, render: () => <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}><LockOutlined /></Tag> },
-          { title: '', key: 'act', width: 150, render: (_, r) => (
-            <Space>
+          { title: t('locked'), key: 'lock', width: 80, render: () => <Tag className="coo-tag" style={{ background: '#eaf2ec', color: '#2f6b4a', border: 'none' }}><LockOutlined /></Tag> },
+          { title: t('actions'), key: 'act', width: 130, fixed: 'right', render: (_, r) => (
+            <RowActions>
               <Button size="small" icon={<DownloadOutlined />} disabled={!r.attachment_count} onClick={() => downloadZip(r)}>{t('export_zip')}</Button>
-            </Space>
+            </RowActions>
           ) },
         ]}
       />

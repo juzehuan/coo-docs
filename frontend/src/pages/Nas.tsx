@@ -115,12 +115,15 @@ export default function Nas() {
       </Col>
       <Col xs={24} md={14}>
         <Card variant="borderless" className="coo-card" title={t('sync_status')}>
-          <Table rowKey="id" size="small" pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }} dataSource={recs} columns={[
+          <Table rowKey="id" size="small" pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }} dataSource={recs}
+            // 这张表在半栏卡片里，窄屏下列宽会被压到折行；给定列宽之和后改为横向滚动
+            scroll={{ x: 540 }}
+            columns={[
             { title: 'ID', dataIndex: 'id', width: 70 },
             { title: t('type'), dataIndex: 'run_type', width: 90 },
             { title: t('success_total'), render: (_, r) => `${r.success}/${r.total}`, width: 110 },
             { title: t('status'), dataIndex: 'status', width: 100, render: (s: string) => <Tag className="coo-tag" style={{ background: s === 'success' ? '#eaf2ec' : s === 'failed' ? '#f9ece9' : '#faf0dc', color: s === 'success' ? '#2f6b4a' : s === 'failed' ? '#9c4134' : '#a67c1e', border: 'none' }}>{s}</Tag> },
-            { title: t('time'), dataIndex: 'started_at', render: (v: string) => formatTime(v) },
+            { title: t('time'), dataIndex: 'started_at', width: 170, render: (v: string) => formatTime(v) },
           ]} />
         </Card>
       </Col>

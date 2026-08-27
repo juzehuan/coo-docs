@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App, Button, Card, Col, Progress, Row, Table, Spin, Typography } from 'antd'
-import { AuditOutlined, DownloadOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
+import { AuditOutlined, DownloadOutlined, EyeOutlined, FileDoneOutlined, FileSyncOutlined, InboxOutlined } from '@ant-design/icons'
 import type { Lang } from '@/types'
 import { errMessage } from '@/api/client'
 import { dashboard } from '@/api/endpoints'
@@ -11,6 +11,8 @@ import { STATUS_LABELS } from '@/i18n/messages'
 import { formatTime } from '@/utils/format'
 import StatCard from '@/components/StatCard'
 import StatusTag from '@/components/StatusTag'
+import RowActions from '@/components/RowActions'
+import { ELLIPSIS } from '@/utils/table'
 import type { Dashboard as Dash } from '@/types'
 
 export default function Dashboard() {
@@ -75,19 +77,20 @@ export default function Dashboard() {
                   rowKey={(_, i) => String(i)}
                   size="small" pagination={false}
                   dataSource={d.need_attention}
+                  scroll={{ x: 680 }}
                   columns={[
                     { title: 'COO', dataIndex: 'code', width: 90 },
-                    { title: t('packages'), dataIndex: 'name' },
+                    { title: t('packages'), dataIndex: 'name', width: 200, ellipsis: ELLIPSIS },
                     // 事项文案由前端按 issue_code 翻译：后端此前直接下发中文，
                     // 英文/泰文界面下这一列会整列漏出中文
-                    { title: t('issue'), dataIndex: 'issue_code', width: 170, render: (_: string, r) => (
+                    { title: t('issue'), dataIndex: 'issue_code', width: 170, ellipsis: ELLIPSIS, render: (_: string, r) => (
                       <span style={{ color: r.overdue ? '#cf1322' : '#b97a1e', fontWeight: r.overdue ? 600 : 400 }}>
                         {r.issue_code === 'overdue'
                           ? `${t('overdue_issue')}${r.due_date ? `（${r.due_date}）` : ''}`
                           : STATUS_LABELS[r.issue_code]?.[lang as Lang] ?? r.issue_code}
                       </span>
                     ) },
-                    { title: t('reject_reason'), dataIndex: 'reason', render: (v: string) => v || '-' },
+                    { title: t('reject_reason'), dataIndex: 'reason', width: 220, ellipsis: ELLIPSIS, render: (v: string) => v || '-' },
                   ]}
                 />
               )}
@@ -100,16 +103,23 @@ export default function Dashboard() {
           rowKey="code"
           dataSource={d.package_progress}
           pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+          // 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
+          scroll={{ x: 816 }}
           columns={[
             { title: 'COO', dataIndex: 'code', width: 90 },
-            { title: t('packages'), dataIndex: 'name', render: (v: string, r: { overdue?: boolean }) => (r.overdue ? <Typography.Text type="danger" strong>{v}（{t('overdue')}）</Typography.Text> : v) },
+            { title: t('packages'), dataIndex: 'name', width: 240, ellipsis: ELLIPSIS, render: (v: string, r: { overdue?: boolean }) => (r.overdue ? <Typography.Text type="danger" strong>{v}（{t('overdue')}）</Typography.Text> : v) },
             { title: t('status'), dataIndex: 'status', width: 120, render: (s: string) => <StatusTag status={s} /> },
             {
               title: t('progress'), dataIndex: 'percent', width: 180,
               render: (p: number) => <Progress percent={p} size="small" strokeColor="#a8833c" />,
             },
             { title: t('attachment'), dataIndex: 'attachments', width: 90, render: (n: number) => `${n}` },
-            { title: '', key: 'act', width: 80, render: (_, r) => <a onClick={() => nav('/packages')}>{t('detail')}</a> },
+            // 与其他列表页一致：行内操作一律用小号按钮，不再用裸链接
+            { title: t('actions'), key: 'act', width: 96, fixed: 'right', render: () => (
+              <RowActions>
+                <Button size="small" icon={<EyeOutlined />} onClick={() => nav('/packages')}>{t('detail')}</Button>
+              </RowActions>
+            ) },
           ]}
         />
       </Card>

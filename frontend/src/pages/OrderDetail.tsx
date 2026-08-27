@@ -17,7 +17,9 @@ import StatusTag from '@/components/StatusTag'
 import ReviewSteps from '@/components/ReviewSteps'
 import AttachmentPreview from '@/components/LazyAttachmentPreview'
 import PageHeader from '@/components/PageHeader'
+import RowActions from '@/components/RowActions'
 import { formatTime } from '@/utils/format'
+import { ELLIPSIS } from '@/utils/table'
 import type { OrderAttachment, OrderDetail as OrderDetailResp, OrderPackage, Package, User } from '@/types'
 
 const { Dragger } = Upload
@@ -100,24 +102,25 @@ function RowAttachments({ orderId, op, user, onChanged }: {
     }
   }
 
+  const attActWidth = canEdit ? 172 : 100
   const columns: ColumnsType<OrderAttachment> = [
-    { title: t('attachment'), dataIndex: 'original_name', render: (n, r) => (
+    { title: t('attachment'), dataIndex: 'original_name', width: 240, ellipsis: ELLIPSIS, render: (n, r) => (
       <a onClick={() => setPreview({ url: orders.attachmentUrl(orderId, op.id, r.id, true), name: r.original_name || r.file_name })}>{n}</a>
     ) },
-    { title: 'MD5', dataIndex: 'md5', ellipsis: true, render: (v: string) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
-    { title: t('batch_no'), dataIndex: 'batch_no', render: (v: string) => v || '-' },
+    { title: 'MD5', dataIndex: 'md5', width: 150, ellipsis: ELLIPSIS, render: (v: string) => <Typography.Text copyable={{ text: v }} style={{ fontSize: 12 }}>{v.slice(0, 12)}…</Typography.Text> },
+    { title: t('batch_no'), dataIndex: 'batch_no', width: 130, ellipsis: ELLIPSIS, render: (v: string) => v || '-' },
     { title: t('upload_time'), dataIndex: 'uploaded_at', width: 160, render: (v: string) => formatTime(v) },
-    { title: '', key: 'act', width: 160, render: (_, r: OrderAttachment) => (
-      <Space size={4}>
+    { title: t('actions'), key: 'act', width: attActWidth, fixed: 'right', render: (_, r: OrderAttachment) => (
+      <RowActions>
         <Button size="small" icon={<DownloadOutlined />} onClick={() => downloadFile(orders.attachmentUrl(orderId, op.id, r.id, false), r.original_name || r.file_name, orders.attachmentTicketUrl(orderId, op.id, r.id))}>{t('download')}</Button>
         {canEdit && <Button size="small" danger icon={<DeleteOutlined />} disabled={busy} onClick={() => run(() => orders.deleteAttachment(orderId, op.id, r.id), t('deleted'))}>{t('cancel')}</Button>}
-      </Space>
+      </RowActions>
     )},
   ]
 
   return (
     <div>
-      <Table rowKey="id" size="small" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} />
+      <Table rowKey="id" size="small" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} scroll={{ x: 680 + attActWidth }} />
 
       {canEdit && (
         <div style={{ marginTop: 8, padding: 12, background: '#faf6ec', border: '1px dashed #d8cdb0', borderRadius: 8 }}>
@@ -157,8 +160,9 @@ function RowAttachments({ orderId, op, user, onChanged }: {
           <Tag className="coo-tag" style={{ background: canReviewCoo ? '#e9eff8' : '#faf0dc', color: canReviewCoo ? '#1f5fa8' : '#a67c1e', border: 'none' }}>{canReviewCoo ? t('coo_review') : t('dept_review')}</Tag>
           <Input.TextArea rows={2} placeholder={t('change_note')} value={reason} onChange={(e) => setReason(e.target.value)} style={{ margin: '8px 0' }} />
           <Space>
-            <Button type="primary" size="small" icon={<CheckOutlined />} loading={busy} onClick={() => doReview('approve', canReviewCoo ? 'coo' : 'dept')}>{t('approve')}</Button>
-            <Button danger size="small" icon={<CloseOutlined />} loading={busy} disabled={!reason.trim()} onClick={() => doReview('reject', canReviewCoo ? 'coo' : 'dept')}>{t('reject')}</Button>
+            {/* 与资料包详情的 ReviewPanel 同一套：审核按钮用默认尺寸，不用小号 */}
+            <Button type="primary" icon={<CheckOutlined />} loading={busy} onClick={() => doReview('approve', canReviewCoo ? 'coo' : 'dept')}>{t('approve')}</Button>
+            <Button danger icon={<CloseOutlined />} loading={busy} disabled={!reason.trim()} onClick={() => doReview('reject', canReviewCoo ? 'coo' : 'dept')}>{t('reject')}</Button>
           </Space>
         </div>
       )}
@@ -278,14 +282,20 @@ export default function OrderDetail() {
           expandable={{
             expandedRowRender: (op) => <RowAttachments orderId={order.id} op={op} user={user!} onChanged={load} />,
           }}
+          // 列宽之和（含展开列）；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
+          scroll={{ x: 894 }}
           columns={[
             { title: 'COO', dataIndex: 'package_code', width: 90, render: (v) => v || '-' },
-            { title: t('packages'), dataIndex: 'package_name', render: (v) => v || '-' },
+            { title: t('packages'), dataIndex: 'package_name', width: 240, ellipsis: ELLIPSIS, render: (v) => v || '-' },
             { title: t('status'), dataIndex: 'status', width: 150, render: (s: string) => (<><StatusTag status={s} /><br /><ReviewSteps status={s} compact /></>) },
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
             { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>{t('required')}</Tag> : '-') },
-            { title: '', key: 'act', width: 90, render: (_, op: OrderPackage) => canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)}>{t('cancel')}</Button> },
+            { title: t('actions'), key: 'act', width: 96, fixed: 'right', render: (_, op: OrderPackage) => (
+              <RowActions>
+                {canEditOrder && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeOp(op)}>{t('cancel')}</Button>}
+              </RowActions>
+            ) },
           ]}
         />
       </Card>

@@ -13,6 +13,8 @@ import { STATUS_LABELS } from '@/i18n/messages'
 import SubmitOnEnter from '@/components/SubmitOnEnter'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
+import RowActions from '@/components/RowActions'
+import { ELLIPSIS } from '@/utils/table'
 import type { Department, Lang, Package, PackageRow, User } from '@/types'
 
 // 可筛选的资料包当前状态（与后端 current_status 取值一致）
@@ -65,6 +67,9 @@ export default function Packages() {
     return true
   })
 
+  // 操作列固定在右侧，宽度随可见按钮数变化
+  const actWidth = isAdmin ? 184 : 100
+
   const deptLabel = (id: string | null) => {
     const d = depts.find((x) => x.id === id)
     if (!d) return '-'
@@ -116,19 +121,21 @@ export default function Packages() {
         loading={loading}
         dataSource={data}
         pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }}
+        // 列宽之和；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
+        scroll={{ x: 870 + actWidth }}
         columns={[
           { title: 'COO', dataIndex: 'code', width: 90 },
-          { title: t('packages'), render: (_, r) => localName(r, lang) },
-          { title: t('dept'), width: 120, render: (_, r) => deptLabel(r.dept_id) },
-          { title: t('owner'), width: 110, render: (_, r) => ownerLabel(r.owner_user_id) },
+          { title: t('packages'), width: 240, ellipsis: ELLIPSIS, render: (_, r) => localName(r, lang) },
+          { title: t('dept'), width: 120, ellipsis: ELLIPSIS, render: (_, r) => deptLabel(r.dept_id) },
+          { title: t('owner'), width: 110, ellipsis: ELLIPSIS, render: (_, r) => ownerLabel(r.owner_user_id) },
           { title: t('version'), dataIndex: 'current_version', width: 90, render: (v: string) => v || '-' },
           { title: t('status'), dataIndex: 'current_status', width: 130, render: (s: string) => <StatusTag status={s} /> },
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
-          { title: '', key: 'act', width: isAdmin ? 180 : 110, render: (_, r) => (
-            <Space>
+          { title: t('actions'), key: 'act', width: actWidth, fixed: 'right', render: (_, r) => (
+            <RowActions>
               <Button size="small" icon={<EyeOutlined />} onClick={() => nav(`/packages/${r.id}`)}>{t('detail')}</Button>
               {isAdmin && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>{t('edit')}</Button>}
-            </Space>
+            </RowActions>
           ) },
         ]}
       />
