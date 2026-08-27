@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, App, Button, Card, DatePicker, Input, Select, Space, Table } from 'antd'
 import { DownloadOutlined, SearchOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { errMessage } from '@/api/client'
 import { audit } from '@/api/endpoints'
@@ -27,7 +28,20 @@ export default function Audit() {
   const [domain, setDomain] = useState<string | undefined>()
   const [actor, setActor] = useState('')
   const [target, setTarget] = useState('')
-  const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null)
+  // 默认只看最近 90 天，而不是全量。
+  //
+  // 理由是成本：审计日志按三年保留规划，全量导出可达 10 万行（MAX_EXPORT_ROWS），
+  // 第 55 轮实测那个量级要 36 秒 CPU；而这套是单进程部署，第 79 轮压测显示
+  // 并发重导出超过约 5 个全站就对普通用户不可用。日常审计工作绝大多数只看近期，
+  // 让默认查询便宜一个数量级，导出名额（core/heavy.py）也能更快周转。
+  //
+  // **默认值放在这里而不是后端**：后端加默认会变成"看不见的截断"——用户看到
+  // 空列表会以为没有记录，而这套系统反复吃过这种亏（静默截断与确实没有，
+  // 结论完全相反）。放进日期控件后窗口是**显式可见**的，用户一眼看到、
+  // 也能随手清空取全量；后端行为完全不变（不传日期就是全量），API 调用方不受影响。
+  const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(
+    [dayjs().subtract(90, 'day'), dayjs()],
+  )
   const [loading, setLoading] = useState(true)
 
   // d：undefined = 用当前 state；null = 明确清除（Select 的 allowClear 触发时 state 尚未更新）
