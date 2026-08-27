@@ -78,6 +78,8 @@ def _run_one(db, job: ExportJob) -> None:
     job.status = "running"
     job.started_at = datetime.datetime.utcnow()
     db.commit()
+    job_id = job.id       # 行被删后 rollback 会让 job 的属性全部过期，再取会抛 ObjectDeletedError
+    dest = ""
     try:
         fname, path, _n = fn(db, user, job.params or {})
         # 移入长期目录：生成器落在 .export-tmp，那里是"用完即删"的语义
@@ -87,6 +89,7 @@ def _run_one(db, job: ExportJob) -> None:
         job.stored_name = os.path.basename(dest)
         job.file_size = os.path.getsize(dest)
         job.status = "done"
+        job.error = ""
     except Exception as e:  # noqa: BLE001
         # 失败原因要能给用户看：第 79 轮之前用户只知道"没反应"
         logger.exception("导出作业失败 id=%s kind=%s", job.id, job.kind)
@@ -94,8 +97,50 @@ def _run_one(db, job: ExportJob) -> None:
         job.error = str(e)[:2000]
     finally:
         job.finished_at = datetime.datetime.utcnow()
-        db.commit()
+        try:
+            db.commit()
+        except Exception:  # noqa: BLE001
+            # 作业跑到一半被提交人删掉了（DELETE /exports/{id}），UPDATE 匹配 0 行。
+            # 行没了，产物也不能留：否则它既不在列表里、也不会被清理（第 71 轮）。
+            db.rollback()
+            if dest:
+                try:
+                    os.unlink(dest)
+                except OSError:
+                    pass
+            logger.warning("导出作业 id=%s 执行期间已被删除，产物已丢弃", job_id)
+            return
         _notify_done(db, job)
+
+
+# 被重启打断的作业最多自动重跑一次；再次被打断就判失败——否则一个会把进程
+# 跑崩（比如 OOM）的作业会在每次重启后被重新捡起，形成崩溃循环。
+_REQUEUE_MARK = "服务重启中断，已自动重排"
+
+
+def _reclaim_interrupted(db) -> None:
+    """启动时接手上一进程留下的 `running` 作业。
+
+    worker 由单例选举保证同一时刻只有一个（core/singleton.py），因此启动时看到的
+    `running` 一定是上一个进程死掉时留下的：主循环只取 `pending`，这些行不接手
+    就会**永远停在 running**——提交人看着"执行中"干等，前端一直轮询，直到 24 小时
+    后清理把它悄悄删掉，全程没有任何提示。（第 86 轮实测确认。）
+    """
+    stuck = db.query(ExportJob).filter(ExportJob.status == "running").all()
+    for j in stuck:
+        if (j.error or "").startswith(_REQUEUE_MARK):
+            j.status = "failed"
+            j.error = f"{_REQUEUE_MARK}后再次被中断，请重新提交"
+            j.finished_at = datetime.datetime.utcnow()
+            db.commit()
+            _notify_done(db, j)
+            logger.warning("导出作业 id=%s 两次被重启中断，已判失败", j.id)
+        else:
+            j.status = "pending"
+            j.error = _REQUEUE_MARK
+            j.started_at = None
+            db.commit()
+            logger.warning("导出作业 id=%s 被重启中断，已重新排队", j.id)
 
 
 def _notify_done(db, job: ExportJob) -> None:
@@ -149,11 +194,15 @@ def _loop() -> None:
     内层操作被 try 包着，一次数据库抖动就让线程永久结束、功能静默停摆。
     """
     last_cleanup = 0.0
+    reclaimed = False
     while True:
         try:
             from app.db import SessionLocal
             db = SessionLocal()
             try:
+                if not reclaimed:
+                    _reclaim_interrupted(db)
+                    reclaimed = True
                 if time.monotonic() - last_cleanup > 3600:
                     _cleanup(db)
                     last_cleanup = time.monotonic()
