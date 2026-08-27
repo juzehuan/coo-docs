@@ -95,8 +95,10 @@ export default function Nas() {
   return (
     <>
       <PageHeader title={t('nas')} desc={t('nas_desc')} />
-      <Row gutter={16}>
-      <Col xs={24} md={10}>
+      {/* 两张卡片上下排列：同步状态是结论、同步记录是明细，竖排读起来是自然顺序；
+          并排时明细表被压在 14 栏里，列宽不够只能横向滚动 */}
+      <Row gutter={[16, 16]}>
+      <Col span={24}>
         <Card variant="borderless" className="coo-card" title={<span><DatabaseOutlined /> {t('sync_status')}</span>}
           extra={<Space>
             {isAdmin && <Button icon={<SettingOutlined />} onClick={openConfig}>{t('nas_config')}</Button>}
@@ -113,10 +115,10 @@ export default function Nas() {
           </Space>
         </Card>
       </Col>
-      <Col xs={24} md={14}>
+      <Col span={24}>
         <Card variant="borderless" className="coo-card" title={t('sync_status')}>
           <Table rowKey="id" size="small" pagination={{ defaultPageSize: 8, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100] }} dataSource={recs}
-            // 这张表在半栏卡片里，窄屏下列宽会被压到折行；给定列宽之和后改为横向滚动
+            // 列宽之和；窄屏下改为横向滚动，列宽不被挤压，字段就不会折行
             scroll={{ x: 540 }}
             columns={[
             { title: 'ID', dataIndex: 'id', width: 70 },
