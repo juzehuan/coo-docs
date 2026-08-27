@@ -74,20 +74,31 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     # "计数说有 3 条、列表只有 1 条"，而无从判断哪个是对的。
     staffed = staffed_dept_ids(db)
     pending_mine = 0
+    # 候选集 = 每个资料包的最新版本 ∪ 所有在审版本，与 /todo 一致。
+    # 只看"最新版本"会漏掉这种情况：一个已提交的 pending_dept 版本，
+    # 只要有人在它之上再建一个新版本（草稿），最新版就变成那个草稿，
+    # 这条正在等人审的版本会从待办与计数里一起消失（第 70 轮实测）。
+    in_review: dict = {}
+    for v in versions:
+        if v.status in (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO):
+            in_review.setdefault(v.package_id, []).append(v)
     for p in pkgs:
-        v = latest.get(p.id)
-        if not v:
-            continue
-        if user.role == "submitter" and p.owner_user_id == user.id \
-                and v.status in (VersionStatus.DRAFT, VersionStatus.REJECTED,
-                                 VersionStatus.WITHDRAWN):
-            pending_mine += 1
-        elif user.role == "dept_reviewer" and p.dept_id == user.dept_id and v.status == VersionStatus.PENDING_DEPT:
-            pending_mine += 1
-        elif user.role in ("coo_reviewer", "admin") and (
-                v.status == VersionStatus.PENDING_COO
-                or no_reviewer_for(v.status, p.dept_id, staffed)):
-            pending_mine += 1
+        cands, seen = [], set()
+        for v in [latest.get(p.id)] + in_review.get(p.id, []):
+            if v is not None and v.id not in seen:
+                seen.add(v.id)
+                cands.append(v)
+        for v in cands:
+            if user.role == "submitter" and p.owner_user_id == user.id \
+                    and v.status in (VersionStatus.DRAFT, VersionStatus.REJECTED,
+                                     VersionStatus.WITHDRAWN):
+                pending_mine += 1
+            elif user.role == "dept_reviewer" and p.dept_id == user.dept_id and v.status == VersionStatus.PENDING_DEPT:
+                pending_mine += 1
+            elif user.role in ("coo_reviewer", "admin") and (
+                    v.status == VersionStatus.PENDING_COO
+                    or no_reviewer_for(v.status, p.dept_id, staffed)):
+                pending_mine += 1
     ops = (
         db.query(OrderPackage)
         .join(Order, OrderPackage.order_id == Order.id)

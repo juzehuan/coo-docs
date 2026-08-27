@@ -39,6 +39,27 @@ def _latest_version(db: Session, pkg_id: int) -> PackageVersion | None:
     )
 
 
+def _eval_version(p: Package, lv: PackageVersion, user: User, staffed: set,
+                  out: list) -> None:
+    """判断某个资料包版本是否属于当前用户的"待我处理"，是则收进 out。"""
+    if user.role == "submitter":
+        # 纳入 DRAFT：收集资料正是提交人的本职工作，而"已指派但还没提交"的条目
+        # 此前既不进待办也没有通知（第 64 轮实测：指派 3 个资料包后通知 +0、待办 +0），
+        # 他只能靠翻订单列表才知道有活。待办只显示"被退回的返工"、不显示"新派的活"，
+        # 等于把提交人的主工作队列做空了。
+        mine = p.owner_user_id == user.id and lv.status in (
+            VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN)
+    elif user.role == "dept_reviewer":
+        mine = p.dept_id == user.dept_id and lv.status == VersionStatus.PENDING_DEPT
+    elif user.role in ("coo_reviewer", "admin"):
+        mine = (lv.status == VersionStatus.PENDING_COO
+                or no_reviewer_for(lv.status, p.dept_id, staffed))
+    else:  # auditor 只读，无待办
+        mine = False
+    if mine:
+        out.append((p, lv))
+
+
 @router.get("", response_model=list[dict])
 def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """按角色返回待办：提交人看自己被退回需整改；部门审核人看待审；COO/管理员看待终审。
@@ -57,30 +78,32 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
     out = []
     # ---- 资料包版本待办 ----
     # 先筛出"待我处理"的版本，再批量统计附件数，避免逐行懒加载
+    # 待我处理必须覆盖**所有在审版本**，而不只是"每个资料包的最新版本"。
+    # 第 70 轮实测：一个已提交的 pending_dept 版本，只要有人在它之上再建一个新版本
+    # （草稿），最新版就变成了那个草稿，**这条正在等人审的版本会从所有人的待办里
+    # 彻底消失**——数据没丢、状态还是 pending_dept，只是谁都看不见。
+    # 前后对照：存在更新的草稿时审核人待办 0 条；删掉草稿立刻变 1 条。
+    # 而"当前版本还在审、先把下一版的框架建起来"是再正常不过的操作。
+    # 因此候选集 = 每个资料包的最新版本 ∪ 所有处于在审状态的版本。
+    # 在审版本按状态一次性查出（而不是逐包再查一遍），只多一条 SQL。
+    in_review = (db.query(PackageVersion)
+                 .filter(PackageVersion.status.in_(
+                     (VersionStatus.PENDING_DEPT, VersionStatus.PENDING_COO)))
+                 .all())
+    extra: dict = {}
+    for v in in_review:
+        extra.setdefault(v.package_id, []).append(v)
+
     ver_hits: list[tuple] = []
     for p in pkgs:
-        lv = _latest_version(db, p.id)
-        if not lv:
-            continue
-        # 角色判定：当前资料包是否为"待我处理"
-        if user.role == "submitter":
-            # 纳入 DRAFT：收集资料正是提交人的本职工作，而"已指派但还没提交"的条目
-            # 此前既不进待办也没有通知（第 64 轮实测：指派 3 个资料包后通知 +0、待办 +0），
-            # 他只能靠翻订单列表才知道有活。待办只显示"被退回的返工"、不显示"新派的活"，
-            # 等于把提交人的主工作队列做空了。
-            mine = p.owner_user_id == user.id \
-                and lv.status in (VersionStatus.DRAFT, VersionStatus.REJECTED,
-                                  VersionStatus.WITHDRAWN)
-        elif user.role == "dept_reviewer":
-            mine = p.dept_id == user.dept_id and lv.status == VersionStatus.PENDING_DEPT
-        elif user.role in ("coo_reviewer", "admin"):
-            mine = (lv.status == VersionStatus.PENDING_COO
-                    or no_reviewer_for(lv.status, p.dept_id, staffed))
-        else:  # auditor 只读，无待办
-            mine = False
-        if not mine:
-            continue
-        ver_hits.append((p, lv))
+        cands = []
+        seen_ids = set()
+        for v in [_latest_version(db, p.id)] + extra.get(p.id, []):
+            if v is not None and v.id not in seen_ids:
+                seen_ids.add(v.id)
+                cands.append(v)
+        for lv in cands:
+            _eval_version(p, lv, user, staffed, ver_hits)
 
     ver_counts = _att_counts(db, Attachment.version_id, [lv.id for _p, lv in ver_hits])
     for p, lv in ver_hits:
