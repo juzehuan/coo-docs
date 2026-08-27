@@ -113,6 +113,25 @@ def create_app() -> FastAPI:
     # 接不住它——池一旦耗尽，用户拿到的是**裸 500 "Internal Server Error"**。
     # 而第 23 轮设立那个处理器的理由恰恰适用于此：500 会把运维引向"代码有 bug"
     # 的排查方向，且裸 500 无结构、前端取不到 detail，用户只看到笼统报错。
+    @app.exception_handler(OSError)
+    def _os_error(request, exc: OSError):
+        """文件系统错误（第 100 轮）。
+
+        磁盘写满是交付机上最可能发生的文件系统故障：save_upload 会把半截临时文件
+        清掉（不留坏证据），但用户此前只会看到裸 500。ENOSPC/EDQUOT 用 507 说清楚
+        "空间不足、找管理员"，管理员按 storage_check.py / /health 的剩余空间处理。
+        """
+        import errno as _errno
+        if exc.errno in (_errno.ENOSPC, _errno.EDQUOT):
+            logging.getLogger("app").error("磁盘空间不足 %s: %s", request.url.path, exc)
+            return SafeIntJSONResponse(status_code=507, content={
+                "detail": "服务器存储空间不足，本次操作未保存；请联系管理员清理磁盘后重试"})
+        if exc.errno in (_errno.EROFS, _errno.EIO):
+            logging.getLogger("app").error("文件系统不可写 %s: %s", request.url.path, exc)
+            return SafeIntJSONResponse(status_code=503, content={
+                "detail": "服务器文件系统暂不可写，本次操作未保存；请联系管理员"})
+        raise exc
+
     @app.exception_handler(SATimeoutError)
     def _pool_exhausted(request, exc: SATimeoutError):
         logging.getLogger("app").error("数据库连接池耗尽 %s: %s", request.url.path, exc)
@@ -157,7 +176,13 @@ def create_app() -> FastAPI:
                 status_code=503,
                 content={"status": "unavailable", "app": settings.APP_NAME, "db": "down"},
             )
-        return {"status": "ok", "app": settings.APP_NAME, "db": "up"}
+        # 上传目录所在文件系统的剩余空间：磁盘写满时整套系统一起停，监控该看得到它逼近
+        try:
+            st = os.statvfs(settings.UPLOAD_DIR)
+            free_mb = st.f_bavail * st.f_frsize // (1024 * 1024)
+        except OSError:
+            free_mb = None
+        return {"status": "ok", "app": settings.APP_NAME, "db": "up", "disk_free_mb": free_mb}
 
     @app.on_event("startup")
     def _startup():

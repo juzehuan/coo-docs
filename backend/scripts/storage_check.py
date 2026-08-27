@@ -47,6 +47,12 @@ def main() -> int:
         print(f"[ERROR] 上传目录不存在：{updir}")
         return 2
     on_disk = {f for f in os.listdir(updir) if os.path.isfile(os.path.join(updir, f))}
+    # 剩余空间（第 100 轮）：磁盘写满时上传 507、整套系统随后一起停；巡检该在逼近时就说
+    st = os.statvfs(updir)
+    free, total = st.f_bavail * st.f_frsize, st.f_blocks * st.f_frsize
+    pct = (free / total * 100) if total else 0
+    flag = "  [WARN] 剩余不足 10%，请尽快清理或扩容" if pct < 10 else ""
+    print(f"  磁盘剩余：{human(free)} / {human(total)}（{pct:.0f}%）{flag}")
 
     db = SessionLocal()
     try:
