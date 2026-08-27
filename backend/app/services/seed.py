@@ -85,9 +85,17 @@ ACCOUNTS = [
     ("dept_prd", "生产经理", Role.DEPT_REVIEWER, "PRD", "dept123"),
     ("dept_adm", "行政经理", Role.DEPT_REVIEWER, "ADM", "dept123"),
     ("dept_qal", "质量经理", Role.DEPT_REVIEWER, "QAL", "dept123"),
+    # 每个部门都要有提交人：资料包责任人若只能落在部门经理身上，上传人与审核人
+    # 就成了同一个人，职责分离形同虚设（代码在本部门无第二名审核人时不阻止，
+    # 否则流程会死锁）。八个部门一一对应。
+    ("submit_wai", "外贸专员", Role.SUBMITTER, "WAI", "user123"),
     ("submit_eng", "采购专员", Role.SUBMITTER, "ENG", "user123"),
+    ("submit_sal", "销售专员", Role.SUBMITTER, "SAL", "user123"),
     ("submit_fin", "财务专员", Role.SUBMITTER, "FIN", "user123"),
     ("submit_log", "物流专员", Role.SUBMITTER, "LOG", "user123"),
+    ("submit_prd", "生产专员", Role.SUBMITTER, "PRD", "user123"),
+    ("submit_qal", "质量专员", Role.SUBMITTER, "QAL", "user123"),
+    ("submit_adm", "行政专员", Role.SUBMITTER, "ADM", "user123"),
     ("auditor", "内审员", Role.AUDITOR, None, "audit123"),
 ]
 

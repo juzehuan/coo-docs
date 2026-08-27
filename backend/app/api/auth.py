@@ -42,9 +42,14 @@ DEMO_CREDENTIALS = {
     # 停用状态的账号不会出现在按钮里（下面按 status == active 过滤），
     # 列在这里是为了与 seed 的 ACCOUNTS 保持一份完整对照
     "dept_eng2": "dept123",
+    "submit_wai": "user123",
     "submit_eng": "user123",
+    "submit_sal": "user123",
     "submit_fin": "user123",
     "submit_log": "user123",
+    "submit_prd": "user123",
+    "submit_qal": "user123",
+    "submit_adm": "user123",
 }
 
 

@@ -27,9 +27,14 @@ const DEMO_PASSWORDS: Record<string, string> = {
   dept_qal: 'dept123',
   dept_adm: 'dept123',
   dept_eng2: 'dept123',
+  submit_wai: 'user123',
   submit_eng: 'user123',
+  submit_sal: 'user123',
   submit_fin: 'user123',
   submit_log: 'user123',
+  submit_prd: 'user123',
+  submit_qal: 'user123',
+  submit_adm: 'user123',
 }
 
 export default function Login() {
