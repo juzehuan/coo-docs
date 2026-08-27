@@ -173,7 +173,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <span class="brand">COO 资料收集平台</span>
   <span class="sub">用户操作手册</span>
   <span class="spacer"></span>
-  <button class="btn print" type="button" onclick="window.print()">打印 / 存为 PDF</button>
+  <button class="btn print" type="button" id="printBtn">打印 / 存为 PDF</button>
   <a class="btn" href="/">返回系统</a>
 </div>
 <div id="backdrop"></div>
@@ -294,6 +294,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 <h3 id="s-2-3">2.3 登录失败与账号锁定<a class="anchor" href="#s-2-3" aria-label="链接到本节">#</a></h3>
 <div class="table-wrap"><table><thead><tr><th>提示</th><th>含义</th><th>怎么办</th></tr></thead><tbody><tr><td>用户名或密码错误</td><td>账号或密码不对</td><td>检查大小写、输入法;注意密码区分大小写</td></tr><tr><td>账号已锁定,请稍后重试</td><td><strong>连续 5 次密码错误</strong>,账号被锁 <strong>30 分钟</strong></td><td>等 30 分钟自动解锁,或请管理员重置密码立即恢复</td></tr><tr><td>账号已被停用,如需恢复请联系管理员</td><td>账号被管理员停用</td><td>联系管理员</td></tr><tr><td>请求过于频繁,请稍后再试</td><td>同一网络出口短时间内登录请求过多(每 IP 每分钟 60 次)</td><td>稍等一分钟再试;整厂共用一个出口 IP 时换班集中登录可能触发</td></tr></tbody></table></div>
 <h3 id="s-2-4">2.4 修改密码(所有人)<a class="anchor" href="#s-2-4" aria-label="链接到本节">#</a></h3>
+<p><strong>首次登录</strong>(新账号,或管理员刚为你重置了密码)会自动弹出改密窗,且<strong>必须改完才能继续使用</strong>——临时密码只能用来改密。之后可随时改:</p>
 <p>右上角<strong>头像 → 修改密码</strong>:</p>
 <ul>
 <li>需要填写<strong>原密码</strong>、新密码、确认新密码;</li>
@@ -585,7 +586,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 </ul>
 <h4 id="s-65">组织管理 →「用户」<a class="anchor" href="#s-65" aria-label="链接到本节">#</a></h4>
 <ul>
-<li><strong>新建用户</strong>:用户名(≤64)、姓名、初始密码(≥6 位)、<strong>角色</strong>、<strong>所属部门</strong>、<strong>授权工厂</strong>(可多选)。</li>
+<li><strong>新建用户</strong>:用户名(≤64)、姓名、（密码由系统生成，创建后<strong>只展示一次</strong>，请立即告知用户）、<strong>角色</strong>、<strong>所属部门</strong>、<strong>授权工厂</strong>(可多选)。</li>
 <li><strong>编辑用户</strong>:改姓名/角色/部门/工厂授权。</li>
 <li><strong>停用/启用</strong>(带二次确认):停用后该用户<strong>立即无法登录</strong>,已登录的会话也会在下次请求时被踢出并显示 「账号已被停用」;<strong>历史操作记录全部保留</strong>。</li>
 <li><strong>重置密码</strong>:生成一次性临时密码,<strong>只显示一次</strong>,请当场记下并单独告知本人。 谁重置了谁的密码会记入操作日志。</li>
@@ -642,53 +643,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   </main>
 </div>
 <button id="top" type="button" title="回到顶部">↑</button>
-<script>
-(function(){
-  var links=[].slice.call(document.querySelectorAll('.toc a'));
-  var heads=links.map(function(a){return document.getElementById(a.getAttribute('href').slice(1));});
-  var side=document.getElementById('sidebar'),back=document.getElementById('backdrop');
-
-  function setOpen(v){side.classList.toggle('open',v);back.classList.toggle('open',v);}
-  document.getElementById('menuBtn').onclick=function(){setOpen(!side.classList.contains('open'));};
-  back.onclick=function(){setOpen(false);};
-  // 窄屏点完目录就收起，否则浮层一直盖着正文
-  links.forEach(function(a){a.onclick=function(){if(window.innerWidth<=1000)setOpen(false);};});
-
-  // 目录高亮：取最后一个已滚过顶部的标题
-  var top=document.getElementById('top'),cur=-1,ticking=false;
-  function sync(){
-    ticking=false;
-    var y=window.scrollY+80,idx=0;
-    for(var i=0;i<heads.length;i++){if(heads[i]&&heads[i].offsetTop<=y)idx=i;}
-    if(idx!==cur){
-      if(links[cur])links[cur].classList.remove('active');
-      links[idx].classList.add('active');cur=idx;
-      // 目录很长，跟随滚动把当前项带进可视区（仅在它已经跑出视野时）。
-      // 这里必须直接改 side.scrollTop，不能用 scrollIntoView：后者会把**所有**
-      // 祖先滚动容器（含文档本身）一起滚，于是点目录触发的平滑滚动刚走到一半
-      // 就被它拽回来——实测点「6.3」后 scrollY 从 0 冲到 384 又退回 211 停住，
-      // 页面看起来像是根本没跳转。
-      var r=links[idx].getBoundingClientRect(),s=side.getBoundingClientRect();
-      if(r.top<s.top+8||r.bottom>s.bottom-8){
-        side.scrollTop+=(r.top-s.top)-(side.clientHeight/2-r.height/2);
-      }
-    }
-    top.style.display=window.scrollY>400?'block':'none';
-  }
-  window.addEventListener('scroll',function(){if(!ticking){ticking=true;requestAnimationFrame(sync);}},{passive:true});
-  sync();
-  top.onclick=function(){window.scrollTo({top:0,behavior:'smooth'});};
-
-  // 目录过滤：676 行的手册靠肉眼找章节太慢
-  var f=document.getElementById('tocfilter');
-  f.oninput=function(){
-    var q=f.value.trim().toLowerCase();
-    links.forEach(function(a){
-      a.classList.toggle('hidden',!!q&&a.textContent.toLowerCase().indexOf(q)<0);
-    });
-  };
-  f.onkeydown=function(e){if(e.key==='Escape'){f.value='';f.oninput();f.blur();}};
-})();
-</script>
+<!-- 脚本外置：站点 CSP 为 script-src 'self'，内联脚本与 onclick 属性一律被拦（第 93 轮） -->
+<script src="/manual.js" defer></script>
 </body>
 </html>

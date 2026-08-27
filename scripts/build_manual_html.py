@@ -24,6 +24,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "docs", "用户操作手册.md")
 OUT = os.path.join(ROOT, "frontend", "public", "manual.html")
+OUT_JS = os.path.join(ROOT, "frontend", "public", "manual.js")
 
 
 # ---------------------------------------------------------------- 行内元素
@@ -437,6 +438,7 @@ JS = """
   window.addEventListener('scroll',function(){if(!ticking){ticking=true;requestAnimationFrame(sync);}},{passive:true});
   sync();
   top.onclick=function(){window.scrollTo({top:0,behavior:'smooth'});};
+  var pb=document.getElementById('printBtn'); if(pb)pb.onclick=function(){window.print();};
 
   // 目录过滤：676 行的手册靠肉眼找章节太慢
   var f=document.getElementById('tocfilter');
@@ -465,7 +467,7 @@ PAGE = """<!doctype html>
   <span class="brand">COO 资料收集平台</span>
   <span class="sub">用户操作手册</span>
   <span class="spacer"></span>
-  <button class="btn print" type="button" onclick="window.print()">打印 / 存为 PDF</button>
+  <button class="btn print" type="button" id="printBtn">打印 / 存为 PDF</button>
   <a class="btn" href="/">返回系统</a>
 </div>
 <div id="backdrop"></div>
@@ -481,7 +483,8 @@ PAGE = """<!doctype html>
   </main>
 </div>
 <button id="top" type="button" title="回到顶部">↑</button>
-<script>{js}</script>
+<!-- 脚本外置：站点 CSP 为 script-src 'self'，内联脚本与 onclick 属性一律被拦（第 93 轮） -->
+<script src="/manual.js" defer></script>
 </body>
 </html>
 """
@@ -494,10 +497,12 @@ def main() -> int:
     toc_html = "\n".join(
         f'      <li><a class="lv{lv}" href="#{a}">{html.escape(t, quote=False)}</a></li>'
         for lv, t, a in toc)
-    page = PAGE.format(css=CSS, js=JS, toc=toc_html, body=body)
+    page = PAGE.format(css=CSS, toc=toc_html, body=body)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(page)
+    with open(OUT_JS, "w", encoding="utf-8") as f:
+        f.write(JS)
     # 按字节而非字符计:中文在 UTF-8 下是 3 字节,按 len(str) 报出来的数字会小三成
     kb = os.path.getsize(OUT) / 1024
     print(f"[OK] {SRC}\n  -> {OUT}  ({kb:.1f} KB，目录 {len(toc)} 项)")
