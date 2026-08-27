@@ -4,7 +4,6 @@ import { App, Card, Empty, Table, Typography, Tag } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
 import { errMessage } from '@/api/client'
 import { todo } from '@/api/endpoints'
-import { useAuth } from '@/store/AuthContext'
 import { useI18n } from '@/i18n'
 import StatusTag from '@/components/StatusTag'
 import PageHeader from '@/components/PageHeader'
@@ -16,7 +15,6 @@ import type { TodoItem } from '@/types'
 
 export default function Todo() {
   const { t } = useI18n()
-  const { user } = useAuth()
   const { message } = App.useApp()
   const nav = useNavigate()
   const [rows, setRows] = useState<TodoItem[]>([])
@@ -31,11 +29,15 @@ export default function Todo() {
   }, [message])
   useEffect(() => { load() }, [load])
 
-  // 按钮文案：提交人→整改，部门审核→去审核，COO/管理员→去终审
+  // 按钮文案按**条目状态**决定，不按角色。
+  // 同一个人的待办里现在可能同时有两类：待我整理（我是责任人、还没提交）与
+  // 待我审核（轮到我审）——部门审核人既维护本部门的常备档案又审本部门的提交。
+  // 按角色给文案的话，他那条草稿条目会显示"去审核"，点进去却是上传界面。
   const actionLabel = (r: TodoItem) => {
-    if (user?.role === 'submitter') return t('go_rework')
-    if (user?.role === 'dept_reviewer') return t('go_review')
-    return r.status === 'pending_coo' ? t('go_final') : t('go_review')
+    if (r.status === 'pending_coo') return t('go_final')
+    if (r.status === 'pending_dept') return t('go_review')
+    if (r.status === 'rejected') return t('go_rework')
+    return t('go_upload')     // draft / withdrawn：还没进审核流，去补材料
   }
 
   return (

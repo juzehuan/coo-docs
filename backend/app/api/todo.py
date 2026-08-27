@@ -31,23 +31,37 @@ def _att_counts(db: Session, column, ids: list[int]) -> dict[int, int]:
 router = APIRouter(prefix="/todo", tags=["todo"])
 
 
+def _assigned_to(owner_user_id, submitted_by, status: str, user: User) -> bool:
+    """"待我整理"：被指派给本人、且还没进入审核流的条目（草稿 / 退回 / 撤回）。
+
+    **不按角色判断，只按"谁是责任人"。** 第 64 轮把 DRAFT 纳入待办时只覆盖了提交人
+    角色，而责任人未必是提交人——本机 18 个资料包里有 10 个的责任人是部门审核人。
+    实测订单 OWN-ENG-1787459107999 的 COO-03 指派给销售经理后处于草稿态：
+    提交人分支要求 role == submitter（他不是），部门审核人分支只筛 pending_dept
+    （它是 draft），于是**这条有责任人、有截止日期的活不在任何人的待办里**，
+    责任人只能靠那条一次性通知，通知翻过去就再也没有入口。
+
+    审计查看人排除在外：他只读、传不了附件，给他待办等于给一条点进去做不了事的条目。
+    """
+    if user.role == "auditor":
+        return False
+    return (owner_user_id == user.id or submitted_by == user.id) and status in (
+        VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN)
+
+
 def _eval_version(p: Package, lv: PackageVersion, user: User, staffed: set,
                   out: list) -> None:
-    """判断某个资料包版本是否属于当前用户的"待我处理"，是则收进 out。"""
-    if user.role == "submitter":
-        # 纳入 DRAFT：收集资料正是提交人的本职工作，而"已指派但还没提交"的条目
-        # 此前既不进待办也没有通知（第 64 轮实测：指派 3 个资料包后通知 +0、待办 +0），
-        # 他只能靠翻订单列表才知道有活。待办只显示"被退回的返工"、不显示"新派的活"，
-        # 等于把提交人的主工作队列做空了。
-        mine = p.owner_user_id == user.id and lv.status in (
-            VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN)
-    elif user.role == "dept_reviewer":
-        mine = p.dept_id == user.dept_id and lv.status == VersionStatus.PENDING_DEPT
+    """判断某个资料包版本是否属于当前用户的"待我处理"，是则收进 out。
+
+    两类并列（用 or 而不是按角色 if/elif）：**待我整理**看责任人，**待我审核**看角色。
+    同一个人可能两者都有——部门审核人既维护本部门的常备档案，又审本部门的提交。
+    """
+    mine = _assigned_to(p.owner_user_id, lv.submitted_by, lv.status, user)
+    if user.role == "dept_reviewer":
+        mine = mine or (p.dept_id == user.dept_id and lv.status == VersionStatus.PENDING_DEPT)
     elif user.role in ("coo_reviewer", "admin"):
-        mine = (lv.status == VersionStatus.PENDING_COO
-                or no_reviewer_for(lv.status, p.dept_id, staffed))
-    else:  # auditor 只读，无待办
-        mine = False
+        mine = mine or (lv.status == VersionStatus.PENDING_COO
+                        or no_reviewer_for(lv.status, p.dept_id, staffed))
     if mine:
         out.append((p, lv))
 
@@ -143,18 +157,14 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
         order = orders.get(op.order_id)
         if not pkg or not order:
             continue
-        if user.role == "submitter":
-            # 同上：纳入 DRAFT（已指派未提交）
-            mine = (op.owner_user_id == user.id or op.submitted_by == user.id) \
-                and op.status in (VersionStatus.DRAFT, VersionStatus.REJECTED,
-                                  VersionStatus.WITHDRAWN)
-        elif user.role == "dept_reviewer":
-            mine = pkg.dept_id == user.dept_id and op.status == VersionStatus.PENDING_DEPT
+        # 与资料包线同一套：待我整理看责任人（不分角色），待我审核看角色
+        mine = _assigned_to(op.owner_user_id, op.submitted_by, op.status, user)
+        if user.role == "dept_reviewer":
+            mine = mine or (pkg.dept_id == user.dept_id
+                            and op.status == VersionStatus.PENDING_DEPT)
         elif user.role in ("coo_reviewer", "admin"):
-            mine = (op.status == VersionStatus.PENDING_COO
-                    or no_reviewer_for(op.status, pkg.dept_id, staffed))
-        else:
-            mine = False
+            mine = mine or (op.status == VersionStatus.PENDING_COO
+                            or no_reviewer_for(op.status, pkg.dept_id, staffed))
         if not mine:
             continue
         op_hits.append((op, pkg, order))
