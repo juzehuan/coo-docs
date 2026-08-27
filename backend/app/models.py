@@ -253,3 +253,31 @@ class SyncRecord(Base):
     # 索引供「最近一次同步」按时间倒序取用：无索引时 MySQL 需对含 JSON 大字段的宽行 filesort
     started_at = Column(DateTime, default=datetime.utcnow, index=True)
     finished_at = Column(DateTime, nullable=True)
+
+class ExportJob(Base):
+    """异步导出作业（第 80 轮）。
+
+    为什么要异步：导出是这套系统里唯一的 CPU 密集操作，单进程部署下
+    第 79 轮压测测得——并发 5 个导出单请求就要 19 秒、并发 20 起全站对普通用户
+    不可用；而且**客户端超时放弃后服务端仍在继续跑**，用户刷新重试只会雪上加霜。
+    同步 HTTP 还受代理超时约束（第 65 轮把 nginx 放宽到 600s 也只是把悬崖推远）。
+
+    改成作业后：提交即返回、请求不被占住、断线不丢结果、可查看进度与失败原因，
+    并且服务端能按名额排队而不是一拥而上。
+    """
+    __tablename__ = "export_jobs"
+
+    id = Column(BigInteger, primary_key=True, default=_id)
+    # 作业类型决定用哪个生成器；参数存 JSON，避免每加一种导出就改表
+    kind = Column(String(32), nullable=False)
+    params = Column(JSON, default=dict)
+    # 提交人：既用于权限复核，也用于"我的导出"列表
+    user_id = Column(BigInteger, nullable=False, index=True)
+    status = Column(String(16), default="pending", index=True)   # pending/running/done/failed
+    file_name = Column(String(255), default="")     # 下发给用户的文件名
+    stored_name = Column(String(255), default="")   # 落盘文件名（不含路径）
+    file_size = Column(BigInteger, default=0)
+    error = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)

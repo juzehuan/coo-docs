@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.heavy import heavy_slot
+from app.services import exporter
 from app.core.audit import client_ip, log_event
 from app.core.http_headers import content_disposition
 from app.core.i18n import t
@@ -114,29 +115,18 @@ def export_logs(
     点导出却拿到全部日志（实测界面 53 条 / 导出 2396 条），而这份文件是要
     作为佐证材料交出去的——与查询对不上的证据比没有证据更糟。
     """
-    q = _apply_filters(db.query(AuditLog), actor_id, actor, target, domain, start, end)
-    total = q.with_entities(func.count(AuditLog.id)).scalar() or 0
-    if total > MAX_EXPORT_ROWS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"符合条件的记录有 {total} 条，超过单次导出上限 {MAX_EXPORT_ROWS} 条，请缩小时间范围后重试",
-        )
-    rows = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).all()
-    header = [t("time_site_tz"), t("domain"), t("action"), t("actor"),
-              t("role"), t("ip"), t("target"), t("detail")]
-    data = [[
-        time_fmt(r.created_at),   # 站点时区 + 显式偏移，导出的证据必须自解释
-        r.event_domain, r.action, r.actor_name, r.actor_role, r.ip, r.target, r.detail,
-    ] for r in rows]
-    content = build_xlsx(header, data, sheet_title=t("sheet_audit"))
+    # 生成逻辑在 services/exporter.py，与异步导出作业共用同一份实现
+    # ——两条路各写一遍，迟早给出不一样的文件，而这些文件是交给核查方的证据。
+    try:
+        fname, path, n = exporter.audit_xlsx(
+            db, user, {},
+            lambda q: _apply_filters(q, actor_id, actor, target, domain, start, end))
+    except exporter.ExportTooLarge as e:
+        raise HTTPException(status_code=400, detail=str(e))
     # 留痕记录导出了多少条、用了什么条件：事后要能回答"这份佐证材料是怎么来的"
     cond = ",".join(f"{k}={v}" for k, v in
                     (("actor", actor), ("target", target), ("domain", domain),
                      ("start", start), ("end", end)) if v)
     log_event(db, AuditDomain.EXPORT, "audit_xlsx", actor=user, ip=client_ip(request),
-              detail=f"rows={len(rows)}" + (f",{cond}" if cond else ",无筛选条件"))
-    return Response(
-        content=content,
-        media_type=XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": content_disposition("audit_logs.xlsx")},
-    )
+              detail=f"rows={n}" + (f",{cond}" if cond else ",无筛选条件"))
+    return exporter.deliver(path, XLSX_MEDIA_TYPE, fname)

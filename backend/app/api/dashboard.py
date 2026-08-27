@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import VersionStatus
 from app.core.heavy import heavy_slot
+from app.services import exporter
 from app.core.audit import client_ip, log_event
 from app.core.overdue import is_overdue
 from app.core.http_headers import content_disposition
@@ -167,32 +168,7 @@ def export_archive_list(request: Request, db: Session = Depends(get_db),
     而订单线才是日常主要工作流——实测清单 32 行、遗漏 31 条已放行订单实例，
     交给核查方的"归档清单"少了一半内容却看不出任何缺失迹象。
     """
-    pkgs = {p.id: p for p in db.query(Package).all()}
-    header = [t("kind"), t("pkg_code"), t("pkg_name"), t("ver_or_order"), t("status"),
-              t("owner"), t("attachments"), t("nas_synced")]
-    # "责任人"列此前填的是雪花 ID（列名写着责任人、内容是一串数字），改填姓名
-    unames = {u.id: (u.display_name or u.username) for u in db.query(User).all()}
-    data = []
-    for v in db.query(PackageVersion).all():
-        p = pkgs.get(v.package_id)
-        synced = sum(1 for a in v.attachments if a.nas_synced)
-        data.append([t("kind_version"), p.code if p else "", local_name(p), v.version_no,
-                     status_label(v.status), unames.get(v.submitted_by, ""),
-                     str(len(v.attachments)), f"{synced}/{len(v.attachments)}"])
-    # 订单线按可见工厂过滤，避免受控内容跨工厂泄漏
-    fids = _factory_ids(user, db)
-    ops = (db.query(OrderPackage).join(Order, OrderPackage.order_id == Order.id)
-           .filter(Order.factory_id.in_(fids)).all()) if fids else []
-    orders = {o.id: o for o in db.query(Order).all()}
-    for op in ops:
-        p = pkgs.get(op.package_id)
-        o = orders.get(op.order_id)
-        synced = sum(1 for a in op.attachments if a.nas_synced)
-        data.append([t("kind_order"), p.code if p else "", local_name(p),
-                     o.order_no if o else "", status_label(op.status),
-                     unames.get(op.owner_user_id, ""), str(len(op.attachments)),
-                     f"{synced}/{len(op.attachments)}"])
-    content = build_xlsx(header, data, sheet_title=t("sheet_archive_list"))
+    # 生成逻辑在 services/exporter.py，与异步导出作业共用同一份实现
+    fname, path, n = exporter.archive_xlsx(db, user, {})
     log_event(db, AuditDomain.EXPORT, "archive_xlsx", actor=user, ip=client_ip(request))
-    return Response(content=content, media_type=XLSX_MEDIA_TYPE,
-                    headers={"Content-Disposition": content_disposition("archive_list.xlsx")})
+    return exporter.deliver(path, XLSX_MEDIA_TYPE, fname)
