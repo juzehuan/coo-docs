@@ -32,6 +32,17 @@ function Root() {
   )
 }
 
+// 网页字体改为挂载后动态加载。index.html 里的 <link rel="stylesheet"> 是渲染阻塞的：
+// 第 94 轮实测，字体主机不可达且连接挂起（工厂内网防火墙丢包而非快速拒绝）时，
+// 首屏白屏 20.5 秒（正常 1.2 秒）。动态插入的样式表不阻塞渲染，字体到了再换、到不了就用本地字体。
+function loadWebFonts() {
+  const l = document.createElement('link')
+  l.rel = 'stylesheet'
+  l.href = 'https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700;900&family=Noto+Sans+SC:wght@400;500;600;700&display=swap'
+  document.head.appendChild(l)
+}
+window.setTimeout(loadWebFonts, 0)
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <I18nProvider>
