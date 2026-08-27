@@ -10,7 +10,7 @@ from app.constants import ALLOWED_EXTENSIONS, ReviewDecision, ReviewLevel, Versi
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
 from app.core import dl_ticket
-from app.core.i18n import local_name
+from app.core.i18n import local_name, status_label, t
 from app.core.rbac import (
     can_edit_order, can_edit_order_package, export_viewer, get_current_user,
     optional_current_user, user_from_download_ticket,
@@ -583,16 +583,22 @@ def export_order(order_id: int, request: Request, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="订单不存在")
     from fastapi import Response
     fac = db.get(Factory, o.factory_id) if o.factory_id else None
-    header = ["工厂", "订单号", "资料包编号", "资料包名称", "状态", "责任人ID", "附件数", "已放行锁定", "截止日期"]
+    # 表头/状态/布尔一律按请求语言取词：这份表是交给外部核查方的，
+    # 此前表头硬编码中文、状态写枚举原值 `released`、锁定写中文"是"（第 68 轮）
+    header = [t("factory"), t("order_no"), t("pkg_code"), t("pkg_name"), t("status"),
+              t("owner"), t("attachments"), t("locked"), t("due_date")]
+    # 责任人此前填的是 19 位雪花 ID——列名写着"责任人"，内容却是一串数字，
+    # 对核查方毫无意义。改填姓名，取不到时留空而不是回退成 ID。
+    unames = {u.id: (u.display_name or u.username) for u in db.query(User).all()}
     data = []
     for op in sorted(o.packages, key=lambda x: x.package.code if x.package else ""):
         pkg = op.package
         data.append([
             fac.code if fac else "", o.order_no, pkg.code if pkg else "",
-            local_name(pkg), op.status, str(op.owner_user_id or ""),
-            str(len(op.attachments)), "是" if op.locked else "否", op.due_date,
+            local_name(pkg), status_label(op.status), unames.get(op.owner_user_id, ""),
+            str(len(op.attachments)), t("yes") if op.locked else t("no"), op.due_date,
         ])
-    content = build_xlsx(header, data, sheet_title="订单资料清单")
+    content = build_xlsx(header, data, sheet_title=t("sheet_order_list"))
     log_event(db, AuditDomain.EXPORT, "order_export", actor=user, ip=client_ip(request), target=o.order_no)
     return Response(content=content, media_type=XLSX_MEDIA_TYPE,
                     headers={"Content-Disposition": content_disposition(f"order_{o.order_no}.xlsx")})
@@ -612,7 +618,8 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
     safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
 
     with zip_builder() as (zf, zpath):
-        manifest = [["工厂", "订单号", "资料包编号", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
+        manifest = [[t("factory"), t("order_no"), t("pkg_code"), t("file_in_zip"),
+                     t("orig_name"), t("stored_name"), t("size_bytes"), t("md5")]]
         for op in sorted(o.packages, key=lambda x: (x.package.code if x.package else "", x.id)):
             pkg_code = op.package.code if op.package else "NA"
             # 同一资料包内的同名附件（如多个供应商各自的"发票.pdf"）若都用原文件名，
@@ -632,7 +639,7 @@ def export_order_zip(order_id: int, request: Request, db: Session = Depends(get_
                                  att.file_name, str(att.file_size), att.md5 or ""])
         # 交付给核查方的清单同样用 Excel：MD5 与订单号是纯数字/长串时，
         # CSV 会被 Excel 改写成科学计数法，清单便与实际文件对不上
-        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
+        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
     log_event(db, AuditDomain.EXPORT, "order_export_zip", actor=user, ip=client_ip(request), target=o.order_no)
     return zip_response(zpath, content_disposition(f"order_{o.order_no}_archive.zip"))
 

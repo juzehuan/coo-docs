@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import client_ip, log_event
 from app.core.http_headers import content_disposition
+from app.core.i18n import t
 from app.core.timefmt import fmt as time_fmt
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.rbac import audit_viewer
@@ -119,12 +120,13 @@ def export_logs(
             detail=f"符合条件的记录有 {total} 条，超过单次导出上限 {MAX_EXPORT_ROWS} 条，请缩小时间范围后重试",
         )
     rows = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).all()
-    header = ["时间（站点时区）", "域", "动作", "操作人", "角色", "IP", "目标", "说明"]
+    header = [t("time_site_tz"), t("domain"), t("action"), t("actor"),
+              t("role"), t("ip"), t("target"), t("detail")]
     data = [[
         time_fmt(r.created_at),   # 站点时区 + 显式偏移，导出的证据必须自解释
         r.event_domain, r.action, r.actor_name, r.actor_role, r.ip, r.target, r.detail,
     ] for r in rows]
-    content = build_xlsx(header, data, sheet_title="操作日志")
+    content = build_xlsx(header, data, sheet_title=t("sheet_audit"))
     # 留痕记录导出了多少条、用了什么条件：事后要能回答"这份佐证材料是怎么来的"
     cond = ",".join(f"{k}={v}" for k, v in
                     (("actor", actor), ("target", target), ("domain", domain),

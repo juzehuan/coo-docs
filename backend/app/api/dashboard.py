@@ -7,7 +7,7 @@ from app.constants import VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.overdue import is_overdue
 from app.core.http_headers import content_disposition
-from app.core.i18n import local_name
+from app.core.i18n import local_name, status_label, t
 from app.core.xlsx import XLSX_MEDIA_TYPE, build_xlsx
 from app.core.rbac import (can_view_package, export_viewer, get_current_user,
                            no_reviewer_for, staffed_dept_ids)
@@ -166,13 +166,17 @@ def export_archive_list(request: Request, db: Session = Depends(get_db),
     交给核查方的"归档清单"少了一半内容却看不出任何缺失迹象。
     """
     pkgs = {p.id: p for p in db.query(Package).all()}
-    header = ["类型", "资料包编号", "资料包名称", "版本/订单号", "状态", "责任人", "附件数", "已同步NAS"]
+    header = [t("kind"), t("pkg_code"), t("pkg_name"), t("ver_or_order"), t("status"),
+              t("owner"), t("attachments"), t("nas_synced")]
+    # "责任人"列此前填的是雪花 ID（列名写着责任人、内容是一串数字），改填姓名
+    unames = {u.id: (u.display_name or u.username) for u in db.query(User).all()}
     data = []
     for v in db.query(PackageVersion).all():
         p = pkgs.get(v.package_id)
         synced = sum(1 for a in v.attachments if a.nas_synced)
-        data.append(["资料包版本", p.code if p else "", local_name(p), v.version_no, v.status,
-                     str(v.submitted_by or ""), str(len(v.attachments)), f"{synced}/{len(v.attachments)}"])
+        data.append([t("kind_version"), p.code if p else "", local_name(p), v.version_no,
+                     status_label(v.status), unames.get(v.submitted_by, ""),
+                     str(len(v.attachments)), f"{synced}/{len(v.attachments)}"])
     # 订单线按可见工厂过滤，避免受控内容跨工厂泄漏
     fids = _factory_ids(user, db)
     ops = (db.query(OrderPackage).join(Order, OrderPackage.order_id == Order.id)
@@ -182,11 +186,11 @@ def export_archive_list(request: Request, db: Session = Depends(get_db),
         p = pkgs.get(op.package_id)
         o = orders.get(op.order_id)
         synced = sum(1 for a in op.attachments if a.nas_synced)
-        data.append(["订单实例", p.code if p else "", local_name(p),
-                     o.order_no if o else "", op.status,
-                     str(op.owner_user_id or ""), str(len(op.attachments)),
+        data.append([t("kind_order"), p.code if p else "", local_name(p),
+                     o.order_no if o else "", status_label(op.status),
+                     unames.get(op.owner_user_id, ""), str(len(op.attachments)),
                      f"{synced}/{len(op.attachments)}"])
-    content = build_xlsx(header, data, sheet_title="归档清单")
+    content = build_xlsx(header, data, sheet_title=t("sheet_archive_list"))
     log_event(db, AuditDomain.EXPORT, "archive_xlsx", actor=user, ip=client_ip(request))
     return Response(content=content, media_type=XLSX_MEDIA_TYPE,
                     headers={"Content-Disposition": content_disposition("archive_list.xlsx")})

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.constants import AuditDomain, VersionStatus
 from app.core.audit import client_ip, log_event
 from app.core.config import settings
-from app.core.i18n import local_name
+from app.core.i18n import local_name, t
 from app.core.xlsx import build_xlsx
 from app.core.zipout import compression_for, zip_builder, zip_response
 from app.core.http_headers import content_disposition
@@ -162,7 +162,8 @@ def download_released_order_zip(order_id: int, op_id: int, request: Request,
     safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", (p.code if p else "pkg") or "pkg")
     safe_order = re.sub(r"[^A-Za-z0-9_\-]", "_", o.order_no or "order")
     with zip_builder() as (zf, zpath):
-        manifest = [["资料包", "订单号", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
+        manifest = [[t("package"), t("order_no"), t("file_in_zip"), t("orig_name"),
+                     t("stored_name"), t("size_bytes"), t("md5")]]
         dup = duplicate_names(op.attachments)
         for att in op.attachments:
             src = os.path.join(settings.UPLOAD_DIR, att.file_name)
@@ -172,7 +173,7 @@ def download_released_order_zip(order_id: int, op_id: int, request: Request,
             zf.write(src, f"{safe_code}/{safe_order}/{safe_name}", compress_type=compression_for(safe_name))
             manifest.append([p.code if p else "", o.order_no, safe_name, att.original_name,
                              att.file_name, str(att.file_size), att.md5 or ""])
-        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
+        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code if p else ''}/{o.order_no}")
     return zip_response(zpath, content_disposition(f"controlled_{safe_code}_{safe_order}.zip"))
@@ -192,7 +193,8 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
 
     safe_code = re.sub(r"[^A-Za-z0-9_\-]", "_", p.code or "pkg")
     with zip_builder() as (zf, zpath):
-        manifest = [["资料包", "版本", "包内文件名", "附件原名", "存储文件名", "大小(字节)", "MD5"]]
+        manifest = [[t("package"), t("version"), t("file_in_zip"), t("orig_name"),
+                     t("stored_name"), t("size_bytes"), t("md5")]]
         # 同名附件若都用原文件名会在 ZIP 内生成同路径条目、解压时互相覆盖，
         # 导致交付给核查方的材料静默缺件；复用 NAS 归档命名规则保持三处一致。
         dup = duplicate_names(v.attachments)
@@ -205,7 +207,7 @@ def download_released_zip(pkg_id: int, vid: int, request: Request,
             zf.write(src, arc, compress_type=compression_for(safe_name))
             manifest.append([p.code, v.version_no, safe_name, att.original_name, att.file_name,
                              str(att.file_size), att.md5 or ""])
-        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title="交付清单"))
+        zf.writestr("_manifest.xlsx", build_xlsx(manifest[0], manifest[1:], sheet_title=t("sheet_manifest")))
     log_event(db, AuditDomain.EXPORT, "controlled_export_zip", actor=user,
               ip=client_ip(request), target=f"{p.code}/{v.version_no}")
     return zip_response(zpath, content_disposition(f"controlled_{p.code}_{v.version_no}.zip")
