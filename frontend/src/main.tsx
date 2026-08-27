@@ -43,6 +43,20 @@ function loadWebFonts() {
 }
 window.setTimeout(loadWebFonts, 0)
 
+// 跨部署的旧标签页（第 104 轮）：资源按哈希命名，部署后旧 chunk 消失；部署前打开的
+// 标签页再点到懒加载页面就会 "Failed to fetch dynamically imported module"。
+// Vite 为此派发 vite:preloadError——自动刷新一次拿到新 index.html 即可。
+// sessionStorage 做一次性闸门：若刷新后仍失败（真的坏了），交给 ErrorBoundary 说明而不是无限刷新。
+window.addEventListener('vite:preloadError', (e) => {
+  const key = 'coo_chunk_reloaded'
+  try {
+    if (sessionStorage.getItem(key)) return
+    sessionStorage.setItem(key, '1')
+  } catch { /* 隐私模式等取不到 storage 时也照常刷新一次 */ }
+  e.preventDefault()
+  window.location.reload()
+})
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <I18nProvider>

@@ -31,6 +31,25 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     const { error } = this.state
     if (!error) return this.props.children
+    // 懒加载 chunk 拿不到 = 服务端已部署新版本、本页还是旧 index.html（第 104 轮）。
+    // 这不是"页面出错"，更不该让用户截图找管理员：刷新即可。main.tsx 里的
+    // vite:preloadError 监听会先自动刷新一次；走到这里说明刷新后仍失败或监听未触发。
+    const msg = String(error.message || error)
+    const stale = /dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(msg)
+    if (stale) {
+      return (
+        <div style={{ padding: 48 }}>
+          <Result
+            status="info"
+            title={tOutside('app_updated_title')}
+            subTitle={tOutside('app_updated_desc')}
+            extra={<Button type="primary" onClick={() => { try { sessionStorage.removeItem('coo_chunk_reloaded') } catch { /* ignore */ } window.location.reload() }}>
+              {tOutside('reload_page')}
+            </Button>}
+          />
+        </div>
+      )
+    }
     return (
       <div style={{ padding: 48 }}>
         <Result
