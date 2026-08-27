@@ -33,10 +33,14 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?未设置，请先运行 scripts/install.sh 生成 .env}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?未设置，请先运行 scripts/install.sh 生成 .env}
+      # 控制台经反向代理对外时必须告诉它浏览器侧的地址，否则登录跳转会指回
+      # 容器内部的 localhost:9001，浏览器直接断在这一跳。留空即不对外暴露。
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
     volumes:
       - minio_data:/data
     ports:
-      # 仅绑定本机回环：对象存储与控制台不对外暴露（backend 走容器网络访问）
+      # 仅绑定本机回环：外部流量一律经 Cloudflare Tunnel（控制台 coo-nas.chongzhu.ai
+      # → localhost:9001），源站不在局域网/公网直接暴露；S3 API 始终不对外
       - "127.0.0.1:9000:9000"   # S3 API
       - "127.0.0.1:9001:9001"   # 管理控制台
     restart: unless-stopped
