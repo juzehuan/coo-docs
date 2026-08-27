@@ -5,7 +5,7 @@ import re
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import DataError, IntegrityError, OperationalError
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError, TimeoutError as SATimeoutError
 
 from app.core.config import settings
 from app.core.i18n import LangMiddleware
@@ -99,6 +99,21 @@ def create_app() -> FastAPI:
                 detail = msg
                 break
         return SafeIntJSONResponse(status_code=400, content={"detail": detail})
+
+    # 连接池耗尽同样是"暂时性、可重试"，也应回 503。
+    #
+    # 关键在于 **`sqlalchemy.exc.TimeoutError` 不是 `OperationalError` 的子类**
+    # （第 78 轮实测确认，它直接继承 SQLAlchemyError），因此下面那个 503 处理器
+    # 接不住它——池一旦耗尽，用户拿到的是**裸 500 "Internal Server Error"**。
+    # 而第 23 轮设立那个处理器的理由恰恰适用于此：500 会把运维引向"代码有 bug"
+    # 的排查方向，且裸 500 无结构、前端取不到 detail，用户只看到笼统报错。
+    @app.exception_handler(SATimeoutError)
+    def _pool_exhausted(request, exc: SATimeoutError):
+        logging.getLogger("app").error("数据库连接池耗尽 %s: %s", request.url.path, exc)
+        return SafeIntJSONResponse(
+            status_code=503,
+            content={"detail": "服务繁忙，请稍后重试"},
+        )
 
     # 数据库暂时不可用（重启、网络抖动）应回 503 而非 500：
     # 503 表示"暂时性、可重试"，500 会把运维引向"代码有 bug"的排查方向；

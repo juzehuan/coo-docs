@@ -8,7 +8,25 @@ connect_args = {}
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
-engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
+# 连接池：此前完全用 SQLAlchemy 的默认值（pool_size=5 / max_overflow=10 = 上限 15），
+# 也就是没人选过这个数。而 uvicorn 跑同步端点用的线程池默认 **40**——
+# 并发上限比连接上限高一倍多，超出的请求会在 pool_timeout（默认 30 秒）里排队。
+#
+# 第 78 轮实测：40 个并发审计导出时，MySQL 侧 coo 库连接数稳定在 **15**（池被压满）、
+# 后端单核 CPU 跑满 108%，**连一次登录都在 30 秒后超时**。
+# 需要说清楚的是：那一档的瓶颈主要是 **CPU**（单进程、xlsx 生成是 CPU 密集），
+# 不是连接池——但池被压满是事实，且 40 > 15 这个不匹配本就该被显式决定而不是默认。
+#
+# 取 20 + 20 = 40，与线程池对齐：请求要么有连接、要么被线程池挡在外面，
+# 不会出现"拿到线程却在连接池里干等 30 秒"这种最难排查的状态。
+# MySQL 侧 max_connections 为 151，单进程占 40 有充足余量（实测日常峰值仅 5）。
+engine = create_engine(
+    settings.DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,
+    pool_size=20,
+    max_overflow=20,
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
