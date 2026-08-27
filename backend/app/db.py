@@ -70,7 +70,13 @@ def _ensure_columns() -> None:
     from sqlalchemy import inspect, text
 
     # (表, 列, DDL 类型)
-    wanted = [("notifications", "params", "TEXT")]
+    wanted = [
+        ("notifications", "params", "TEXT"),
+        # 随单/公司级标记：历史库一律按"随单"处理，与改动前行为一致
+        ("packages", "per_order", "TINYINT(1) NOT NULL DEFAULT 1"),
+        # 引用型订单实例指向的资料包版本
+        ("order_packages", "source_version_id", "BIGINT NULL"),
+    ]
     insp = inspect(engine)
     with engine.connect() as conn:
         for table, column, ddl in wanted:

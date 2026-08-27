@@ -133,11 +133,11 @@ def archive_xlsx(db: Session, user: User, params: dict) -> tuple[str, str, int]:
     for op in ops:
         p = pkgs.get(op.package_id)
         o = orders.get(op.order_id)
-        synced = sum(1 for a in op.attachments if a.nas_synced)
+        synced = sum(1 for a in op.effective_attachments if a.nas_synced)
         data.append([t("kind_order"), p.code if p else "", local_name(p),
                      o.order_no if o else "", status_label(op.status),
-                     unames.get(op.owner_user_id, ""), str(len(op.attachments)),
-                     f"{synced}/{len(op.attachments)}"])
+                     unames.get(op.owner_user_id, ""), str(len(op.effective_attachments)),
+                     f"{synced}/{len(op.effective_attachments)}"])
     content = build_xlsx(header, data, sheet_title=t("sheet_archive_list"))
     return "archive_list.xlsx", _write(_tmp_path(".xlsx"), content), len(data)
 
@@ -166,7 +166,7 @@ def order_xlsx(db: Session, user: User, params: dict, visible_ids) -> tuple[str,
         data.append([
             fac.code if fac else "", o.order_no, pkg.code if pkg else "",
             local_name(pkg), status_label(op.status), unames.get(op.owner_user_id, ""),
-            str(len(op.attachments)), t("yes") if op.locked else t("no"), op.due_date,
+            str(len(op.effective_attachments)), t("yes") if op.locked else t("no"), op.due_date,
         ])
     content = build_xlsx(header, data, sheet_title=t("sheet_order_list"))
     return f"order_{o.order_no}.xlsx", _write(_tmp_path(".xlsx"), content), len(data)
@@ -197,8 +197,8 @@ def order_zip(db: Session, user: User, params: dict, visible_ids) -> tuple[str, 
             # 同一资料包内的同名附件（如多个供应商各自的"发票.pdf"）若都用原文件名，
             # 在 ZIP 里会生成路径完全相同的条目，解压时互相覆盖——交付给核查方的
             # 材料静默缺件，而清单仍列出全部。复用 NAS 归档的命名规则以保持一致。
-            dup = duplicate_names(op.attachments)
-            for att in op.attachments:
+            dup = duplicate_names(op.effective_attachments)
+            for att in op.effective_attachments:
                 src = os.path.join(settings.UPLOAD_DIR, att.file_name)
                 if not os.path.exists(src):
                     continue
@@ -252,7 +252,7 @@ def controlled_order_zip(db: Session, user: User, params: dict, check) -> tuple[
         manifest = [[t("package"), t("order_no"), t("file_in_zip"), t("orig_name"),
                      t("stored_name"), t("size_bytes"), t("md5")]]
         n = _zip_attachments(
-            zf, op.attachments, f"{safe_code}/{safe_order}", manifest,
+            zf, op.effective_attachments, f"{safe_code}/{safe_order}", manifest,
             lambda att, sn: [p.code if p else "", o.order_no, sn, att.original_name,
                              att.file_name, str(att.file_size), att.md5 or ""])
         zf.writestr("_manifest.xlsx",

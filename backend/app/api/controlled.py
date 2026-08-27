@@ -135,6 +135,11 @@ def controlled_area(limit: int = Query(50, ge=1, le=200), offset: int = Query(0,
             o = order_map.get(op.order_id) if op else None
             if not op or not p or not o:
                 continue
+            # 引用型实例不进受控区：它本身不是一份受控记录，只是指向资料包线某个
+            # 已放行版本的指针，那一版已经作为「版本」条目在受控区里了。
+            # 不排除的话，同一批文件会按引用它的订单张数重复出现，调阅时分不清哪份是原始记录。
+            if op.source_version_id is not None:
+                continue
             items.append({
                 "kind": "order", "key": f"o-{op.id}",
                 "package_code": p.code, "package_name": local_name(p),

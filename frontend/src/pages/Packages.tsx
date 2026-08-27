@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App, Button, Card, DatePicker, Form, Input, Modal, Select, Space, Switch, Table } from 'antd'
+import { App, Button, Card, DatePicker, Form, Input, Modal, Select, Space, Switch, Table, Tag } from 'antd'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
@@ -83,7 +83,7 @@ export default function Packages() {
   function openCreate() {
     setEditing(null)
     form.resetFields()
-    form.setFieldsValue({ code: '', name_zh: '', name_en: '', name_th: '', dept_id: undefined, owner_user_id: undefined, required: true, status: 'active', sort_order: 0, due_date: '', review_focus: '' })
+    form.setFieldsValue({ code: '', name_zh: '', name_en: '', name_th: '', dept_id: undefined, owner_user_id: undefined, required: true, per_order: true, status: 'active', sort_order: 0, due_date: '', review_focus: '' })
     setOpen(true)
   }
   function openEdit(r: PackageRow) {
@@ -129,6 +129,14 @@ export default function Packages() {
           { title: t('dept'), width: 120, ellipsis: ELLIPSIS, render: (_, r) => deptLabel(r.dept_id) },
           { title: t('owner'), width: 110, ellipsis: ELLIPSIS, render: (_, r) => ownerLabel(r.owner_user_id) },
           { title: t('version'), dataIndex: 'current_version', width: 90, render: (v: string) => v || '-' },
+          // 随单 / 公司级：决定这类证据在订单里是逐单上传还是引用已放行版本
+          { title: t('per_order'), dataIndex: 'per_order', width: 100, render: (v: boolean) => (
+            <Tag className="coo-tag" style={v
+              ? { background: '#f4efe4', color: '#8a6a1e', border: 'none' }
+              : { background: '#eef2f8', color: '#2f4a6b', border: 'none' }}>
+              {v === false ? t('scope_company') : t('scope_per_order')}
+            </Tag>
+          ) },
           { title: t('status'), dataIndex: 'current_status', width: 130, render: (s: string) => <StatusTag status={s} /> },
           { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
           { title: t('actions'), key: 'act', width: actWidth, fixed: 'right', render: (_, r) => (
@@ -166,6 +174,9 @@ export default function Packages() {
             </Form.Item>
             <Form.Item name="required" label={t('required')} valuePropName="checked">
               <Switch />
+            </Form.Item>
+            <Form.Item name="per_order" label={t('per_order')} valuePropName="checked" tooltip={t('scope_hint')}>
+              <Switch checkedChildren={t('scope_per_order')} unCheckedChildren={t('scope_company')} />
             </Form.Item>
             <Form.Item label={t('status')} name="status">
               <Select options={[{ value: 'active', label: t('active') }, { value: 'disabled', label: t('disabled') }]} />

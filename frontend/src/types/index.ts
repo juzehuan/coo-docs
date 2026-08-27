@@ -83,6 +83,10 @@ export interface OrderPackage {
   reviewable_dept?: boolean
   attachment_count: number
   attachments?: OrderAttachment[]
+  /** 引用型实例：附件来自资料包线的已放行版本，订单里只读 */
+  referenced?: boolean
+  /** 被引用的版本号，如 V1.0 */
+  source_version_no?: string
 }
 
 export interface Order {
@@ -173,6 +177,8 @@ export interface Package {
   review_focus: string
   due_date: string
   required: boolean
+  /** true=随单（一票一套，订单里逐单上传）；false=公司级（订单里引用已放行版本） */
+  per_order: boolean
   status: string
   sort_order: number
   created_at: string | null

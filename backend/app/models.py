@@ -93,6 +93,17 @@ class Package(Base):
     review_focus = Column(Text, default="")       # 核查重点
     due_date = Column(String(32), default="")     # 截止日期（文本，宽松）
     required = Column(Boolean, default=True)      # 是否必需
+    # 随单 / 公司级：决定这类证据是"一票一套"还是"全公司一份"。
+    #
+    # True（随单，默认）：采购订单、发票、提单、付款证明、生产记录……每张订单
+    #   各有一套，订单里逐单上传。
+    # False（公司级）：营业执照、SOP 工艺文件、设备清单、厂区照片……跨订单不变。
+    #   这类只在资料包线维护一份，加进订单时**引用**最新已放行版本，不再重传——
+    #   否则每来一票订单就要把同一份营业执照重传一遍。
+    #
+    # 需求规格里本来只有一条线（订单号只是附件上的标签，见 F-05），是实现时扩出
+    # 第二条订单线才产生了"同一份材料传两遍"的问题，这个标记是把两者接回去。
+    per_order = Column(Boolean, nullable=False, default=True)
     status = Column(String(16), nullable=False, default="active")  # active/disabled
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -143,9 +154,30 @@ class OrderPackage(Base):
     locked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # 引用型实例：公司级资料包加进订单时不重传附件，而是指向资料包线的某个已放行版本。
+    # 只存一个外键、不复制附件行——复制的话资料包线换了新版本，订单里那份就悄悄过期了。
+    source_version_id = Column(BigInteger, ForeignKey("package_versions.id"),
+                               nullable=True, index=True)
+
     order = relationship("Order", back_populates="packages")
     package = relationship("Package")
+    source_version = relationship("PackageVersion", foreign_keys=[source_version_id])
     attachments = relationship("Attachment", back_populates="order_package", cascade="all, delete-orphan")
+
+    @property
+    def effective_attachments(self):
+        """本实例实际呈现的附件：引用型取被引用版本的，普通型取自己的。
+
+        导出、清单、附件计数一律走这里——只看 self.attachments 的话，
+        引用型实例会一路显示成"0 个附件"，交付出去的 ZIP 里也会缺这一类。
+        """
+        if self.source_version_id is not None and self.source_version is not None:
+            return self.source_version.attachments
+        return self.attachments
+
+    @property
+    def is_referenced(self) -> bool:
+        return self.source_version_id is not None
 
 
 class PackageVersion(Base):

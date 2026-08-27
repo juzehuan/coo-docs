@@ -27,7 +27,8 @@ from app.core.filetype import guess_mime
 from app.core.uploads import read_validated_upload, sanitize_name
 from app.db import get_db
 from app.models import (
-    Attachment, AuditDomain, Factory, Notification, Order, OrderPackage, Package, User,
+    Attachment, AuditDomain, Factory, Notification, Order, OrderPackage, Package,
+    PackageVersion, User,
 )
 from app.schemas import (
     AttachmentOut, Msg, OrderCreate, OrderDetailOut, OrderInstanceCreate, OrderList, OrderOut,
@@ -53,7 +54,7 @@ def _visible_orders_q(db: Session, user: User):
 def _package_stats(op: OrderPackage) -> dict:
     """订单-资料包完成度与附件数。"""
     return {
-        "attachment_count": len(op.attachments),
+        "attachment_count": len(op.effective_attachments),
     }
 
 
@@ -83,8 +84,13 @@ def _op_out(op: OrderPackage, db: Session | None = None, user: User | None = Non
     out["package_code"] = pkg.code if pkg else ""
     out["package_name"] = local_name(pkg)
     out["package_dept_id"] = pkg.dept_id if pkg else None
-    out["attachment_count"] = len(op.attachments)
-    out["attachments"] = [AttachmentOut.model_validate(a).model_dump() for a in op.attachments]
+    atts = op.effective_attachments
+    out["attachment_count"] = len(atts)
+    out["attachments"] = [AttachmentOut.model_validate(a).model_dump() for a in atts]
+    # 引用型：附件来自资料包线的某个已放行版本，订单里只读。前端据此隐藏上传区
+    # 与提交/撤回，并标出引用的是哪一版
+    out["referenced"] = op.is_referenced
+    out["source_version_no"] = op.source_version.version_no if op.is_referenced and op.source_version else ""
     # 是否真的可以部门审核：前端只按"角色+部门"判断，看不到职责分离这条规则，
     # 于是审核人给自己提交的内容也会看到「通过/退回」按钮，点下去必然 403。
     # 该规则需要查库（本部门是否还有其他审核人），只能由后端下发。
@@ -94,6 +100,19 @@ def _op_out(op: OrderPackage, db: Session | None = None, user: User | None = Non
         out["reviewable_dept"] = dept_review_block_reason(
             user, pkg.dept_id if pkg else None, submitted_by=op.submitted_by, db=db) is None
     return out
+
+
+def _reject_if_referenced(op: OrderPackage) -> None:
+    """引用型实例不接受任何内容改动。
+
+    它的附件属于资料包线的已放行版本（版本锁定后本就只读），订单这边只是引用。
+    允许在这里改，等于绕过"已放行版本不可修改"。要换内容就去资料包线发新版本，
+    或者把这条从订单里移除后重新添加以引用最新版。
+    """
+    if op.is_referenced:
+        raise HTTPException(
+            status_code=400,
+            detail="该资料包为公司级资料，内容在「资料包」页维护；订单这边只引用已放行版本，不能单独修改")
 
 
 # ---------- 列表 / 详情 ----------
@@ -243,6 +262,35 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
         raise HTTPException(status_code=400, detail="该资料包已停用，不可再加入订单")
     if any(op.package_id == pkg.id for op in o.packages):
         raise HTTPException(status_code=400, detail="该资料包已在订单中")
+
+    # 公司级资料包：不重传，直接引用资料包线**最新已放行**版本。
+    # 营业执照、SOP、设备清单这类跨订单不变，每来一票订单重传一遍没有意义
+    # （内容去重让磁盘不多占，但操作与审核要重做一遍，且各订单的版本会各走各的）。
+    if not pkg.per_order:
+        src = (db.query(PackageVersion)
+               .filter(PackageVersion.package_id == pkg.id,
+                       PackageVersion.status == VersionStatus.RELEASED)
+               .order_by(PackageVersion.id.desc())
+               .first())
+        if not src:
+            # 宁可明确拒绝，也不要建一条空壳：那会在订单里挂一个永远补不齐的条目
+            raise HTTPException(
+                status_code=400,
+                detail=f"「{pkg.code}」是公司级资料，需先在「资料包」页放行一个版本，订单才能引用")
+        op = OrderPackage(
+            order_id=o.id, package_id=pkg.id, project_code=settings.PROJECT_CODE,
+            source_version_id=src.id,
+            # 引用的是已放行版本，本身即已完成：不进审核流、不需要责任人、直接锁定
+            status=VersionStatus.RELEASED, locked=True, owner_user_id=None,
+            required=payload.required, due_date=payload.due_date or pkg.due_date,
+        )
+        db.add(op)
+        db.commit()
+        db.refresh(op)
+        log_event(db, AuditDomain.PACKAGE, "order_package_ref", actor=user, ip=client_ip(request),
+                  target=f"{o.order_no}/{pkg.code}", detail=f"引用已放行版本 {src.version_no}")
+        return _op_out(op)   # 不发"指派给你"通知：没有人需要为它做事
+
     op = OrderPackage(
         order_id=o.id,
         package_id=pkg.id,
@@ -286,9 +334,13 @@ def remove_order_package(order_id: int, op_id: int, request: Request,
         raise HTTPException(status_code=404, detail="资源不存在")
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权移除该订单资料包")
-    if op.locked or op.status == VersionStatus.RELEASED:
+    # 引用型实例例外：它一建出来就是 released+locked（引用的是已放行版本），
+    # 但自身没有任何附件，只是一个指针。按"已放行不可移除"拦下它，等于加错了
+    # 就再也拿不掉。移除它不动资料包线的那一版。
+    if not op.is_referenced and (op.locked or op.status == VersionStatus.RELEASED):
         raise HTTPException(status_code=400, detail="已放行实例不可移除，如需变更请新建订单")
-    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件
+    # 内容哈希命名可能被多个附件行复用，仅当无其它引用时才删除物理文件。
+    # 引用型的 op.attachments 本就是空的，不会误删资料包线的文件。
     atts = list(op.attachments)
     db.delete(op)
     db.commit()
@@ -303,6 +355,7 @@ def submit_order_package(order_id: int, op_id: int, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
     op = _lock_op(db, op_id) or op   # 与并发审核串行化
+    _reject_if_referenced(op)
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     if op.status not in (VersionStatus.DRAFT, VersionStatus.REJECTED, VersionStatus.WITHDRAWN):
@@ -329,6 +382,7 @@ def submit_order_package(order_id: int, op_id: int, request: Request,
 def review_order_package(order_id: int, op_id: int, payload: ReviewRequest, request: Request,
                          db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    _reject_if_referenced(op)
     # 加锁重读：与并发的上传/删除附件串行化，避免基于旧快照写回破坏状态机
     op = _lock_op(db, op_id) or op
     from app.core.rbac import dept_review_block_reason, is_coo
@@ -403,6 +457,7 @@ def withdraw_order_package(order_id: int, op_id: int, request: Request,
                            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """提交人撤回：待部门审核 / 待COO终审的实例可撤回，撤回复审后重新提交。"""
     o, op = _get_op(db, order_id, op_id, user)
+    _reject_if_referenced(op)
     # 与并发审核串行化：撤回同样是"检查状态后写状态"，不加锁时可与终审放行竞态，
     # 产生 locked=True 却显示已撤回的破损状态（实测 5 次并发中复现 2 次）
     op = _lock_op(db, op_id) or op
@@ -438,6 +493,7 @@ async def upload_order_attachment(
     db: Session = Depends(get_db), user: User = Depends(get_current_user),
 ):
     o, op = _get_op(db, order_id, op_id, user)
+    _reject_if_referenced(op)
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     if op.locked:
@@ -482,6 +538,7 @@ async def upload_order_attachment(
 def delete_order_attachment(order_id: int, op_id: int, aid: int, request: Request,
                             db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     o, op = _get_op(db, order_id, op_id, user)
+    _reject_if_referenced(op)
     if not can_edit_order_package(user, op):
         raise HTTPException(status_code=403, detail="无权操作该订单资料包")
     # 加锁重读，避免与并发终审放行竞态导致向已锁定版本删除附件

@@ -23,6 +23,16 @@ FACTORIES = [
 
 # 内置 18 个资料包（COO-01 ~ COO-18），对齐 RMA 美国审查资料分类（docs/美国审查资料）
 # 元组：编号 / 中文名 / 英文名 / 泰文名 / 责任部门code / 核查重点
+# 公司级资料包：跨订单不变，只在资料包线维护一份，加进订单时引用最新已放行版本。
+# 其余按"随单"处理（采购订单、发票、提单、付款证明、生产记录……一票一套）。
+# 交付现场可在「资料包」页逐个改，这里只是一份合理的出厂默认值。
+COMPANY_LEVEL = {
+    "COO-13",   # 生产设备、工装及产能资料
+    "COO-14",   # SOP、作业指导书及工艺流程
+    "COO-15",   # 工厂、生产现场照片及视频证据
+    "COO-16",   # 公司资质、许可证及登记资料
+}
+
 PACKAGE_SEED = [
     ("COO-01", "成品原产地证及制造商声明", "Certificate of Origin & Manufacturer Declaration",
      "ใบรับรองถิ่นกำเนิดและคำรับรองผู้ผลิต", "WAI", "证书、车型/批次与出口批次一一对应，制造商声明完整"),
@@ -133,6 +143,7 @@ def seed(db: Session):
             code=code, name_zh=zh, name_en=en, name_th=th,
             dept_id=dept_map[dept_code].id,
             review_focus=focus, required=True, sort_order=i,
+            per_order=code not in COMPANY_LEVEL,
         )
         db.add(pkg)
 

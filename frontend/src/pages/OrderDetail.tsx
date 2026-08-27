@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Progress, App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Tooltip, Typography, Upload,
+import { Alert, Progress, App, Button, Card, DatePicker, Descriptions, Form, Input, Modal, Result, Select, Space, Table, Tag, Tooltip, Typography, Upload,
 } from 'antd'
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, FileZipOutlined, InboxOutlined, PlusOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -48,13 +48,16 @@ function RowAttachments({ orderId, op, user, onChanged }: {
   // 与后端 can_edit_order_package 保持一致：提交人只操作指派给自己的实例。
   // 建单人若要自己传，在「添加资料包」里把责任人改成自己即可
   const ownerOk = user.role === 'submitter' && op.owner_user_id === user.id
-  const canEdit = (isStaff || ownerOk) && op.status !== 'released' && !op.locked
+  // 引用型实例：附件属于资料包线的已放行版本（版本锁定后本就只读），订单这边只引用。
+  // 一律禁掉上传/提交/撤回/审核——放开等于绕过"已放行版本不可修改"，后端也会 400。
+  const referenced = op.referenced === true
+  const canEdit = !referenced && (isStaff || ownerOk) && op.status !== 'released' && !op.locked
   // reviewable_dept 由后端下发：职责分离（本部门另有审核人时不得审自己提交的内容）
   // 需要查库才能判定，前端单凭角色+部门算不出来，此前因此显示了必然 403 的按钮
-  const canReviewDept = op.reviewable_dept !== false && user.role === 'dept_reviewer' && op.package_dept_id != null &&
+  const canReviewDept = !referenced && op.reviewable_dept !== false && user.role === 'dept_reviewer' && op.package_dept_id != null &&
     op.package_dept_id === user.dept_id && op.status === 'pending_dept'
-  const canReviewCoo = (user.role === 'coo_reviewer' || user.role === 'admin') && op.status === 'pending_coo'
-  const canWithdraw = (user.role === 'admin' || ownerOk) &&
+  const canReviewCoo = !referenced && (user.role === 'coo_reviewer' || user.role === 'admin') && op.status === 'pending_coo'
+  const canWithdraw = !referenced && (user.role === 'admin' || ownerOk) &&
     (op.status === 'pending_dept' || op.status === 'pending_coo')
 
   // 统一包裹：补齐错误提示与防重复点击。原先这些操作失败时静默无反馈，
@@ -127,6 +130,11 @@ function RowAttachments({ orderId, op, user, onChanged }: {
 
   return (
     <div>
+      {/* 说明这条为什么没有上传区：不写的话，用户只会觉得"这条坏了" */}
+      {referenced && (
+        <Alert type="info" showIcon style={{ marginBottom: 8 }}
+          message={t('referenced_note').replace('{v}', op.source_version_no || '')} />
+      )}
       <Table rowKey="id" size="small" pagination={false} columns={columns} dataSource={atts} locale={{ emptyText: t('no_data') }} scroll={{ x: 680 + attActWidth }} />
 
       {/* 虚线框内只放"上传这批文件"需要的东西：批次号是给本批文件贴的标签。
@@ -332,11 +340,15 @@ export default function OrderDetail() {
             expandedRowRender: (op) => <RowAttachments orderId={order.id} op={op} user={user!} onChanged={load} />,
           }}
           // 列宽之和（含展开列）；不够宽时整表横向滚动，列宽不被挤压，字段就不会折行
-          scroll={{ x: 750 + actionWidth(1) + 48 }}
+          scroll={{ x: 770 + actionWidth(1) + 48 }}
           columns={[
             { title: 'COO', dataIndex: 'package_code', width: 90, render: (v) => v || '-' },
             { title: t('packages'), dataIndex: 'package_name', width: 240, ellipsis: ELLIPSIS, render: (v) => v || '-' },
-            { title: t('status'), dataIndex: 'status', width: 150, render: (s: string) => (<><StatusTag status={s} /><br /><ReviewSteps status={s} compact /></>) },
+            { title: t('status'), dataIndex: 'status', width: 170, render: (s: string, op: OrderPackage) => (op.referenced
+              ? <Tag className="coo-tag" style={{ background: '#eef2f8', color: '#2f4a6b', border: 'none' }}>
+                  {t('scope_company')} · {t('referenced_from').replace('{v}', op.source_version_no || '')}
+                </Tag>
+              : <><StatusTag status={s} /><br /><ReviewSteps status={s} compact /></>) },
             { title: t('attachment'), dataIndex: 'attachment_count', width: 90 },
             { title: t('due_date'), dataIndex: 'due_date', width: 110, render: (v) => v || '-' },
             { title: t('required'), dataIndex: 'required', width: 70, render: (v: boolean) => (v ? <Tag className="coo-tag" style={{ background: '#faf0dc', color: '#a67c1e', border: 'none' }}>{t('required')}</Tag> : '-') },

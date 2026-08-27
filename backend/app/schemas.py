@@ -198,6 +198,8 @@ class OrderPackageOut(BaseModel):
     required: bool = True
     due_date: str = ""
     locked: bool = False
+    # 引用型实例：附件来自资料包线的某个已放行版本，订单里只读
+    source_version_id: Optional[int] = None
     submitted_by: Optional[int] = None
     submitted_at: Optional[datetime] = None
     dept_reviewer_id: Optional[int] = None
@@ -270,6 +272,7 @@ class PackageCreate(BaseModel):
     review_focus: str = ""
     due_date: DueDate = Field("", max_length=32)
     required: bool = True
+    per_order: bool = True        # 随单（默认）/ 公司级
 
 
 class PackageUpdate(BaseModel):
@@ -281,6 +284,7 @@ class PackageUpdate(BaseModel):
     review_focus: Optional[str] = None
     due_date: Optional[DueDate] = Field(None, max_length=32)
     required: Optional[bool] = None
+    per_order: Optional[bool] = None
     status: Optional[str] = Field(None, max_length=16)
     sort_order: Optional[int] = None
 
@@ -297,6 +301,7 @@ class PackageOut(BaseModel):
     review_focus: str = ""
     due_date: str = ""
     required: bool = True
+    per_order: bool = True
     status: str
     sort_order: int = 0
     created_at: Optional[datetime] = None
