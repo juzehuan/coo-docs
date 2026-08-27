@@ -237,6 +237,10 @@ def add_order_package(order_id: int, payload: OrderInstanceCreate, request: Requ
     pkg = db.get(Package, payload.package_id)
     if not pkg:
         raise HTTPException(status_code=404, detail="资料包模板不存在")
+    # 界面的「添加资料包」下拉已经不列停用包，但后端此前不拦——第 82 轮实测
+    # 直接调 API 照样 201。与第 28 轮工厂停用同一模式：前端藏了不等于后端拦了。
+    if pkg.status != "active":
+        raise HTTPException(status_code=400, detail="该资料包已停用，不可再加入订单")
     if any(op.package_id == pkg.id for op in o.packages):
         raise HTTPException(status_code=400, detail="该资料包已在订单中")
     op = OrderPackage(

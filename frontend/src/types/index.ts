@@ -270,6 +270,8 @@ export interface TodoItem {
   overdue?: boolean
   /** 责任部门无在岗审核人：该条已落入部门审核人视野之外，由 COO/管理员兜底 */
   no_reviewer?: boolean
+  /** 资料包已停用但这条仍在办：不再新接，在办的要走完 */
+  package_inactive?: boolean
 }
 
 export interface NotificationItem {

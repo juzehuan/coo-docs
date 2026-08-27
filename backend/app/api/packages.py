@@ -165,6 +165,9 @@ def create_version(pkg_id: int, payload: VersionCreate, request: Request,
         raise HTTPException(status_code=404, detail="资料包不存在")
     if not can_edit_package(user, p):
         raise HTTPException(status_code=403, detail="无权操作该资料包")
+    # "停用"= 不再新接：已停用的资料包不能再开新版本（在办版本照常走完）
+    if p.status != "active":
+        raise HTTPException(status_code=400, detail="该资料包已停用，不可新建版本")
     project = payload.project_code or settings.PROJECT_CODE
     v = PackageVersion(
         id=next_id(),

@@ -120,6 +120,8 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             "overdue": is_overdue(p.due_date, lv.status),
             # 责任部门无在岗审核人：前端据此标注，避免它看起来像一条普通待审
             "no_reviewer": no_reviewer_for(lv.status, p.dept_id, staffed),
+            # 资料包已停用但这条还在办：前端据此标注，处理人要知道它不再新接
+            "package_inactive": p.status != "active",
         })
 
     # ---- 订单资料包实例待办 ----
@@ -179,6 +181,7 @@ def todo_list(db: Session = Depends(get_db), user: User = Depends(get_current_us
             "due_date": op.due_date,
             "overdue": is_overdue(op.due_date, op.status),
             "no_reviewer": no_reviewer_for(op.status, pkg.dept_id, staffed),
+            "package_inactive": pkg.status != "active",
         })
 
     # 按提交时间倒序，无提交时间的排最后

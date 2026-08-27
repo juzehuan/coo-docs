@@ -73,6 +73,7 @@ export default function Todo() {
               <>
                 {v || '-'}
                 {r.no_reviewer && <><br /><Tag color="volcano">{t('no_reviewer')}</Tag></>}
+                {r.package_inactive && <><br /><Tag>{t('pkg_inactive')}</Tag></>}
               </>
             ),
           },

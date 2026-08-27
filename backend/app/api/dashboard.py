@@ -24,7 +24,13 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("", response_model=DashboardOut)
 def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     fids = _factory_ids(user, db)
-    pkgs = db.query(Package).filter(Package.status == "active").all()
+    # 取**全部**资料包，不按 status 过滤——与 /todo 用同一个集合。
+    # 第 82 轮实测：停用一个带待审版本的资料包后，审核人待办里它还在（1 条），
+    # 看板「待我处理」却变成 0、进度列表里它直接消失——计数与列表对不上，
+    # 而这正是第 63/64/70 轮反复修过的那类静默失效。"停用"只应表示"不再新接"
+    # （与第 28 轮对工厂停用的结论一致），在办事项必须继续可见、可处理。
+    # 完成度的分母另行只取启用中的（见下），已停用的包不再是"要求交齐"的范围。
+    pkgs = db.query(Package).all()
     versions = db.query(PackageVersion).all()
     # 构建 资料包 -> 最新版本状态
     latest = {}
@@ -35,8 +41,11 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
 
     # 仅统计可见资料包的完成度，避免向提交人泄露非本人资料包信息
     visible_pkgs = [p for p in pkgs if can_view_package(user, p)]
-    released_count = sum(1 for p in visible_pkgs if p.id in latest and latest[p.id].status == VersionStatus.RELEASED)
-    completion = round(released_count / len(visible_pkgs) * 100, 1) if visible_pkgs else 0.0
+    # 完成度只算启用中的资料包：已停用的不再是"要求交齐"的范围，留在分母里会让
+    # 完成度永远到不了 100%；留在分子里则会把一个已退出范围的包算作成绩
+    active_visible = [p for p in visible_pkgs if p.status == "active"]
+    released_count = sum(1 for p in active_visible if p.id in latest and latest[p.id].status == VersionStatus.RELEASED)
+    completion = round(released_count / len(active_visible) * 100, 1) if active_visible else 0.0
 
     # 附件总数：订单附件按工厂隔离，版本附件按资料包可见性过滤。
     # 二者都必须过滤 —— 看板的完成度/已放行/进度列表都按 can_view_package 收敛，
@@ -121,6 +130,10 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     for p in visible_pkgs:
         v = latest.get(p.id)
         st = v.status if v else "none"
+        # 已停用的包：只有仍有在办事项时才进进度/关注列表，
+        # 否则它会以"未提交/已放行"的样子永远赖在看板上
+        if p.status != "active" and st in (VersionStatus.RELEASED, "none"):
+            continue
         att_n = len(v.attachments) if v else 0
         # 超期 = 截止日期已过且未放行（F-03）
         od = is_overdue(p.due_date, st)
