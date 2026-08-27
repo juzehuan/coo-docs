@@ -18,13 +18,33 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # 登录页「演示账号一键登录」的候选账号及其公开演示口令。
-# 与 services/seed.py 的 ACCOUNTS 对应；前端 Login.tsx 持有同一份口令用于点击登录。
+# 与 services/seed.py 的 ACCOUNTS 一一对应；前端 Login.tsx 持有同一份口令用于点击登录。
+#
+# 这里列全 15 个账号（此前只列了 5 个代表角色）：演示与验收时要按具体岗位走流程
+# ——采购专员传料 → 工程采购经理初审 → COO 终审——只给"部门审核人"一个按钮，
+# 演示者还得回去查哪个账号对应哪个部门。
+#
+# ⚠️ 这些是公开口令。按钮是否渲染由 /auth/demo-accounts 逐个校验口令后决定：
+# 生产部署（SEED_DEMO_DATA=false）不会创建这些账号，口令一旦轮换该账号即自动摘掉，
+# 全部摘掉后入口整体消失。正式交付前请轮换口令或停用这些账号（见风险记录 P0-1）。
 DEMO_CREDENTIALS = {
     "admin": "admin123",
     "coo": "coo123",
-    "dept_wai": "dept123",
-    "submit_eng": "user123",
     "auditor": "audit123",
+    "dept_wai": "dept123",
+    "dept_eng": "dept123",
+    "dept_sal": "dept123",
+    "dept_fin": "dept123",
+    "dept_log": "dept123",
+    "dept_prd": "dept123",
+    "dept_qal": "dept123",
+    "dept_adm": "dept123",
+    # 停用状态的账号不会出现在按钮里（下面按 status == active 过滤），
+    # 列在这里是为了与 seed 的 ACCOUNTS 保持一份完整对照
+    "dept_eng2": "dept123",
+    "submit_eng": "user123",
+    "submit_fin": "user123",
+    "submit_log": "user123",
 }
 
 
@@ -54,13 +74,14 @@ def demo_accounts(db: Session = Depends(get_db)):
     里都存在（生产实例的 admin 用的是随机初始口令），只按存在与否判断会让
     生产登录页重新冒出一个点了必然失败的管理员按钮。逐个校验口令之后，
     生产环境返回空数组、入口自然消失；口令被轮换过的演示账号也会自动摘掉。
-    只返回用户名与角色，不返回口令。
+    只返回用户名、姓名与角色，不返回口令。姓名是必需的——15 个账号里有 8 个
+    都是"部门审核人"，只给角色名的话按钮上会出现 8 个一模一样的「部门审核人」。
     """
     rows = (db.query(User)
             .filter(User.username.in_(list(DEMO_CREDENTIALS)), User.status == "active").all())
     order = {u: i for i, u in enumerate(DEMO_CREDENTIALS)}
     out = [
-        {"username": u.username, "role": u.role}
+        {"username": u.username, "display_name": u.display_name or u.username, "role": u.role}
         for u in rows
         if verify_password(DEMO_CREDENTIALS[u.username], u.password_hash)
     ]

@@ -11,15 +11,25 @@ import { SERIF } from '@/theme'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import type { Lang, Role } from '@/types'
 
-// 演示账号的公开口令。按钮渲染与否由后端 /auth/demo-accounts 据实回答：
-// 它逐个校验口令是否仍为演示值，生产部署返回空数组、入口自然消失，
-// 不会出现点下去必然 401 的假按钮。
+// 演示账号的公开口令，与后端 api/auth.py 的 DEMO_CREDENTIALS 一一对应。
+// 按钮渲染与否由后端 /auth/demo-accounts 据实回答：它逐个校验口令是否仍为演示值，
+// 生产部署返回空数组、入口自然消失，不会出现点下去必然 401 的假按钮。
 const DEMO_PASSWORDS: Record<string, string> = {
   admin: 'admin123',
   coo: 'coo123',
-  dept_wai: 'dept123',
-  submit_eng: 'user123',
   auditor: 'audit123',
+  dept_wai: 'dept123',
+  dept_eng: 'dept123',
+  dept_sal: 'dept123',
+  dept_fin: 'dept123',
+  dept_log: 'dept123',
+  dept_prd: 'dept123',
+  dept_qal: 'dept123',
+  dept_adm: 'dept123',
+  dept_eng2: 'dept123',
+  submit_eng: 'user123',
+  submit_fin: 'user123',
+  submit_log: 'user123',
 }
 
 export default function Login() {
@@ -33,7 +43,7 @@ export default function Login() {
   // 只有落在登录页上的提示才能真正被用户看到
   const sessionReason = new URLSearchParams(location.search).get('reason')
   // 仅当这些演示账号在当前环境真实存在时才显示快捷登录
-  const [demoAccounts, setDemoAccounts] = useState<{ username: string; role: Role }[]>([])
+  const [demoAccounts, setDemoAccounts] = useState<{ username: string; display_name: string; role: Role }[]>([])
   useEffect(() => {
     auth.demoAccounts()
       .then((list) => setDemoAccounts(list.filter((a) => DEMO_PASSWORDS[a.username])))
@@ -178,17 +188,20 @@ export default function Login() {
               <span style={{ fontSize: 12, color: '#a49e8c', letterSpacing: 0.5 }}>{t('demo_login')}</span>
               <div style={{ flex: 1, height: 1, background: '#e5dfd0' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {/* 按钮文字用姓名而非角色名：15 个账号里 8 个都是「部门审核人」，
+                只给角色名会出现 8 个一模一样的按钮。角色与账号名放进 title。
+                auto-fill 网格：账号数量随环境变化，写死列数会在换行处留下空位。 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: 8 }}>
               {demoAccounts.map((a) => (
                 <Button
                   key={a.username}
                   size="small"
                   disabled={loading}
                   onClick={() => quickLogin(a.username, DEMO_PASSWORDS[a.username])}
-                  style={{ background: '#fffef8', borderColor: '#e5dfd0', color: '#75705f', fontSize: 12 }}
-                  title={a.username}
+                  style={{ background: '#fffef8', borderColor: '#e5dfd0', color: '#75705f', fontSize: 12, padding: '0 6px' }}
+                  title={`${a.username} · ${ROLE_LABELS[a.role]?.[lang as Lang] ?? a.role}`}
                 >
-                  {ROLE_LABELS[a.role]?.[lang as Lang] ?? a.role}
+                  {a.display_name || ROLE_LABELS[a.role]?.[lang as Lang] || a.role}
                 </Button>
               ))}
             </div>

@@ -16,7 +16,7 @@ export const auth = {
     post('/auth/change-password', { old_password, new_password }),
   logout: () => post('/auth/logout'),
   /** 当前环境真实存在的演示账号（生产部署返回空数组，登录页据此隐藏快捷登录入口） */
-  demoAccounts: () => get<{ username: string; role: Role }[]>('/auth/demo-accounts'),
+  demoAccounts: () => get<{ username: string; display_name: string; role: Role }[]>('/auth/demo-accounts'),
   /** 上传限制（大小/扩展名），供前端预检 */
   limits: () => get<{ max_file_mb: number; allowed_extensions: string[] }>('/auth/limits'),
 }
