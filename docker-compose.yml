@@ -3,6 +3,16 @@
 #
 # 镜像一律固定到具体版本：用 :latest / :alpine 时重新 pull 可能拿到与测试过的
 # 不同的东西（本项目历史上 nginx 因此出过两次问题）。升级请显式改这里的版本号。
+# 容器日志上限（第 99 轮）。Docker 默认 json-file 驱动**不限大小、不轮转**：
+# 后端每小时约百行请求日志，加上每个用户 30 秒一次的通知轮询与 nginx 访问日志，
+# 交付机跑上一年就是 GB 级且永不清理，"磁盘被日志吃满"是交付后最常见的事故之一。
+# 每个容器最多 5 × 20MB；需要长期留存的审计记录在数据库里，不靠容器日志。
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   mysql:
     image: mysql:8.0.46
@@ -16,6 +26,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     restart: unless-stopped
+    logging: *default-logging
     ports:
       # 仅绑定本机回环：数据库不对外网/局域网暴露（容器间走 compose 内部网络）。
       # 宿主侧映射 3307，避免与本机已有的 3306 服务冲突（backend 走容器网络不受影响）
@@ -44,6 +55,7 @@ services:
       - "127.0.0.1:9000:9000"   # S3 API
       - "127.0.0.1:9001:9001"   # 管理控制台
     restart: unless-stopped
+    logging: *default-logging
 
   backend:
     build: ./backend
@@ -76,6 +88,7 @@ services:
       minio:
         condition: service_started
     restart: unless-stopped
+    logging: *default-logging
     # 健康检查探测 /health（该端点会真正查一次数据库），让编排与监控能感知
     # "进程还活着但依赖已挂"的状态；start_period 覆盖建表与种子数据的启动耗时
     healthcheck:
@@ -92,6 +105,7 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    logging: *default-logging
     ports:
       # 仅绑定本机回环：对外访问一律经 Cloudflare Tunnel（coo.chongzhu.ai → localhost:80），
       # HTTPS 由 Cloudflare 边缘终结；源站不在局域网/公网暴露
